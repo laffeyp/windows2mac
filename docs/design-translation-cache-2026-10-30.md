@@ -180,7 +180,43 @@ words in the real run; the VM's follows once the host's conforms.
    each in-VM compile (+0.19 s over 274,837), so about 0.1 s over the cached run's 150,065. Card 5's install makes its
    words visible by range and invalidates by page, as the in-VM compiler does (`block_compiler.c` 113-118, 166-176);
    a change to the miss stub's words is an option off by default, as `Timing` is, so the gates' frozen-word tests hold
-   the default stub (reviewer-3's Low 2 at 259).
+   the default stub (reviewer-3's Low 2 at 259). *(Amended 2026-10-30, Sprint 260: how it is built.)*
+   - **I. The file in the guest, read only.** The cache file's bytes, 211,190,784 for UnityPlayer.dll, are mapped
+     read-only at a fixed address below the monitor area, replacing `CACHE_CODE_VA` and `CACHE_DATA_VA` (184 MiB,
+     too small), in the layout the file already has: the blocks in start order, their words, their marks. Nothing
+     there runs and the C runtime never reads it, so its addresses outside `W2M_CODE_START..END` meet none of
+     Sprint 255's limits; the installer only copies from it. Weighed: copying only the 128,456 blocks the batch run
+     installs, about 14.5 MB at the cache's 112.8 bytes a block, and not the rest. Not taken: which blocks a run reaches is known only after it, and the cache
+     serves any run. The file's table is written once and only read after, so several vCPUs read it with no lock,
+     as QEMU's lookups are (below).
+   - **II. Each block's fix-ups in the file.** For each block the file lists the word indices `relocate` re-encodes
+     (a `B` or `BL` whose target leaves the block), so the installer copies and patches them without decoding a word.
+     Version 2 of the file. Weighed: decoding in the VM as `relocate` does. Not taken: the rule would then live in two
+     places, Rust and the VM, which Sprint 254's Observation 1 (one rule, one home) refuses.
+   - **III. The installer in monitor code, not the C runtime.** The miss stub, with the cache option on, sends a
+     target in the image's range to an installer written by `monitor_code` (Rust assembling A64), not to `hvc 1`. It
+     finds the start by bisection over the file's block table (998,222 blocks, 20 probes); copies the words to the
+     code cursor; patches the fix-ups by the move's distance; appends the marks rebased to the cursor; makes the words
+     visible by range (`dc cvau`, `ic ivau`, as `block_compiler.c` 166-176 does); writes the dispatch pair; logs the
+     install; and branches to the code. A start the file lacks, a full log, a full code area or a full reconstruction
+     table go to `hvc 1` as card 4's do. Weighed: the installer in `block_compiler.c`. Not taken: any change there
+     moves the runtime image's linked addresses and with them the frozen-image and call-stream tests (Sprint 247,
+     Observation 1). With the option off the stub's words are the frozen host's.
+   - **IV. No page protected inside the VM.** Card 4 makes every executable page of the image read-only at load
+     (`HostCompiler::use_cache`), so an install changes no descriptor and needs no TLB invalidation; the host notes
+     the pages behind each installed block, and the code-page set, when it replays the log.
+   - **V. The log tells the host.** An install writes a compile log entry (`block_compiler.c` 31-42) with its `pad`
+     word set to 1: the host's replay (`vm_compiled`) notes its tails, pages and start as for a compile and counts it
+     as an install, apart from "compiled". The log's 4,096 entries and its replay at every exit serve both. The C
+     compiler never writes `pad`, and the log's slots are reused after each replay, so the replay clears `pad` after
+     reading each entry; else a compile written into an install's old slot would read as an install.
+   - **VI. A write stops the installer.** `code_written` (card 4's write rule) sets a monitor data word the installer
+     reads first; set, it sends every target to `hvc 1`, where the host compiles. The log is replayed before the
+     write's exit is served, so every block installed before the write is dropped with the others.
+   - **VII. The judges.** Card 4's counts unchanged; instructions retired equal to card 4's cached runs',
+     80,307,872,496; `ledger_parting` against a card 4 ledger finds no parting; a unit test of the installer's words
+     on a small cache in a VM (`run_loop.rs`'s guests), its marks rebased and its fix-ups patched; the plants: a
+     fix-up left unpatched, the marks not rebased, the stop word unread.
 
 Each card's census rows: row 13 (flag liveness on composed blocks) at 1 and 3; row 2 (the loader's tests) at 4,
 where the cache loads with the image; row 15c (a full code area) at 3, the cache taking the image's code out of it.
