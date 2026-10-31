@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 292
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -82,4 +82,26 @@ No code outside the crate's tests builds a view from a slice, and the compiler r
 
 ## result
 
-- **The gates:** GATES-LINE
+- **A doc test that did not exist:** the first form put the `compile_fail` test on `new`'s own doc; rustdoc gathers
+  doc tests from the build without `cfg(test)`, where `#[cfg(test)]` removes `new` and its doc with it, and the
+  pre-commit run's doc tests read "0 passed; 0 failed". Moved to `ConcurrentGuestMemory`'s doc, which every build
+  keeps: "1 passed". The same run piped the doc tests into `grep` under `/bin/sh -e`, where a pipe's status is its
+  last command's, so a failing doc test would not have stopped it; the run again calls them plainly.
+- **A guard that fails for its one thing alone** (reviewer-3's Low 1 at 292): a bare `compile_fail` passes on any
+  error; stable rustdoc reads `compile_fail,E0599` as plain text (the rustdoc book, "Unstable features"), so the review's
+  fix would remove the guard. Each `compile_fail` sample, here and `hypervisor`'s `Vcpu`, gains a twin that differs in
+  the guarded thing alone and must compile: `from_raw_parts` for `new`, run on the vCPU's own thread (`no_run`) for the
+  move. Listed by name: `ConcurrentGuestMemory (line 28)` ok, `(line 35) - compile fail` ok, `Vcpu (line 390) -
+  compile` ok, `(line 396) - compile fail` ok. A departure: `crates/hypervisor/src/lib.rs` is changed, the same class.
+- **The change** (364763e11): `ConcurrentGuestMemory::new` under `#[cfg(test)]`; the code cache at load from
+  `memory_view(&memory)`; the twin-guarded doc tests in `concurrent_memory.rs` and `hypervisor`; `guest.rs` 0 views
+  built from a slice, `monitor_code.rs` 1 and `run.rs` 2, all in `#[cfg(test)]` modules.
+- **Expected values:** the four doc tests passing; 179 tests in the pre-commit run, the batch-run step first, the doc
+  tests of both crates called plainly.
+- **The gates:** `scripts/gates.sh` exit 0 in 886 s, kept in `store/gates/passes.tsv` as sprint 292 at 364763e11 with root=9aeb6f12c and "rust=crates python=0 samples=0", rdeps(hypervisor) and rdeps(w2m_vm), 179 tests and 4 doc tests, base=15160ecc8, Sprint 291's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: `#[cfg(test)]` off `new`; `ConcurrentGuestMemory (line 35) -
+  compile fail ... FAILED`, "Test compiled successfully, but it's marked `compile_fail`", its twin at line 28 passing.
+- **Plant 2,** restored by `cp` and checked by `cmp`: the code cache built from the slice again; the build failed at
+  `guest.rs` 853, "error[E0599]: no associated function or constant named `new` found for struct
+  `ConcurrentGuestMemory<'a>`". The card's second judge, `slice_calls.rs`' count, did not run: the integration test
+  links the library built without `cfg(test)`, which the same error stops; the compiler is the judge alone.
