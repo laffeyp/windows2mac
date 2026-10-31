@@ -115,3 +115,93 @@ impl Ledger {
         self.out.flush().map_err(|e| e.to_string())
     }
 }
+
+/// A host request as the guest asked it (Sprint 258): its ledger row, its op and four argument words, and the
+/// instruction count its bridge stored on entering the service. A row's monitor word is the one the next exit finds,
+/// so a request's own count is the previous row's; two runs whose other exits differ (a cache's `hvc 1`s) show
+/// different words on the request's own row for the same count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Asked {
+    pub row: u64,
+    pub words: [u64; 5],
+    pub count: u64,
+}
+
+/// A ledger's requests in order, from its text.
+pub fn asked(text: &str) -> Result<Vec<Asked>, String> {
+    let mut out = Vec::new();
+    let mut previous = 0u64;
+    for (n, line) in text.lines().enumerate() {
+        let cells: Vec<&str> = line.split('\t').collect();
+        let bad = || format!("ledger line {}: {line:?}", n + 1);
+        if cells.len() < 14 {
+            return Err(bad());
+        }
+        if cells[1] == "hvc 8" {
+            let mut words = [0u64; 5];
+            for (w, cell) in words.iter_mut().zip(&cells[5..10]) {
+                *w = u64::from_str_radix(cell, 16).map_err(|_| bad())?;
+            }
+            let row = cells[0].parse().map_err(|_| bad())?;
+            out.push(Asked {
+                row,
+                words,
+                count: previous,
+            });
+        }
+        previous = cells[3].parse().map_err(|_| bad())?;
+    }
+    Ok(out)
+}
+
+/// The first request two runs' guests asked differently, by op, argument or entry count, as its index and both sides;
+/// None when one run's requests begin the other's. The host's answers are left out: its words and the bytes it wrote
+/// carry the host's file times and inode numbers, which differ in every run (Sprint 258: `C:\w2m`'s times, a file's
+/// inode).
+pub fn first_parting(a: &[Asked], b: &[Asked]) -> Option<(usize, Asked, Asked)> {
+    a.iter()
+        .zip(b)
+        .enumerate()
+        .find(|(_, (x, y))| x.words != y.words || x.count != y.count)
+        .map(|(i, (x, y))| (i, *x, *y))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(seq: u64, kind: &str, executed: u64, request: &str) -> String {
+        format!("{seq}\t{kind}\t1800\t{executed}\t0\t{request}\tfeed")
+    }
+
+    /// Two ledgers alike but for the answers, the sites and an extra `hvc 1`, then one planted request with another
+    /// entry count: `first_parting` names the planted request and no earlier one.
+    #[test]
+    fn the_first_parting_is_the_first_request_asked_differently() {
+        let ask = |a2: u64, answer: &str| format!("9\tce\t10\t{a2:x}\t0\t0\t800\t{answer}");
+        // a row's count is the one the next exit finds: the requests' own counts are 0, 100 and 250 against 0, 100 and
+        // 309, b's second request reached through one `hvc 1` more
+        let none = ["-"; 8].join("\t");
+        let a = [
+            row(0, "hvc 8", 50, &ask(0, "aa")),
+            row(1, "hvc 1", 100, &none),
+            row(2, "hvc 8", 250, &ask(800, "bb")),
+            row(3, "hvc 8", 300, &ask(1000, "cc")),
+        ]
+        .join("\n");
+        let b = [
+            row(0, "hvc 8", 50, &ask(0, "dd")),
+            row(1, "hvc 1", 70, &none),
+            row(2, "hvc 1", 100, &none),
+            row(3, "hvc 8", 309, &ask(800, "ee")),
+            row(4, "hvc 8", 360, &ask(1000, "ff")),
+        ]
+        .join("\n");
+        let (a, b) = (asked(&a).unwrap(), asked(&b).unwrap());
+        assert_eq!(a.len(), 3);
+        let (i, x, y) = first_parting(&a, &b).expect("a parting");
+        assert_eq!(i, 2, "the request at offset 0x1000, asked at another count");
+        assert_eq!((x.count, y.count), (250, 309));
+        assert_eq!(first_parting(&a[..2], &b[..2]), None);
+    }
+}
