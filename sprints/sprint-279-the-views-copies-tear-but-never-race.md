@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 279
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -94,3 +94,22 @@ uses and why, and the slice-built views are counted.
 - [x] One concept: the view's copy semantics, with the table and count that rest on it.
 
 ## result
+
+- **The copies** (54a6d4c01): `read` and `write` load and store `AtomicU8` up to 8-byte alignment, `AtomicU64` over
+  the aligned words, and `AtomicU8` for the tail, all relaxed, in native byte order; the module's head and the Sync
+  comment say so, with RFC 3301 and P1478.
+- **The table** (Low 3): `docs/design-guest-memory-on-several-vcpus-2026-10-31.md`, "The structures the host reaches",
+  nine rows. One row names a defect for two vCPUs: `x86_address_at` reads the reconstruction table's count plain, then
+  its entries, and the host's Arm ordering lets those loads pass each other; the card that moves `run.rs` reads the
+  count Acquire. Choice 2 amended, choice 4's "plain" corrected, the type's lines 282.
+- **The count** (Low 1): `tests/slice_calls.rs` counts `ConcurrentGuestMemory::new(` outside its module: run.rs 7,
+  cases.rs 1, guest.rs 1, monitor_code.rs 1; census D7 says so.
+- **Expected values:** every length 0 to 40 at every offset 0 to 15 reads back, nothing written outside it; 20,000
+  copies racing 20,000 writes read only bytes written; the count tests pass.
+- **The gates:** `scripts/gates.sh` exit 0 in 670 s, kept in `store/gates/passes.tsv` as sprint 279 at 54a6d4c01 with root=358439357 and "rust=crates python=0 samples=0", rdeps(w2m_vm), 156 tests, base=77d21ab2f, Sprint 278's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** replaced: the card's plant, the word loop stopping a word early, cannot fire, as the byte loop after it
+  copies what is left and the result is the same; the plant made instead puts a word's bytes in big-endian order, by a
+  one-line `sed`, restored by `cp` and checked by `cmp`; the test failed, "length 1 at offset 0 wrote outside its
+  bytes".
+- **Plant 2,** restored by `cp` and checked by `cmp`: a second `ConcurrentGuestMemory::new(` in `cases.rs`; the count
+  test failed, "cases.rs: 2 views built from a slice, census D7 allows 1".
