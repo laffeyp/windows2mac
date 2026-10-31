@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 301
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -82,7 +82,7 @@ A work commit's checks are one command whose exit status is theirs.
 
 ## result
 
-- **The change** (WORK-COMMIT): `scripts/pre-commit.sh`, `#!/bin/sh`, `set -eu`: the one active card's sprint and the
+- **The change** (dd8935172): `scripts/pre-commit.sh`, `#!/bin/sh`, `set -eu`: the one active card's sprint and the
   last closed one's, zero or two active cards stopping it by name; format; lint with the gates' flags; the Linux check;
   `design_check`; `signal_report <the last closed> --check`; the doc tests of every crate with a library, the last
   command, nothing after it. Its arithmetic first used bash's `10#`, which the `sh` it names need not read; it strips
@@ -90,7 +90,7 @@ A work commit's checks are one command whose exit status is theirs.
   amendments kept after it as its history, not deleted.
 - **Expected values:** on the tree, exit 0 in 20 s, each check named in order, 18 doc-test results ok; under `dash`,
   the same script.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 57 s, kept in `store/gates/passes.tsv` as sprint 301 at dd8935172 with root=62e31489d and "rust=none python=0 samples=0", no crate changed, 0 tests, base=3f028d6e5, Sprint 300's close; multi-vCPU: not run (Python gates not run)
 - **Plant 1,** under `dash`, restored by `cp` and checked by `cmp`: `pub const PAGE` in `crates/guest_layout/src/lib.rs`
   indented two spaces (the card said one); the script exited 1 at the format check, "Diff in
   /Users/peterlaffey/port/crates/guest_layout/src/lib.rs:8", and ran nothing after it.
