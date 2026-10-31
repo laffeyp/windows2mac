@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 261
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -94,3 +94,32 @@ The cache file carries each block's fix-ups, and a guest run with a cache holds 
 - [x] One concept: the cache file in the guest.
 
 ## result
+
+- **Version 2** (c6b91f41a): each block carries `fixup` and `nfixups` into the file's `fixups`, the word indices
+  `relocate` re-encodes; `branch_leaving` is the one rule both use; `from_bytes` refuses another version by number.
+  Over UnityPlayer.dll: 2,448,701 fix-ups for 998,222 blocks, the file 228,971,368 bytes of the region's 268,435,456,
+  all blocks relocating equal (`store/translation-cache/cache-unityplayer-2026-10-30.json`, bde425323).
+- **The region:** `CACHE_DATA_VA` removed; `CACHE_FILE_VA`, 256 MiB, ends at the assembly range `CACHE_CODE_VA`, which
+  stays an address the words are assembled at and is never mapped; `tests/cache_layout.rs` holds both against every
+  mapped area. `Layout::new(loaded, cache)` places the file's part, 2 MB aligned, after the heap and maps it in blocks;
+  `Guest::new` sets `AP_READ_ONLY` on each of its 128 block descriptors (`tables::block_descriptor`, new);
+  `Guest::place_cache_file` copies the bytes; `w2m-vm --cache` places the file before `use_cache`. The maker refuses a
+  file larger than the region; its figures now name the file's region and the fix-ups in place of the data region's.
+- **The tests:** the fixture test holds each block's fix-ups to the words `relocate` changes, over the 280 images;
+  `a_cached_guest_holds_the_file_read_only_at_its_region` holds the bytes, the read-only blocks, the guest's memory
+  within the 40-bit IPA, and no region without a cache; `qpc` runs in a VM with the file mapped.
+- **The batch run with the map:** one untimed run with `--cache`, the reference's end, 128,456 installs and 125,515
+  compiles, as at Sprint 257.
+- **Files beyond the artifact contract:** `crates/w2m_vm/src/tables.rs` (`block_descriptor`) and
+  `store/translation-cache/cache-unityplayer-2026-10-30.json` (the figures at version 2); `compile.rs`, named in the
+  contract, did not change.
+- **The review:** not come; this card rests on choices I and II alone.
+- **The gates:** `scripts/gates.sh` exit 0 in 882 s on bde425323, copied from `store/gates/passes.tsv`; the timing stage 650 ns an exit at load 3.90.
+- **Plants,** run on bde425323, each restored by `cp` and checked by `cmp`.
+- **Plant 1,** `every_fixture_cache_covers_its_reads_indexes_its_pages_and_reads_back` failed, "block 0x1000's fix-ups
+  [33], where the move changes [32, 33]": each block's first fix-up dropped (`.skip(1)` in `fixups`). A first try,
+  dropping a fix-up at a block's last word, changed nothing: a block's last word is the budget stop's `b body`, inside
+  it.
+- **Plant 2,** `a_cached_guest_holds_the_file_read_only_at_its_region` failed, "called `Result::unwrap()` on an `Err`
+  value: \"the guest has no cache file region: its start set no host range\"": the region left out of the layout with a
+  cache.
