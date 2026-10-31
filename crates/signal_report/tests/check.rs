@@ -566,7 +566,7 @@ fn a_quoted_multi_line_sed_must_be_owned() {
     assert_eq!(code, Some(1));
     assert_eq!(
         stderr.trim(),
-        "sprint 199: its tail entry quotes `sed -i '' '5a\\ x' f.rs`, a multi-line edit (sed -i with an a\\, i\\ or c\\ \
+        "sprint 199: its tail entry quotes `sed -i '' '5a\\ x' f.rs`, a multi-line edit (sed -i with an a, i or c \
          command: a multi-line edit goes through the Edit tool), and owns no breach"
     );
     let owned = format!("{not_run}; `sed -i '' '5a\\ x' f.rs`, a multi-line edit outside the Edit tool");
