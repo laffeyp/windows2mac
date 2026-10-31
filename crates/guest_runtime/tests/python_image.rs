@@ -105,16 +105,47 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
     );
 }
 
-/// Sprint 271: the working tree's C is the tag's, so its image is the one judged above; a card that changes the C
-/// changes this test with its reason, the frozen judge unmoved.
+/// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
+/// is the frozen one with these changes, which their own tests judge (Sprint 272).
+const DEPARTURES: [(&str, &str); 3] = [
+    (
+        "tools/vm_compiler/vm_compiler.c",
+        "Sprint 272: a memory XCHG declined to the host's atomic lowering",
+    ),
+    ("tools/vm_compiler/x86_decode.c", "Sprint 272: x86_is_xchg"),
+    ("tools/vm_compiler/x86_decode.h", "Sprint 272: x86_is_xchg"),
+];
+
+/// Sprint 271, from Sprint 272 a list: the working tree's C differs from `FROZEN`'s in the files `DEPARTURES` names
+/// and no others, so a change to the C is named with its reason, the frozen judge unmoved.
 #[test]
-fn the_working_trees_c_is_the_frozen_c() {
+fn the_working_trees_c_departs_from_the_frozen_c_only_where_named() {
     let root = root();
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args([
+            "diff",
+            "--name-only",
+            FROZEN,
+            "--",
+            "tools/guest_runtime",
+            "tools/vm_compiler",
+        ])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "git diff {FROZEN}");
+    let changed: Vec<&str> = std::str::from_utf8(&out.stdout).unwrap().lines().collect();
+    let named: Vec<&str> = DEPARTURES.iter().map(|(f, _)| *f).collect();
+    assert_eq!(
+        changed, named,
+        "the C files changed from {FROZEN}'s, against those named with a reason"
+    );
     let (frozen_key, _) = frozen_build_root(&root);
     let here = cache_key(&root, &texts(&root).unwrap(), &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
-    assert_eq!(
+    assert_ne!(
         here, frozen_key,
-        "the working tree's C has left {FROZEN}'s: the image the VM runs is no longer the one judged byte for byte"
+        "the named departures leave the image's key the frozen one's"
     );
 }
 

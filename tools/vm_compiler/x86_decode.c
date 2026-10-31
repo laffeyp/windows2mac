@@ -421,3 +421,5 @@ int x86_operands(const struct x86_decoded *d, struct x86_operand out[4]) {
     }
     return t->count;
 }
+
+int x86_is_xchg(const struct x86_decoded *d) { return d->iclass == X86_ICLASS_XCHG; }

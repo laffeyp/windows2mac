@@ -162,6 +162,8 @@ fn group_1_s_words_equal_the_c_emitter_s() {
     let mut rust_refused: BTreeMap<String, usize> = BTreeMap::new();
     let mut lowering_refused: BTreeMap<String, usize> = BTreeMap::new();
     let mut differ: BTreeMap<String, (usize, String)> = BTreeMap::new();
+    // memory XCHGs the C compiled, where it must decline them (Sprint 272)
+    let mut c_compiled_locked: BTreeMap<String, usize> = BTreeMap::new();
     let mut words = [0u32; 512];
     // the calls no Rust rule lifts yet, by decoded class: the later groups' reach (Sprint 160)
     let mut not_lifted: BTreeMap<String, usize> = BTreeMap::new();
@@ -192,6 +194,20 @@ fn group_1_s_words_equal_the_c_emitter_s() {
         };
         if n < 0 {
             *c_refused.entry(format!("{} status {n}", ins.iclass)).or_default() += 1;
+            continue;
+        }
+        // a memory XCHG is locked on x86; the C has no atomic stencil for it and declines it to the host (Sprint 272)
+        let memory = |op: &translator::lift::Op| {
+            matches!(
+                op,
+                translator::lift::Op::Ld {
+                    loc: translator::lift::Loc::M { .. },
+                    ..
+                }
+            )
+        };
+        if ins.iclass == "XCHG" && ins.ops.iter().any(memory) {
+            *c_compiled_locked.entry(format!("0x{address:x}")).or_default() += 1;
             continue;
         }
         let nzcv_from = (flags[0] > 0).then(|| NZCV_KINDS[flags[0] as usize - 1]);
@@ -244,6 +260,11 @@ fn group_1_s_words_equal_the_c_emitter_s() {
     by_count.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
     println!("not lifted by the Rust rules, by class: {by_count:?}");
     println!("C refusals of lifted calls: {c_refused:?}");
+    assert!(
+        c_compiled_locked.is_empty(),
+        "the C compiled {} memory XCHG call(s), which x86 locks: {c_compiled_locked:?}",
+        c_compiled_locked.len()
+    );
     println!("Rust refusals: {rust_refused:?}");
     println!("lowering refused by name, by class: {lowering_refused:?}");
     for (k, (n, example)) in differ.iter().take(30) {

@@ -118,6 +118,13 @@ int vmc_key(const u8 *code, int n, u64 address, const struct vmc_flags *flags, u
             return VMC_DECODE;
     }
     *length = d.length;
+    /* an XCHG with a memory operand is locked "regardless of the presence or absence of the LOCK prefix" (Intel SDM
+       vol. 2, XCHG); its stencils store as a plain store, so the form goes to the host, whose lowering makes it the
+       load-exclusive and store-exclusive pair (Sprint 272) */
+    if (x86_is_xchg(&d))
+        for (int i = 0; i < nops; i++)
+            if (ops[i].kind == X86_OP_M)
+                return VMC_NO_STENCIL;
     u64 nxt = address + d.length;
     struct key_builder b = {.key = key};
     value(&b, nxt);

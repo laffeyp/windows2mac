@@ -1286,8 +1286,11 @@ pub fn compile_insn(
     let mut nzcv_ready = false; // an ALU op fused with the flags op that follows
     let mut fused_store = false; // a load fused with the store that follows
     let mut constant: BTreeMap<Temp, u64> = BTreeMap::new(); // temporaries an `imm` of this instruction set
-    // 1466-1468: a locked form folds no address and fuses no move: its loads and stores are the exclusive pair
-    let locked = ins.iclass.ends_with("_LOCK");
+    // 1466-1468: a locked form folds no address and fuses no move: its loads and stores are the exclusive pair. An XCHG
+    // with a memory operand is one (Sprint 272): x86 locks it "regardless of the presence or absence of the LOCK
+    // prefix" (Intel SDM vol. 2, XCHG), and its rule stores the memory operand before the register
+    let locked = ins.iclass.ends_with("_LOCK")
+        || (ins.iclass == "XCHG" && ops.iter().any(|op| matches!(op, Op::Ld { loc: Loc::M { .. }, .. })));
     let folded = if locked { BTreeMap::new() } else { folded_addresses(ops) };
     let mut lock_retry: Vec<Target> = Vec::new();
     // 1469-1471: a locked form, or an instruction with an op outside OPERAND_SAFE (1198: model steps, REP, DIV, CPUID,
@@ -3622,5 +3625,49 @@ mod tests {
         let (alias, _, forward) = operand_forms(&ops, &last_reads(&ops), &BTreeSet::new());
         assert_eq!(alias, BTreeMap::from([(1, 0), (2, 3)]));
         assert_eq!(forward, BTreeMap::from([(3, 0)]));
+    }
+
+    /// Sprint 272 (census D1): a memory XCHG, which x86 locks without a prefix, lowers as the load-exclusive and
+    /// store-exclusive pair with its retry, at 64 and 32 bits and RIP-relative; a register XCHG has no exclusive. One
+    /// encoding, `87 /r`, serves both operand orders.
+    #[test]
+    fn a_memory_xchg_is_the_exclusive_pair_and_a_register_xchg_is_not() {
+        let runtime = RuntimeCalls {
+            cpuid: 0x7f00_0000_1000,
+            pcmpistri: None,
+            approximate: None,
+            x87_fast: None,
+        };
+        let words = |bytes: &[u8]| {
+            let ins = crate::lift::lift(bytes, 0x1000).unwrap();
+            let mut a = Assembler::new(0x7f00_0000_0000);
+            compile_insn(
+                &mut a,
+                &ins,
+                0x7f00_0000_2000,
+                0x7ffe_0000_3000,
+                &runtime,
+                None,
+                0,
+                false,
+            )
+            .unwrap();
+            a.finish()
+        };
+        let exclusive = |w: &[u32]| {
+            let ldaxr = w.iter().any(|x| x & 0xbffffc00 == a64::ldaxr(8, 0, 0) & 0xbffffc00);
+            let stlxr = w.iter().any(|x| x & 0xbfe0fc00 == a64::stlxr(8, 0, 0, 0) & 0xbfe0fc00);
+            (ldaxr, stlxr)
+        };
+        // xchg [rax], rcx; xchg [rax], ecx; xchg [rip + 0x10], rcx
+        for bytes in [
+            &[0x48, 0x87, 0x08][..],
+            &[0x87, 0x08],
+            &[0x48, 0x87, 0x0d, 0x10, 0x00, 0x00, 0x00],
+        ] {
+            assert_eq!(exclusive(&words(bytes)), (true, true), "{bytes:02x?}");
+        }
+        // xchg rax, rcx
+        assert_eq!(exclusive(&words(&[0x48, 0x91])), (false, false));
     }
 }

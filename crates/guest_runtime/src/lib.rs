@@ -122,14 +122,20 @@ fn run(cmd: &mut Command, what: &str) -> Result<(), String> {
 }
 
 /// Builds the runtime for `defines` at `base_va` under `root/build/guest_runtime_rust/`: the image's key, and the
-/// image read back. Each source and generated header is written into the key's work directory and compiled there.
+/// image read back. Each source and generated header is written into a work directory of this call's own and compiled
+/// there, and the linked file renamed onto `<key>.bin`, so builds of one key at once (the test threads of a suite, the
+/// first time a key is met) neither write each other's files nor read a file half linked (Sprint 272: three tests
+/// failed together on the first build of a changed key and passed alone).
 pub fn build(root: &Path, defines: &[(String, u64)], base_va: u64) -> Result<(String, Image), String> {
+    static BUILDS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let texts = texts(root)?;
     let key = cache_key(root, &texts, defines, base_va)?;
     let cache = root.join("build/guest_runtime_rust");
-    let work = cache.join(&key);
     let out = cache.join(format!("{key}.bin"));
     if !out.exists() {
+        let call = BUILDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let work = cache.join(format!("{key}.work-{}-{call}", std::process::id()));
+        let linked = work.join("image.bin");
         fs::create_dir_all(&work).map_err(|e| format!("{}: {e}", work.display()))?;
         for (name, text) in generated_headers(root)? {
             fs::write(work.join(name), text).map_err(|e| e.to_string())?;
@@ -172,10 +178,14 @@ pub fn build(root: &Path, defines: &[(String, u64)], base_va: u64) -> Result<(St
                 ])
                 .arg(format!("0x{base_va:x}"))
                 .arg("-o")
-                .arg(&out)
+                .arg(&linked)
                 .args(&objects),
             "ld",
         )?;
+        // atomic on one filesystem: a reader sees no file or the whole one, and a second builder's rename puts the same
+        // bytes in place
+        fs::rename(&linked, &out).map_err(|e| format!("{} to {}: {e}", linked.display(), out.display()))?;
+        let _ = fs::remove_dir_all(&work);
     }
     let data = fs::read(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let (segments, symbols) = macho::parse_preload(&data)?;

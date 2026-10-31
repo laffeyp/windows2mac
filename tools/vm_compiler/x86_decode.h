@@ -95,5 +95,7 @@ int x86_decode(const u8 *b, int n, struct x86_decoded *out);
 /* Its explicit operands: their count, -1 where the row has no template (OperandError), -2 where x86ops raises
  * otherwise (an assertion or a size it has no entry for). */
 int x86_operands(const struct x86_decoded *d, struct x86_operand out[4]);
+/* Whether the instruction is an XCHG, the iclass the tables keep apart (`X86_ICLASS_XCHG`; Sprint 272). */
+int x86_is_xchg(const struct x86_decoded *d);
 
 #endif
