@@ -170,7 +170,9 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    and model-steps runs and the batch run; a plant serving `#12` without the take.
 2. **`Guest` divided.** The load part, `served` and the mapping; `served`'s guard takeable only with the word held,
    checked by the guard in debug builds; one vCPU still. Judge: every run as held; a plant taking `served` without
-   the word, which the guard's check names.
+   the word, which the guard's check names. *(Split by rule 6 at Sprint 302: 2a, Sprint 302, the 22 Served fields
+   gathered into one value, `Guest.served`, held to this design's table by a test; 2b, `served` a lock whose guard
+   checks the word, the run loop's serving paths taking it, with this card's judge and plant.)*
 3. **Break-before-make** for a block split, its count on the batch run's record. Judge: a split's three writes in
    order, by a test that records them; the batch run as held.
 4. **The threads and the second vCPU.** A thread per vCPU, the stop, the kick, the merged outcome, FEAT_LSE2's
