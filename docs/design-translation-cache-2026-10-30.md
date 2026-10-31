@@ -161,11 +161,17 @@ words in the real run; the VM's follows once the host's conforms.
    unchanged with no cache. A guest write to the image's code stops the cache's use for the rest of the run, so no
    cached word or liveness outlives the bytes it came from. The batch run makes none (Sprint 257): the card's first
    count, taken in the `hvc 13` handler, saw only pages already behind code; the run with the cache, every executable
-   page of the image read-only from the load (`HostCompiler::use_cache`), stopped the cache on no write.
+   page of the image read-only from the load (`HostCompiler::use_cache`), stopped the cache on no write. *(Amended
+   2026-10-30, Sprint 262, reviewer-3's Medium 1 at 261.)* Card 4's time: on six timed records alike with neither the
+   whole-block judge nor the exit ledger, the host's install is faster, the rate 3.174 to 3.185 billion instructions a
+   second against 3.065 to 3.117 without the cache (3.0% on the means), the VM's run seconds 22.72 to 22.79 against
+   23.41 to 23.71, the host's `hvc 1` seconds 0.206 to 0.212 against 0.042. Sprint 257's "1.1% slower" came from
+   records that wrote the ledger, whose hashing at each of 150,065 exits weighed on the cached run alone.
 5. **The install inside the VM.** The copy and the re-encoding in the miss stub's path, no exit. Gate: card 4's counts
    unchanged, and the run's compile time falling below Sprint 248's 1,351 to 1,362 ms and its most in a 60 Hz frame
-   below 248's 10.9 to 12.0 ms, on timed records run alone. Step 5 is met at this card's close. *(Amended 2026-10-30,
-   Sprint 258.)* A cached run is another schedule of the same guest, conforming: a time slice ends at a block's stop
+   below 248's 10.9 to 12.0 ms, on timed records run alone, without the judge or the exit ledger (Sprint 262); its
+   `ledger_parting` check on separate untimed runs that write the ledger. Step 5 is met at this card's close.
+   *(Amended 2026-10-30, Sprint 258.)* A cached run is another schedule of the same guest, conforming: a time slice ends at a block's stop
    (`threads.c` 17-18), each block charged whole on entry, and the cache cuts blocks where the in-VM compiler does not
    (a page boundary among them), so the same 14 switches fall at other instructions and the threads interleave
    otherwise from the batch run's 5,539th host request on, 20,683,462,044 instructions in; the run retires
