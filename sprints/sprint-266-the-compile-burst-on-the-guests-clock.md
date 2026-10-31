@@ -99,3 +99,40 @@ carries it.
 - [x] One concept: the burst on the guest's clock.
 
 ## result
+
+- **The gate first** (e67bf4ee4): card 5's frame gate in the design counted in instructions retired, a window of
+  53,500,000, before any record.
+- **The count** (22757427f): `Timing::instructions_at_compile` (`w2m-vm --instructions-at-compile`), off by default;
+  `call_path`, after a call that logged a block, writes `[x28 + 8] - x23` into the entry's word at
+  `VMC_LOG_EXECUTED`, 120, past the C's 120 bytes; `run::InstructionsAt`, compiles and installs apart;
+  `record::most_in_window` over `FRAME_INSTRUCTIONS`; two `vm_compile_blocks` rows. The limit is absolute,
+  `executed + TIME_SLICE` with threads (`threads::set_budget`), so the count is the run's; the entry's compile, before
+  any instruction, counts 0.
+- **Not as the card said:** `struct log_entry` names no word. A field in `block_compiler.c` changed the runtime's key,
+  and `python_image.rs`, which holds the image to the frozen host's byte for byte, failed ("no Python image under key
+  …"); the C restored by `git checkout`, the offset held by a `const` assert and by the run test, whose uncounted run
+  reads 0 in every entry.
+- **The checks** (8c5795ca8): `batch_record.rs`'s `compile_problems` named the two rows as counts the reference does
+  not hold, which would have failed the gates on the first record; it now takes them, both or neither, the compiles'
+  above zero, the installs' above zero beside installs. `batch-run-record.sh` refuses a directory that exists: the
+  first run, given `.`, wrote its record into the repository root, as Sprint 247's did; that record, moved out, gave
+  the figures below.
+- **The records**, untimed, with the judge and the ledger, each conforming, each pair equal:
+
+  | record | cache | instructions | compiled | installed | most compiled in a frame | most installed |
+  |---|---|---|---|---|---|---|
+  | w2m-vm-game-1793423671000000000 | no | 80,306,813,574 | 274,837 | — | 54,996 | 0 |
+  | w2m-vm-game-1793423788000000000 | no | 80,306,813,574 | 274,837 | — | 54,996 | 0 |
+  | w2m-vm-game-1793423896000000000 | yes | 80,307,872,496 | 125,515 | 145,570 | 19,201 | 33,363 |
+  | w2m-vm-game-1793424005000000000 | yes | 80,307,872,496 | 125,515 | 145,570 | 19,201 | 33,363 |
+
+  The rate, which the count does not read, moved: 2.646 and 2.739 billion instructions a second uncached, 2.842 and
+  2.812 cached. The cached run's 125,515 compiles hold 41,830 in mono-2.0-bdwgc.dll, 897 in steam_api64.dll and 770
+  in the program.
+- **Card 5's gate:** the most compiles in a frame of instructions 19,201 with the cache against 54,996 without, card
+  4's count (80,307,872,496) unchanged, and the compile time below Sprint 248's (Sprint 263: 678 to 694 ms): met.
+- **The gates:** GATES-LINE
+- **Plant 1,** restored by `cp` and checked by `cmp`: `>=` in `most_in_window` made `>`, the window's end closed; the
+  test failed, "assertion `left == right` failed, left: 2, right: 1".
+- **Plant 2,** restored by `cp` and checked by `cmp`: `vm_compiled` pushing 0 for an install; the run test failed,
+  "install 1: 0 instructions, the run's 149".
