@@ -105,7 +105,7 @@ impl From<crate::file_bridge::FileError> for ModuleError {
 /// `module` (94-132): the handle `name` means, 0 when it is found nowhere; `loading` is LoadLibrary, which would load
 /// a DLL not yet in the process, where GetModuleHandle reports only loaded ones.
 pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, ModuleError> {
-    use guest_runtime::layout::{MONITOR_SIZE, PROCESS_VA, SYSTEM_IMAGES, SYSTEM_IMAGES_OFF};
+    use guest_runtime::layout::{PROCESS_VA, SYSTEM_IMAGES, SYSTEM_IMAGES_OFF};
     let p = &guest.process;
     let used = p.system.len() as u64;
     let next_system = (used < SYSTEM_IMAGES).then_some(PROCESS_VA + SYSTEM_IMAGES_OFF + 0x1000 * used);
@@ -143,8 +143,9 @@ pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, Modul
             })?
             .clone();
         let off = handle - PROCESS_VA;
-        let process = &mut guest.memory.as_mut_slice()[MONITOR_SIZE as usize..];
-        crate::process::synthetic_image(process, off);
+        // through the view: LoadLibrary is served while the run runs (Sprint 290, census D7)
+        let mut process = crate::process::ProcessView(crate::guest::memory_view(&guest.memory));
+        crate::process::synthetic_image(&mut process, off);
         guest.process.system.insert(c, (handle, spelling));
     }
     Ok(handle)
@@ -157,8 +158,6 @@ pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, Modul
 /// second answer gives the guest runtime. 0: no file. A DLL with TLS callbacks stops by name as the Python's does, a
 /// refusal; one with static TLS gets its index and a block in every thread (`threads::late_static_tls`, Sprint 218).
 fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
-    use crate::guest::PROCESS_SIZE;
-    use guest_runtime::layout::MONITOR_SIZE;
     let Some(files) = guest.files.as_ref() else {
         return Ok(0);
     };
@@ -185,8 +184,10 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
     let at = guest
         .layout
         .offset(base)
-        .ok_or_else(|| Failed(format!("{file} placed at 0x{base:x}, which is not mapped")))? as usize;
-    guest.memory.as_mut_slice()[at..at + data.len()].copy_from_slice(data);
+        .ok_or_else(|| Failed(format!("{file} placed at 0x{base:x}, which is not mapped")))?;
+    // the image, its import slots and PEB.Ldr through the view: LoadLibrary is served while the run runs (Sprint 290,
+    // census D7)
+    crate::guest::memory_view(&guest.memory).write(at, data);
     for (&slot, target) in &pe.iat {
         let (dll, function) = target.split_once('!').unwrap_or((target, ""));
         let leaf = canonical(dll);
@@ -204,8 +205,7 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
                 })?,
             None => guest.import_thunk(target).map_err(|e| Failed(format!("{e:?}")))?,
         };
-        let s = at + slot as usize;
-        guest.memory.as_mut_slice()[s..s + 8].copy_from_slice(&va.to_le_bytes());
+        crate::guest::memory_view(&guest.memory).write_u64(at + u64::from(slot), va);
     }
     // its static TLS in every thread before the snapshot and before it joins the images (vm_backend 3938-3940)
     crate::threads::late_static_tls(guest, &pe, base)?;
@@ -234,9 +234,9 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
         dependency_order: &guest.dependency_order,
         paths: &guest.dll_paths,
     };
-    let process = &mut guest.memory.as_mut_slice()[MONITOR_SIZE as usize..(MONITOR_SIZE + PROCESS_SIZE) as usize];
+    let mut process = crate::process::ProcessView(crate::guest::memory_view(&guest.memory));
     // its only errors are the loader area full (process.rs 548, 569), a capacity, as the system slots are
-    crate::process::write_loader_data(process, &list, &guest.process).map_err(|e| NotServed(e.0))?;
+    crate::process::write_loader_data(&mut process, &list, &guest.process).map_err(|e| NotServed(e.0))?;
     guest.trace_ranges().map_err(|e| Failed(format!("{e:?}")))?;
     if entry_rva != 0 {
         guest.pending_init = guest

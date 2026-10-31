@@ -27,14 +27,14 @@ use crate::monitor_code::{
     self, MonitorCode, REG_BUDGET, STATE_REDIRECT, Site, budget_from_count, count_from_budget, record_taking,
     release_runtime, take_runtime, unlock_runtime,
 };
-use crate::process::{self, Areas, PARAMETERS_ROOM, ProcessArea, ProcessError, Start, TRACE_SIZE};
+use crate::process::{self, Areas, PARAMETERS_ROOM, ProcessArea, ProcessError, Start};
 use crate::tables::{TableError, write_translation_tables};
 
-pub use crate::{VIRTUAL_SIZE, VIRTUAL_VA};
-/// vm_backend 261: the process area's size.
-pub const PROCESS_SIZE: u64 = guest_runtime::layout::TRACE_OFF + TRACE_SIZE;
 /// VM_COMPILER + this: the code cache's next free offset from MONITOR_VA (vm_backend 197, 2514-2520).
 pub use crate::monitor_code::VMC_CURSOR;
+/// vm_backend 261: the process area's size, defined beside the area's writers (Sprint 290).
+pub use crate::process::PROCESS_SIZE;
+pub use crate::{VIRTUAL_SIZE, VIRTUAL_VA};
 /// VM_COMPILER + this: the dispatcher's, the slice stub's and the trace's addresses (vm_backend 197, 2508).
 pub const VMC_EXIT: u64 = 0x18;
 /// The state block's schedule word (vm_backend 1133).

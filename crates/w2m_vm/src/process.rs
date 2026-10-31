@@ -28,6 +28,8 @@ pub const RING_APIS: u64 = 512;
 pub const RING_HEADER: u64 = 16 + 8 * RING_APIS;
 pub const TRACE_SIZE: u64 = 0x80_0000;
 pub const TRACE_CAPACITY: u64 = (TRACE_SIZE - TRACE_RECORDS_OFF) / TRACE_RECORD;
+/// vm_backend 261: the process area's size, from its start to the trace's end.
+pub const PROCESS_SIZE: u64 = TRACE_OFF + TRACE_SIZE;
 pub const LDR_ENTRY_SIZE: u64 = 0x120;
 pub const PARAMETERS_VA: u64 = HEAP_VA + 0x1000;
 pub const PARAMETERS_FIXED: usize = 0x448;
@@ -147,19 +149,54 @@ pub struct Areas<'a> {
     pub heap: &'a mut [u8],
 }
 
-fn put(mem: &mut [u8], off: u64, bytes: &[u8]) {
-    mem[off as usize..off as usize + bytes.len()].copy_from_slice(bytes);
+/// Where a writer of the process area puts its bytes, `off` from the area's start (Sprint 290, census D7): the area as
+/// a slice at load, while no vCPU runs, and `ProcessView` at a run's LoadLibrary, while another may.
+pub trait ProcessBytes {
+    fn put(&mut self, off: u64, bytes: &[u8]);
 }
 
-fn q(mem: &mut [u8], off: u64, v: u64) {
+impl ProcessBytes for [u8] {
+    fn put(&mut self, off: u64, bytes: &[u8]) {
+        self[off as usize..off as usize + bytes.len()].copy_from_slice(bytes);
+    }
+}
+
+/// A block built on the host before it is written, the parameters block's.
+impl ProcessBytes for Vec<u8> {
+    fn put(&mut self, off: u64, bytes: &[u8]) {
+        self[..].put(off, bytes);
+    }
+}
+
+/// The process area through the view, `MONITOR_SIZE` past guest memory's start: each write a copy that makes no
+/// reference into memory another vCPU may write, and inside the area's `PROCESS_SIZE` bytes, as the slice it stands
+/// for bounds it.
+pub struct ProcessView<'a>(pub crate::concurrent_memory::ConcurrentGuestMemory<'a>);
+
+impl ProcessBytes for ProcessView<'_> {
+    fn put(&mut self, off: u64, bytes: &[u8]) {
+        assert!(
+            off + bytes.len() as u64 <= PROCESS_SIZE,
+            "a write of {} bytes at 0x{off:x}, past the process area's 0x{PROCESS_SIZE:x}",
+            bytes.len()
+        );
+        self.0.write(guest_runtime::layout::MONITOR_SIZE + off, bytes);
+    }
+}
+
+fn put<M: ProcessBytes + ?Sized>(mem: &mut M, off: u64, bytes: &[u8]) {
+    mem.put(off, bytes);
+}
+
+fn q<M: ProcessBytes + ?Sized>(mem: &mut M, off: u64, v: u64) {
     put(mem, off, &v.to_le_bytes());
 }
 
-fn d(mem: &mut [u8], off: u64, v: u32) {
+fn d<M: ProcessBytes + ?Sized>(mem: &mut M, off: u64, v: u32) {
     put(mem, off, &v.to_le_bytes());
 }
 
-fn h(mem: &mut [u8], off: u64, v: u16) {
+fn h<M: ProcessBytes + ?Sized>(mem: &mut M, off: u64, v: u16) {
     put(mem, off, &v.to_le_bytes());
 }
 
@@ -168,7 +205,7 @@ fn utf16(text: &str) -> Vec<u8> {
 }
 
 /// A UNICODE_STRING: Length, MaximumLength, the pad, Buffer.
-fn unicode_string(mem: &mut [u8], off: u64, length: u16, maximum: u16, buffer: u64) {
+fn unicode_string<M: ProcessBytes + ?Sized>(mem: &mut M, off: u64, length: u16, maximum: u16, buffer: u64) {
     h(mem, off, length);
     h(mem, off + 2, maximum);
     d(mem, off + 4, 0);
@@ -191,22 +228,22 @@ pub struct ProcessArea {
 }
 
 /// vm_backend 2318-2325: a synthetic module's PE32+ optional header, SizeOfOptionalHeader 0xF0, SizeOfImage 0x1000.
-fn synthetic_optional_header(page: &mut [u8]) {
-    h(page, 0x80 + 0x14, 0xF0);
-    h(page, 0x80 + 0x18, 0x20B);
-    d(page, 0x80 + 0x18 + 0x38, 0x1000);
+fn synthetic_optional_header<M: ProcessBytes + ?Sized>(mem: &mut M, page: u64) {
+    h(mem, page + 0x80 + 0x14, 0xF0);
+    h(mem, page + 0x80 + 0x18, 0x20B);
+    d(mem, page + 0x80 + 0x18 + 0x38, 0x1000);
 }
 
 /// A synthetic module page: DOS and PE headers, x64, no sections (vm_backend 2909-2915, 2946-2951); `process` is the
-/// process area, `off` the page's offset in it (Sprint 202: a LoadLibrary after the start writes one too).
-pub fn synthetic_image(process: &mut [u8], off: u64) {
-    let page = &mut process[off as usize..off as usize + 0x1000];
-    page[..2].copy_from_slice(b"MZ");
-    d(page, 0x3C, 0x80);
-    page[0x80..0x84].copy_from_slice(b"PE\0\0");
-    h(page, 0x84, 0x8664);
-    h(page, 0x86, 0);
-    synthetic_optional_header(page);
+/// process area, `off` the page's offset in it (Sprint 202: a LoadLibrary after the start writes one too, through the
+/// view from Sprint 290).
+pub fn synthetic_image<M: ProcessBytes + ?Sized>(process: &mut M, off: u64) {
+    put(process, off, b"MZ");
+    d(process, off + 0x3C, 0x80);
+    put(process, off + 0x80, b"PE\0\0");
+    h(process, off + 0x84, 0x8664);
+    h(process, off + 0x86, 0);
+    synthetic_optional_header(process, off);
 }
 
 /// Writes the process area for `loaded` (vm_backend 2803-2859, 2861-2903, 2905-2956, 2970-3014). `system_modules` is
@@ -510,7 +547,11 @@ fn system_images(
 /// initialization order ntdll.dll, KERNELBASE.dll, KERNEL32.DLL, then the DLLs dependencies first. PEB.Ldr 0x18;
 /// PEB_LDR_DATA Length 0, Initialized 4, the list heads at 0x10, 0x20, 0x30; LDR_DATA_TABLE_ENTRY links at 0x00, 0x10,
 /// 0x20, DllBase 0x30, EntryPoint 0x38, SizeOfImage 0x40, FullDllName 0x48, BaseDllName 0x58.
-pub fn write_loader_data(process: &mut [u8], list: &LoaderList<'_>, area: &ProcessArea) -> Result<(), ProcessError> {
+pub fn write_loader_data<M: ProcessBytes + ?Sized>(
+    process: &mut M,
+    list: &LoaderList<'_>,
+    area: &ProcessArea,
+) -> Result<(), ProcessError> {
     let (base, va0) = (LOADER_DATA_OFF, PROCESS_VA + LOADER_DATA_OFF);
     let system32 = "C:\\Windows\\System32\\";
     type Entry = (u64, u64, u64, String, String);

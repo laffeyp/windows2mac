@@ -24,7 +24,7 @@ const SLICES: [(&str, usize); 16] = [
     ("guest.rs", 5),
     ("host_request.rs", 2),
     ("kernel.rs", 1),
-    ("modules.rs", 5),
+    ("modules.rs", 1),
     ("monitor.rs", 6),
     ("run.rs", 2),
     ("shared.rs", 1),
