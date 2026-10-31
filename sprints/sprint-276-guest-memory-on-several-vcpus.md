@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 276
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -114,3 +114,28 @@ second vCPU.
 - [x] One concept: the access path for memory other vCPUs write.
 
 ## result
+
+- **The view** (545d19c49): `w2m_vm::concurrent_memory::ConcurrentGuestMemory`, 194 lines with its tests: `read`,
+  `write`, `read_u32`, `read_u64`, `write_u32`, `write_u64`, `atomic_u32` and `atomic_u64` (aligned, refused
+  otherwise), and `store_pair_release`, one `STP` after a release fence, on aarch64.
+- **Moved to it:** the runtime word's take and release (`monitor_code`), `dispatch_insert`, which now stores each pair
+  whole, `x86_address_at` and `recon_lookup`, its bisection now reading entries through the view, and the litmus
+  harness's dispatch inserts and code reads, through a view made once before its threads start. `cases.rs`'s one
+  `dispatch_insert` call follows the new signature, a file the card's list did not name.
+- **The waiting tests:** `host_take_runtime_word_waiting` calls a hook each time the word is held. The take's test
+  frees the word on the holder's thread only after the hook has run; the drain's test (`vm_compiled_waiting`) frees it
+  from the hook on one thread. Neither reads a time. The take's tests moved to `monitor_code`, which builds on Linux, so
+  CI runs them; `run`, where 275 put them, is macOS-only, and 275's entry said CI ran them.
+- **`GuestMemory`'s SAFETY comment** says `Send` covers ownership only, a slice is sound only while every vCPU that may
+  write is stopped, and the view serves the rest.
+- **The design note** `docs/design-guest-memory-on-several-vcpus-2026-10-31.md`, the Decision of 2026-10-31, and census
+  row D7: 209 slice calls left in `crates/w2m_vm`, 174 in `src/`.
+- **Expected values:** the `w2m_vm` library tests, 81 (76 at 275), including a word read back by every path, a
+  misaligned atomic and an access past the end refused, and a pair read back low then high; the litmus tests: MP, LB,
+  2+2W and IRIW's forbidden outcome 0 in 100,000 each, SB's relaxed outcome 7,332, EnTSO cleared MP's forbidden outcome
+  2,007; the run-loop tests, 11.
+- **The gates:** `scripts/gates.sh` exit 0 in 703 s, kept in `store/gates/passes.tsv` as sprint 276 at 545d19c49 with root=8a3e4053d and "rust=crates python=0 samples=0", rdeps(hypervisor) and rdeps(w2m_vm), 158 tests, base=c21789e7e, Sprint 275's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: the take a plain store; the test failed, "the take did not wait
+  for the other vCPU's hold".
+- **Plant 2,** restored by `cp` and checked by `cmp`: `read_u64` reading at the offset plus 4; the test failed,
+  "assertion `left == right` failed: the word read at 8 left: 12302652056939934532 right: 1234605616436508552".
