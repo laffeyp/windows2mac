@@ -127,4 +127,7 @@ measured difference, and card 5's design says what follows.
 - **Plant 1,** run with `monitor_code.rs` restored (the added invalidation left out) and `W2M_FLUSH=1` still set, load
   3.13: the compile time 1,325 ms, inside (c)'s 1,278 to 1,329 and under (d)'s 1,475 to 1,496, so the (d) figure names
   the invalidation and nothing else; the run seconds, 24.36, lie inside both (c)'s and (d)'s spread under this load,
-  and the compile time is the figure that names it.
+  and the compile time is the figure that names it. *(Amended 2026-10-30, in card 260's commit.)* No test judges a
+  timing run: the comparison was made by hand, which the observation contract did not say, and the close committed and
+  pushed with `signal_report --check` failing on it. The run's own line, read against (c) and (d): "plant load 3.13 exit
+  0 vm=24.358967532 vm=1324.7725".
