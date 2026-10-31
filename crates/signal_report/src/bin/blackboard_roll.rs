@@ -105,9 +105,22 @@ fn is_review(entry: &str) -> bool {
         .is_some_and(|(_, text)| text.starts_with("reviewer-") || text.starts_with("The user's pasted code review"))
 }
 
-/// A Decision marked closed or superseded in one of its annotations.
+/// A Decision marked closed or superseded in one of its annotations: `*(Closed ` or `*(Superseded ` and a date,
+/// `YYYY-MM-DD`. A Decision that quotes the mark, as Sprint 269's names `"*(Closed"`, is not marked (Sprint 299).
 fn is_closed(entry: &str) -> bool {
-    entry.contains("*(Closed") || entry.contains("*(Superseded")
+    ["*(Closed ", "*(Superseded "].iter().any(|mark| {
+        entry.match_indices(mark).any(|(at, _)| {
+            let date = &entry.as_bytes()[at + mark.len()..];
+            date.len() >= 10
+                && date[..10].iter().enumerate().all(|(i, b)| {
+                    if i == 4 || i == 7 {
+                        *b == b'-'
+                    } else {
+                        b.is_ascii_digit()
+                    }
+                })
+        })
+    })
 }
 
 /// The first sprint a Built paragraph names, "Sprint N" or "Sprints N-M".
@@ -395,6 +408,19 @@ mod tests {
                            - **2026-10-22 agent-resolved** — C. Decision: c. Revisit if: z. *(Superseded 2026-10-30 by D.)*\n\n\
                            ## Built\n\n- **2026-10-05** — Sprint 000 (zero) a.\n- **2026-10-06** — Sprint 241 (b) b.\n\
                            - **2026-10-07** — Sprint 242 (c) c.\n- **2026-10-08** — Sprint 243 (d) d.\n\n## Sprint tail\n";
+
+    /// A mark is the annotation with its date; a Decision quoting the mark, as Sprint 269's does, stays (Sprint 299).
+    #[test]
+    fn a_quoted_mark_is_not_a_mark() {
+        assert!(is_closed("A. *(Closed 2026-10-30, Sprint 243: done.)*"));
+        assert!(is_closed(
+            "C. *(Superseded 2026-10-31, Sprint 299: by the Decision \"D\")*"
+        ));
+        assert!(!is_closed(
+            "the Decisions whose entry holds \"*(Closed\" or \"*(Superseded\" to the archive"
+        ));
+        assert!(!is_closed("*(Closed by hand)*"));
+    }
 
     /// The closed and superseded Decisions leave in the record's order, the pointer where the first stood; the rest,
     /// the user's scope first, stay byte for byte (Sprint 269).
