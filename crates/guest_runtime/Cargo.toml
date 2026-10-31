@@ -7,4 +7,6 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+# the layout the image is compiled against, re-exported as `guest_runtime::layout` (Sprint 298)
+guest_layout = { path = "../guest_layout" }
 serde_json.workspace = true

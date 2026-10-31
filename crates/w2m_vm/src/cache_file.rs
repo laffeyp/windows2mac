@@ -68,11 +68,13 @@ pub type Refused = BTreeMap<String, u32>;
 
 /// What the cached words are made from (Sprint 265), whose tree id the key hashes: the maker's crates, `guest_runtime`,
 /// `pe_image`, `translator` and `image_walk`, with every crate they reach by a `path =` dependency (`a64_encoder`,
-/// `x86_decoder`); this file; `specs/`, which `x86_decoder`'s build script reads; the lockfile and the toolchain. The rest
-/// of `w2m_vm` changes no cached word: the addresses it places that the words embed are hashed apart, as `Exits`.
-/// `tests/cache_file.rs` holds the crates against their manifests.
-pub const KEY_INPUTS: [&str; 10] = [
+/// `x86_decoder`, and `guest_layout`, which `guest_runtime` re-exports, Sprint 298); this file; `specs/`, which
+/// `x86_decoder`'s build script reads; the lockfile and the toolchain. The rest of `w2m_vm` changes no cached word: the
+/// addresses it places that the words embed are hashed apart, as `Exits`. `tests/cache_file.rs` holds the crates
+/// against their manifests.
+pub const KEY_INPUTS: [&str; 11] = [
     "crates/guest_runtime",
+    "crates/guest_layout",
     "crates/pe_image",
     "crates/translator",
     "crates/image_walk",

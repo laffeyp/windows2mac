@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 //! One definition a fact (Sprints 296 and 297). A `pub const` name defined in two source files under `crates/` is a
-//! fact stated twice, which a change to one copy would split: Sprint 296 found seven of `guest_runtime/src/layout.rs`'
-//! names defined again in `w2m_vm`, and reviewer-3's Low 1 at 296 found 24 more across the crates. A name in two files
+//! fact stated twice, which a change to one copy would split: Sprint 296 found seven of the layout's names (then
+//! `guest_runtime/src/layout.rs`, `guest_layout` from Sprint 298) defined again in `w2m_vm`, and reviewer-3's Low 1 at 296 found 24 more across the crates. A name in two files
 //! passes only if one definition derives its value from the other's path, or a named test holds the two equal, or the
 //! two are different facts that share a name, each allowed below with its reason.
 
@@ -168,6 +168,35 @@ fn every_fact_has_one_definition_or_a_named_reason() {
         .filter(|n| by_name.get(*n).is_none_or(|d| d.len() < 2))
         .collect();
     assert!(stale.is_empty(), "allowed but defined once: {stale:?}");
+}
+
+/// The loader and the arena use the layout alone, so they reach it in `guest_layout`, a crate of facts, and not through
+/// `guest_runtime`, which builds the C runtime's image (reviewer-3's Low 1 at 297; Sprint 298). A manifest's lines are
+/// read whole, less comments, so every form Cargo takes is caught: `name = {..}`, `name.workspace = true`, and the
+/// table forms `[dependencies.name]` and `[target.'cfg(..)'.dependencies]`.
+#[test]
+fn the_loader_and_the_arena_reach_the_layout_without_the_image_builder() {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let lines = |name: &str| -> Vec<String> {
+        fs::read_to_string(crates.join(name).join("Cargo.toml"))
+            .unwrap()
+            .lines()
+            .map(|l| l.split('#').next().unwrap_or("").to_string())
+            .collect()
+    };
+    let through_builder: Vec<&str> = ["pe_loader", "virtual_memory"]
+        .into_iter()
+        .filter(|name| lines(name).iter().any(|l| l.contains("guest_runtime")))
+        .collect();
+    assert!(
+        through_builder.is_empty(),
+        "depending on guest_runtime for the layout: {through_builder:?}"
+    );
+    let tables: Vec<String> = lines("guest_layout")
+        .into_iter()
+        .filter(|l| l.contains("dependencies"))
+        .collect();
+    assert!(tables.is_empty(), "guest_layout has dependencies: {tables:?}");
 }
 
 /// `STATUS_ACCESS_VIOLATION`, stated by `cpu_cases` (the case runner's faults) and `pe_loader` (the loader's), which

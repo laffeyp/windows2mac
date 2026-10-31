@@ -9,7 +9,7 @@ publish.workspace = true
 [dependencies]
 pe_image = { path = "../pe_image" }
 # the guest's layout, its one definition of a page (Sprint 297)
-guest_runtime = { path = "../guest_runtime" }
+guest_layout = { path = "../guest_layout" }
 
 [dev-dependencies]
 serde_json.workspace = true

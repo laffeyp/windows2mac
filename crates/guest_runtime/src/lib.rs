@@ -8,7 +8,7 @@
 //! Python's `build/guest_runtime/`.
 
 pub mod headers;
-pub mod layout;
+pub use guest_layout as layout;
 pub mod services;
 
 use std::collections::BTreeMap;

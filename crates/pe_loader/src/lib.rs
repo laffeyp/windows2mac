@@ -28,9 +28,9 @@ pub const TLS_VA: u64 = 0x7FFC_0000_0000;
 /// 38229055834: the array does not move).
 pub const TLS_SLOTS: usize = 64;
 pub const DLL_PROCESS_ATTACH: u32 = 1;
-pub use guest_runtime::layout::HEAP_SIZE;
-pub use guest_runtime::layout::HEAP_VA;
-pub use guest_runtime::layout::MONITOR_VA;
+pub use guest_layout::HEAP_SIZE;
+pub use guest_layout::HEAP_VA;
+pub use guest_layout::MONITOR_VA;
 /// A thunk no service serves: the run stops by name.
 pub const DLL_INIT_FAILED: &str = "w2m-loader!DllMain returned FALSE";
 pub const STACK_TOP: u64 = 0x0000_0001_0000_0000;

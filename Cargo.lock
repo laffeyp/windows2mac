@@ -48,9 +48,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "guest_layout"
+version = "0.1.0"
+
+[[package]]
 name = "guest_runtime"
 version = "0.1.0"
 dependencies = [
+ "guest_layout",
  "serde_json",
 ]
 
@@ -129,7 +134,7 @@ dependencies = [
 name = "pe_loader"
 version = "0.1.0"
 dependencies = [
- "guest_runtime",
+ "guest_layout",
  "pe_image",
 ]
 
@@ -239,7 +244,7 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 name = "virtual_memory"
 version = "0.1.0"
 dependencies = [
- "guest_runtime",
+ "guest_layout",
  "pe_image",
  "serde_json",
 ]
