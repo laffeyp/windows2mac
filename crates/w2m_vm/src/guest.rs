@@ -848,9 +848,9 @@ impl Guest {
             },
         );
         let switch = image.symbols["w2m_switch"];
-        // load time, no vCPU yet: the slice stands, and the cache takes it as a view for its life
+        // the cache's view from the mapping, not from the load's slice (Sprint 292), whose last use is above
         let mut cache = CodeCache {
-            mem: ConcurrentGuestMemory::new(mem),
+            mem: memory_view(&memory),
         };
         let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va, timed))?;
         let switch_slice_va = cache.put(|a| switch_stub(a, true, switch, code.dispatch_va, timed))?;

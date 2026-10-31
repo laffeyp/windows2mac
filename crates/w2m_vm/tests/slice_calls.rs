@@ -33,7 +33,7 @@ const SLICES: [(&str, usize); 16] = [
 ];
 
 /// Each file's views built from a slice, as census row D7 states them; the view's module is not counted.
-const SLICE_BUILT_VIEWS: [(&str, usize); 3] = [("guest.rs", 1), ("monitor_code.rs", 1), ("run.rs", 2)];
+const SLICE_BUILT_VIEWS: [(&str, usize); 2] = [("monitor_code.rs", 1), ("run.rs", 2)];
 
 /// Each `.rs` file under `dir` holding any of `patterns`, by its path from `root`, with the count.
 fn counts(dir: &Path, root: &Path, patterns: &[&str], out: &mut BTreeMap<String, usize>) {

@@ -19,6 +19,24 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64};
 
 /// A view of `len` bytes of guest memory from `ptr`, shared by copy among the threads that serve vCPUs.
+///
+/// Code outside the crate's tests builds one from the mapping or its pointer, never from a slice (Sprint 292): `new`
+/// is a test's only, so the second sample does not compile. The first, the same but for `from_raw_parts`, compiles
+/// and runs, so the second can fail for `new` alone: a bare `compile_fail` passes on any error, and stable rustdoc
+/// reads `compile_fail,E0599` as plain text (the rustdoc book, "Unstable features").
+///
+/// ```
+/// let mut buffer = [0u8; 16];
+/// // SAFETY: the buffer outlives the view, and nothing else touches it meanwhile
+/// let view = unsafe { w2m_vm::concurrent_memory::ConcurrentGuestMemory::from_raw_parts(buffer.as_mut_ptr(), 16) };
+/// assert_eq!(view.len(), 16);
+/// ```
+///
+/// ```compile_fail
+/// let mut buffer = [0u8; 16];
+/// let view = w2m_vm::concurrent_memory::ConcurrentGuestMemory::new(&mut buffer);
+/// assert_eq!(view.len(), 16);
+/// ```
 #[derive(Clone, Copy)]
 pub struct ConcurrentGuestMemory<'a> {
     ptr: *mut u8,
@@ -32,7 +50,11 @@ unsafe impl Send for ConcurrentGuestMemory<'_> {}
 unsafe impl Sync for ConcurrentGuestMemory<'_> {}
 
 impl<'a> ConcurrentGuestMemory<'a> {
-    /// The view of `memory`, which it borrows for `'a`: the host makes no other reference to it meanwhile.
+    /// The view of `memory`, which it borrows for `'a`: the host makes no other reference to it meanwhile. A test's
+    /// own buffer only (Sprint 292; reviewer-3's Low 1 at 278): the host's views come from the mapping
+    /// (`guest::memory_view`) or its pointer (`from_raw_parts`), so none rests on a slice a running vCPU may write; the
+    /// type's doc test holds it so (a doc test here would vanish with the item outside tests).
+    #[cfg(test)]
     pub fn new(memory: &'a mut [u8]) -> ConcurrentGuestMemory<'a> {
         ConcurrentGuestMemory {
             ptr: memory.as_mut_ptr(),

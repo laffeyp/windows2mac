@@ -383,6 +383,16 @@ impl Drop for GuestMemory {
 /// A vCPU of `Vm`, on the thread that created it. Not `Send`: every call but `hv_vcpus_exit` "Must be called by the
 /// owning thread" (`hv_vcpu.h`).
 ///
+/// The first sample, a vCPU run on its own thread, compiles; the second, the same but moved to another thread, does
+/// not, so it fails for `Send` alone (Sprint 292: a bare `compile_fail` passes on any error, and stable rustdoc reads
+/// `compile_fail,E0277` as plain text).
+///
+/// ```no_run
+/// let vm = hypervisor::Vm::new(40).unwrap();
+/// let vcpu = hypervisor::Vcpu::new(&vm).unwrap();
+/// let _ = vcpu.run();
+/// ```
+///
 /// ```compile_fail
 /// let vm = hypervisor::Vm::new(40).unwrap();
 /// let vcpu = hypervisor::Vcpu::new(&vm).unwrap();
