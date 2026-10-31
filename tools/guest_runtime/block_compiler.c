@@ -142,22 +142,25 @@ static void scanned(void *ctx, u64 page) {
         s->pages[s->npages++] = page;
 }
 
-/* the dispatch pair for `target` (vm_backend.dispatch_slot, _dispatch_insert): an empty slot or its own, else first */
+/* A dispatch pair stored whole, by one `stp` (Sprint 284): the dispatcher reads a pair by one `ldp`, single-copy atomic
+ * with FEAT_LSE2, so another vCPU sees the old pair or the new, never a target with another pair's code. */
+static void store_pair(volatile u64 *p, u64 target, u64 code) {
+    __asm__ volatile("stp %0, %1, [%2]" ::"r"(target), "r"(code), "r"(p) : "memory");
+}
+
+/* the dispatch pair for `target` (vm_backend.dispatch_slot, _dispatch_insert): an empty slot or its own, else first,
+ * the first way's pair moved to the second before the first is written */
 static void dispatch_insert(u64 target, u64 code) {
     u64 slot = (target ^ target >> W2M_DISPATCH_BITS ^ target >> 2 * W2M_DISPATCH_BITS) &
                ((1ull << W2M_DISPATCH_BITS) - 2);
     volatile u64 *p = (volatile u64 *)(W2M_DISPATCH_VA + 16 * slot);
     if (p[0] == ~0ull || p[0] == target) {
-        p[1] = code;
-        p[0] = target;
+        store_pair(p, target, code);
     } else if (p[2] == ~0ull || p[2] == target) {
-        p[3] = code;
-        p[2] = target;
+        store_pair(p + 2, target, code);
     } else {
-        p[2] = p[0];
-        p[3] = p[1];
-        p[1] = code;
-        p[0] = target;
+        store_pair(p + 2, p[0], p[1]);
+        store_pair(p, target, code);
     }
 }
 

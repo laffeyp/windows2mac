@@ -694,12 +694,13 @@ pub fn installer(a: &mut Assembler) {
     a.branch(|o| a64::bcond("eq", o), second);
     a.emit(&[a64::cmp(4, 0)]);
     a.branch(|o| a64::bcond("eq", o), second);
-    a.emit(&[a64::ldp(4, 5, 3, 0), a64::str(8, 5, 3, 24), a64::str(8, 4, 3, 16)]);
+    // each pair stored whole by one `stp` (Sprint 284): the dispatcher's one `ldp` sees the old pair or the new
+    a.emit(&[a64::ldp(4, 5, 3, 0), a64::stp(4, 5, 3, 16)]);
     a.bind(first);
-    a.emit(&[a64::str(8, 14, 3, 8), a64::str(8, 0, 3, 0)]);
+    a.emit(&[a64::stp(0, 14, 3, 0)]);
     a.branch(a64::b, inserted);
     a.bind(second);
-    a.emit(&[a64::str(8, 14, 3, 24), a64::str(8, 0, 3, 16)]);
+    a.emit(&[a64::stp(0, 14, 3, 16)]);
     a.bind(inserted);
     a.emit(&[a64::mov(0, 14), a64::ret()]);
     a.bind(decline);
@@ -1116,5 +1117,36 @@ mod tests {
         let mut free = word_page(0);
         assert!(host_take_runtime_word(view(&mut free), 2));
         assert_eq!(view(&mut free).read_u32(RUN_TABLE + RUNTIME_LOCK), HOST_OWNER);
+    }
+
+    /// Sprint 284 (reviewer-3's Medium 1 at 283): the installer stores each dispatch pair whole, the new pair (x0 the
+    /// target, x14 the code) by one `stp` at either way and the first way's pair moved by one `stp`, with no lone `str`
+    /// of a pair's word, which another vCPU's `ldp` could read half written.
+    #[test]
+    fn the_installer_stores_each_dispatch_pair_whole() {
+        let mut a = crate::assembler::Assembler::new(super::MONITOR_VA);
+        super::installer(&mut a);
+        let all = a.finish();
+        // x3 is the reconstruction table's and the compile log's base before it is the dispatch slot's
+        let slot = all
+            .iter()
+            .position(|w| *w == a64::add(3, 3, 9, a64::LSL, 4))
+            .expect("the installer finds its dispatch slot");
+        let words = &all[slot..];
+        for (stp, what) in [
+            (a64::stp(0, 14, 3, 0), "the new pair at the first way"),
+            (a64::stp(0, 14, 3, 16), "the new pair at the second way"),
+            (a64::stp(4, 5, 3, 16), "the first way's pair moved to the second"),
+        ] {
+            assert!(words.contains(&stp), "{what}: no stp");
+        }
+        for (off, what) in [(0, "target"), (8, "code"), (16, "target"), (24, "code")] {
+            for rt in [0, 4, 5, 14] {
+                assert!(
+                    !words.contains(&a64::str(8, rt, 3, off)),
+                    "a lone str of a {what} word at +{off}"
+                );
+            }
+        }
     }
 }
