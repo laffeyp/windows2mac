@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 291
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -87,4 +87,23 @@ a Release store when the run runs.
 
 ## result
 
-- **The gates:** GATES-LINE
+- **The order** (8a436e769): the entries' fields and names, then the header's two words, then each list's `Flink`s
+  from the tail back to the head and its `Blink`s from the first entry on to the head, then `PEB.Ldr`; each link and
+  `PEB.Ldr` by `ProcessBytes::publish`, a Release store of the aligned word in `ProcessView`.
+- **Expected values:** `every_state_of_a_loadlibrarys_lists_is_a_whole_list` passing: a third DLL loaded after two
+  images, first in init order, so inserted mid-list there and at the tail of the other two; 121 writes, the three
+  lists walked both ways after each; the lists after the last equal to lists written whole into empty memory, the new
+  DLL in each. 173 tests in the pre-commit run, the batch-run step first.
+- **The card's "final bytes equal to the writes' in the old order":** the test compares with the lists written whole,
+  not with the old order's, the old order's code being gone; the game's and the family runs, which hold the lists'
+  readers, stand as held.
+- **A lint the first run met:** the pre-commit run stopped at clippy, "useless use of `vec!`" (`loader_lists.rs` 92);
+  an array, and the whole list run again.
+- **The gates:** `scripts/gates.sh` exit 0 in 847 s, kept in `store/gates/passes.tsv` as sprint 291 at 8a436e769 with root=5efc1d580 and "rust=crates python=0 samples=0", rdeps(w2m_vm), 173 tests, base=aee4798a0, Sprint 290's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: both loops from the head, the old order; the test failed,
+  "after write 85 of 121 (0x544d8): list 0x7ffe00054010 forward: a link to 0x0, outside the loader data".
+- **Plant 2 as the card had it could not fire:** the head's `Flink` written first passed, since it always names the
+  first node, the program in two lists and ntdll in the init list (`init` begins with ntdll, kernelbase, kernel32),
+  and a load never changes it; rewriting it first rewrites the value it holds. Replaced by the head's `Blink` written
+  first, which names the new tail: the test failed, "after write 87 of 121 (0x54018): list 0x7ffe00054010 back: a
+  link to 0x0, outside the loader data". Restored by `cp` and checked by `cmp`.
