@@ -9,6 +9,7 @@ use std::fmt;
 use guest_runtime::layout::{MONITOR_SIZE, TRANSPORT_OFF};
 use hypervisor::{HvError, Vcpu};
 
+use crate::concurrent_memory::ConcurrentGuestMemory;
 use crate::guest::{Guest, GuestError, GuestView};
 
 /// runtime.h 69-71, 324; vm_backend 282-316.
@@ -139,7 +140,7 @@ pub fn wake_blocked(guest: &mut Guest) {
         .map(|t| t.index)
         .filter(|&i| {
             let at = crate::threads::entry(i) + crate::threads::E_STATUS;
-            read_u64(guest.memory.as_slice(), at as usize) == crate::threads::BLOCKED
+            read_u64(crate::guest::memory_view(&guest.memory), at as usize) == crate::threads::BLOCKED
         })
         .collect();
     for i in blocked {
@@ -157,8 +158,8 @@ fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostErro
     if wake {
         wake_blocked(guest);
     }
-    let mem = guest.memory.as_mut_slice();
-    mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
+    let mem = crate::guest::memory_view(&guest.memory);
+    mem.write((TRANSPORT + 48) as u64, &second.to_le_bytes());
     // a pipe's bytes, which the supervisor wrote into this process's memory: the exit ledger's written ranges, as the
     // frozen host's child writes them through its own `_GuestView` (kernel.py 254, the one kernel write; Sprint 206)
     if a[0] == crate::kernel::PIPE_READ
@@ -166,7 +167,7 @@ fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostErro
         && result > 0
         && let Some(at) = guest.layout.offset(a[2])
     {
-        let data = guest.memory.as_slice()[at as usize..(at + result) as usize].to_vec();
+        let data = bytes(guest.memory_view(), at as usize, result as usize);
         if let Some(l) = &mut guest.exit_ledger {
             l.wrote(a[2], &data);
         }
@@ -179,7 +180,7 @@ fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostErro
 /// of its own gets (Sprint 199; reviewer-2's Low 1 of its review of 196-198: the parent's start block before).
 fn environment_now(guest: &Guest) -> Result<Vec<String>, String> {
     use guest_runtime::layout::{ENVIRONMENT_OFF, ENVIRONMENT_SIZE, PROCESS_VA};
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let parameters = guest
         .layout
         .offset(crate::process::PARAMETERS_VA + 0x80)
@@ -190,7 +191,7 @@ fn environment_now(guest: &Guest) -> Result<Vec<String>, String> {
         return Err(format!("ProcessParameters.Environment at 0x{at:x}, outside its area"));
     }
     let start = (MONITOR_SIZE + off) as usize;
-    let block = &mem[start..start + (ENVIRONMENT_SIZE / 2) as usize];
+    let block = bytes(mem, start, (ENVIRONMENT_SIZE / 2) as usize);
     let units: Vec<u16> = block
         .as_chunks::<2>()
         .0
@@ -244,7 +245,7 @@ impl crate::kernel::Memory for KernelMemory<'_> {
             .layout
             .offset(va)
             .ok_or_else(|| format!("a kernel request at unmapped 0x{va:x}"))? as usize;
-        Ok(self.0.memory.as_slice()[at..at + n].to_vec())
+        Ok(bytes(self.0.memory_view(), at, n))
     }
     fn write(&mut self, va: u64, data: &[u8]) -> Result<(), String> {
         let at = self
@@ -252,7 +253,7 @@ impl crate::kernel::Memory for KernelMemory<'_> {
             .layout
             .offset(va)
             .ok_or_else(|| format!("a kernel request at unmapped 0x{va:x}"))? as usize;
-        self.0.memory.as_mut_slice()[at..at + data.len()].copy_from_slice(data);
+        self.0.memory_view().write(at as u64, data);
         // the exit ledger's written ranges, as the frozen host's fixture logs `_GuestView.write` (Sprint 206)
         if let Some(l) = &mut self.0.exit_ledger {
             l.wrote(va, data);
@@ -276,8 +277,16 @@ pub fn memory_basic_information(info: &virtual_memory::Info) -> [u8; 48] {
     raw
 }
 
-fn read_u64(mem: &[u8], at: usize) -> u64 {
-    u64::from_le_bytes(mem[at..at + 8].try_into().unwrap())
+// Guest memory through the view (Sprint 280, census D7): the request service makes no reference into it.
+fn read_u64(mem: ConcurrentGuestMemory<'_>, at: usize) -> u64 {
+    mem.read_u64(at as u64)
+}
+
+/// `n` bytes from `at`, copied out.
+fn bytes(mem: ConcurrentGuestMemory<'_>, at: usize, n: usize) -> Vec<u8> {
+    let mut out = vec![0; n];
+    mem.read(at as u64, &mut out);
+    out
 }
 
 /// `Modules.containing` (modules.py 149-158): the module holding `address`: the program's image, a synthetic image
@@ -329,7 +338,7 @@ pub fn map_view(guest: &mut Guest, size: u64, fd: u64, protect: u64) -> Result<(
         .layout
         .offset(base)
         .ok_or_else(|| HostError::Failed(format!("a file view at unmapped 0x{base:x}")))? as usize;
-    guest.memory.as_mut_slice()[at..at + bytes.len()].copy_from_slice(&bytes);
+    crate::guest::memory_view(&guest.memory).write(at as u64, &bytes);
     Ok((0, base))
 }
 
@@ -361,7 +370,7 @@ pub fn unimplemented(guest: &mut Guest, a0: u64, a1: u64) -> HostError {
 /// thread's).
 pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
     let (op, a0, a1, a2, a3) = {
-        let mem = guest.memory.as_slice();
+        let mem = crate::guest::memory_view(&guest.memory);
         (
             read_u64(mem, TRANSPORT),
             read_u64(mem, TRANSPORT + 8),
@@ -379,8 +388,8 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 .offset(a0)
                 .ok_or_else(|| HostError::Failed(format!("a write from unmapped 0x{a0:x}")))?
                 as usize;
-            let bytes = guest.memory.as_slice()[at..at + a1 as usize].to_vec();
-            guest.stdout.extend(bytes);
+            let written = bytes(guest.memory_view(), at, a1 as usize);
+            guest.stdout.extend(written);
             a1
         }
         HOST_RUNTIME_FAULT => {
@@ -393,8 +402,8 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             // the second answer: a DLL just loaded leaves its DllMain stub (`_pending_init`, vm_backend 3873-3874)
             let r = containing(guest, a0);
             let init = std::mem::take(&mut guest.pending_init);
-            let mem = guest.memory.as_mut_slice();
-            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&init.to_le_bytes());
+            let mem = crate::guest::memory_view(&guest.memory);
+            mem.write((TRANSPORT + 48) as u64, &init.to_le_bytes());
             r
         }
         // `_module_request` (vm_backend 3889-3904; Sprint 189): the name or the path through guest memory, the answer
@@ -406,7 +415,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                     .offset(va)
                     .ok_or_else(|| HostError::Failed(format!("a module request's name at unmapped 0x{va:x}")))?
                     as usize;
-                Ok(guest.memory.as_slice()[at..at + n as usize].to_vec())
+                Ok(bytes(guest.memory_view(), at, n as usize))
             };
             let r = match op {
                 HOST_MODULE => {
@@ -435,7 +444,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                             let at = guest.layout.offset(a1).ok_or_else(|| {
                                 HostError::Failed(format!("a module path's buffer at unmapped 0x{a1:x}"))
                             })? as usize;
-                            guest.memory.as_mut_slice()[at..at + n].copy_from_slice(&raw[..n]);
+                            crate::guest::memory_view(&guest.memory).write(at as u64, &raw[..n]);
                             // the Python writes it through `_GuestView` (vm_backend 3904): the ledger's written ranges
                             if let Some(l) = &mut guest.exit_ledger {
                                 l.wrote(a1, &raw[..n]);
@@ -447,8 +456,8 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             };
             // a DLL just loaded: its DllMain stub (vm_backend 3873-3874; Sprint 205)
             let init = std::mem::take(&mut guest.pending_init);
-            let mem = guest.memory.as_mut_slice();
-            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&init.to_le_bytes());
+            let mem = crate::guest::memory_view(&guest.memory);
+            mem.write((TRANSPORT + 48) as u64, &init.to_le_bytes());
             r
         }
         // `_virtual_request` (vm_backend 4028-4047) and its dispatch (3865-3869; Sprint 190): the arena's answer, the
@@ -485,12 +494,12 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                         .offset(a1)
                         .ok_or_else(|| HostError::Failed(format!("VirtualQuery's buffer at unmapped 0x{a1:x}")))?
                         as usize;
-                    guest.memory.as_mut_slice()[at..at + raw.len()].copy_from_slice(&raw);
+                    crate::guest::memory_view(&guest.memory).write(at as u64, &raw);
                     (raw.len() as u64, 0)
                 }
             };
-            let mem = guest.memory.as_mut_slice();
-            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
+            let mem = crate::guest::memory_view(&guest.memory);
+            mem.write((TRANSPORT + 48) as u64, &second.to_le_bytes());
             result
         }
         // `kernel.py`'s objects for this process (vm_backend 3819-3831; Sprint 193): the answer and its second word, and
@@ -528,8 +537,8 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                         s.wake_children();
                     }
                 }
-                let mem = guest.memory.as_mut_slice();
-                mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&answer.second.to_le_bytes());
+                let mem = crate::guest::memory_view(&guest.memory);
+                mem.write((TRANSPORT + 48) as u64, &answer.second.to_le_bytes());
                 answer.result
             }
         }
@@ -549,8 +558,8 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             let served = files.request(&mut KernelMemory(guest), op, [a0, a1, a2, a3]);
             guest.files = Some(files);
             let (result, second) = served?;
-            let mem = guest.memory.as_mut_slice();
-            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
+            let mem = crate::guest::memory_view(&guest.memory);
+            mem.write((TRANSPORT + 48) as u64, &second.to_le_bytes());
             result
         }
         // vm_backend 3840-3842 (Sprint 203): a0 bytes at a1, on the instruction clock from the process's generator
@@ -586,8 +595,8 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         }
         HOST_MAP_VIEW => {
             let (second, base) = map_view(guest, a0, a1, a2)?;
-            let mem = guest.memory.as_mut_slice();
-            mem[TRANSPORT + 48..TRANSPORT + 56].copy_from_slice(&second.to_le_bytes());
+            let mem = crate::guest::memory_view(&guest.memory);
+            mem.write((TRANSPORT + 48) as u64, &second.to_le_bytes());
             base
         }
         HOST_EXCEPTION if a0 == EXCEPTION_STUBS => guest.guest_stubs()?,
@@ -601,7 +610,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 .offset(a1)
                 .ok_or_else(|| HostError::Failed(format!("XMM capture to unmapped 0x{a1:x}")))?
                 as usize;
-            guest.memory.as_mut_slice()[at..at + 256].copy_from_slice(&bytes);
+            crate::guest::memory_view(&guest.memory).write(at as u64, &bytes);
             0
         }
         HOST_EXCEPTION => {
@@ -660,8 +669,8 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             )));
         }
     };
-    let mem = guest.memory.as_mut_slice();
-    mem[TRANSPORT + 56..TRANSPORT + 64].copy_from_slice(&result.to_le_bytes());
+    let mem = crate::guest::memory_view(&guest.memory);
+    mem.write((TRANSPORT + 56) as u64, &result.to_le_bytes());
     Ok(Served::Answered)
 }
 
