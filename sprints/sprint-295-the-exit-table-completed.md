@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 295
-status: active
+status: done
 phase: 6
 pass_kind: design
 ---
@@ -88,4 +88,15 @@ it can wait, and its rule on two vCPUs.
 
 ## result
 
-- **The gates:** GATES-LINE
+- **The design amended** (6ea1544a8): the model-step row's two forms; the host-request row and its paragraph, "The
+  host requests that can wait", KERNEL 33 the one that does and a child process kept to one vCPU; the paragraph "A
+  model step of a locked form" with the stop's two conditions; the eighth precondition, the list's lead-in counting
+  eight; card 4's judges (the child held to one vCPU, the stop for a locked form, the stop flag, the XCHG race and the
+  stop while a guest holds the word); two revisit clauses.
+- **Expected values:** `design_check: 6 plans and designs state the goal and the systems`; 8 numbered preconditions.
+- **The gates:** `scripts/gates.sh` exit 0 in 14 s, kept in `store/gates/passes.tsv` as sprint 295 at 6ea1544a8 with root=ac0c78eba and "rust=none python=0 samples=0", no crate changed, base=785e11148, Sprint 294's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: every `https://` made `hxxps://`; `design_check` exited 1,
+  "\"## Against the systems that solved it\" names QEMU with no source", and the same for crosvm, Firecracker, Wine,
+  Rosetta 2 and FEX.
+- **Plant 2,** restored by `cp` and checked by `cmp`: the eighth precondition taken out of the numbered list; the
+  count printed "preconditions: 7", against "preconditions: 8" restored; its first run printed a bare 7.
