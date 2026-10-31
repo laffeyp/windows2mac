@@ -35,6 +35,9 @@ pub const FRAMES_A_SECOND: u64 = 60;
 /// target builds the monitor code (Sprint 263).
 pub const VMC_CURSOR: u64 = 0x08;
 pub const VMC_LOG_COUNT: u64 = 0x10;
+/// The block the C compiler leaves to the host (`block_compiler.c` 223), the call trace's first, which the host's
+/// compile opens the trace at (`guest.rs`, `VMC_EXIT + 16`); the installer leaves it too (Sprint 263).
+pub const VMC_HOST_ONLY: u64 = 0x28;
 /// VM_COMPILER + these (Sprint 263; card 5's III and VI), past `VMC_SAVE`'s 0x90 bytes: the installer's stop word,
 /// nonzero once a write to the cached image's code stopped the cache; the installer's address, 0 when the run has
 /// none; and, written by the host when it places the cache file, the image's base, then the guest addresses of the
@@ -394,6 +397,9 @@ pub fn installer(a: &mut Assembler) {
     a.emit(&a64::mov_imm(15, MONITOR_VA + VM_COMPILER));
     a.emit(&[a64::ldr(8, 1, 15, VMC_INSTALL_STOP as u32)]);
     a.branch(|o| a64::cbnz(1, o), decline);
+    // the block the host opens the call trace at, left to the host as the C leaves it
+    a.emit(&[a64::ldr(8, 1, 15, VMC_HOST_ONLY as u32), a64::cmp(1, 0)]);
+    a.branch(|o| a64::bcond("eq", o), decline);
     a.emit(&[a64::ldr(8, 2, 15, VMC_CACHE_BASE as u32), a64::subs(3, 0, 2)]);
     a.branch(|o| a64::bcond("lo", o), decline);
     a.emit(&[a64::lsri(1, 3, 32)]);

@@ -831,11 +831,6 @@ impl Guest {
         );
         let switch = image.symbols["w2m_switch"];
         let mut cache = CodeCache { mem };
-        if start.host_range.is_some() && start.install_in_vm {
-            // the installer in the code area, the miss stub reaching it through `VMC_INSTALLER` (Sprint 263)
-            let installer = cache.put(monitor_code::installer)?;
-            write_u64(cache.mem, VM_COMPILER + monitor_code::VMC_INSTALLER, installer);
-        }
         let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va, timed))?;
         let switch_slice_va = cache.put(|a| switch_stub(a, true, switch, code.dispatch_va, timed))?;
         let thunks = loaded.thunks.clone();
@@ -963,7 +958,15 @@ impl Guest {
         };
         self.slice_va = cache.put(|a| slice_stub(a, switch_slice_va))?;
         self.entry_va = cache.put(|a| entry_stub(a, dispatch_va))?;
+        // the installer last, the miss stub reaching it through `VMC_INSTALLER` (Sprint 263): placed before the slice
+        // stub it moved the stub, whose address every cached block embeds and the cache's key hashes
+        let installer = if start.host_range.is_some() && start.install_in_vm {
+            cache.put(monitor_code::installer)?
+        } else {
+            0
+        };
         let mem = self.memory.as_mut_slice();
+        write_u64(mem, VM_COMPILER + monitor_code::VMC_INSTALLER, installer);
         write_u64(mem, VM_COMPILER + VMC_EXIT, dispatch_va);
         write_u64(mem, VM_COMPILER + VMC_EXIT + 8, self.slice_va);
         write_u64(mem, VM_COMPILER + VMC_EXIT + 16, self.trace_from);

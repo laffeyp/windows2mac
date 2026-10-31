@@ -437,6 +437,16 @@ fn the_installer_installs_a_cached_start_and_declines_the_rest() {
             .any(|s| (read(after, *s), read(after, s + 8)) == (start, code)),
         "no dispatch pair (0x{start:x}, 0x{code:x})"
     );
+    // the block the host opens the call trace at, left to the host as the C leaves it
+    let host_only = VM_COMPILER + w2m_vm::monitor_code::VMC_HOST_ONLY;
+    let other = file.base + u64::from(file.blocks[0].start);
+    let mem = guest.memory.as_mut_slice();
+    mem[host_only as usize..host_only as usize + 8].copy_from_slice(&other.to_le_bytes());
+    assert_eq!(
+        call_installer(&mut guest, other),
+        0,
+        "the host's block 0x{other:x} installed"
+    );
     // the misses: below the image, before the first block, after the last
     let (first, last) = (file.blocks[0].start, file.blocks.last().unwrap().start);
     for (what, target) in [
