@@ -171,7 +171,8 @@ words in the real run; the VM's follows once the host's conforms.
    unchanged, and the run's compile time falling below Sprint 248's 1,351 to 1,362 ms and its most in a 60 Hz frame
    below 248's 10.9 to 12.0 ms, on timed records run alone, without the judge or the exit ledger (Sprint 262); its
    `ledger_parting` check on separate untimed runs that write the ledger. Step 5 is met at this card's close.
-   *(Amended 2026-10-30, Sprint 258.)* A cached run is another schedule of the same guest, conforming: a time slice ends at a block's stop
+   *(Amended 2026-10-30, Sprint 258.)* A cached run is another schedule of the same guest, conforming:
+   a time slice ends at a block's stop
    (`threads.c` 17-18), each block charged whole on entry, and the cache cuts blocks where the in-VM compiler does not
    (a page boundary among them), so the same 14 switches fall at other instructions and the threads interleave
    otherwise from the batch run's 5,539th host request on, 20,683,462,044 instructions in; the run retires
@@ -192,7 +193,8 @@ words in the real run; the VM's follows once the host's conforms.
      too small), in the layout the file already has: the blocks in start order, their words, their marks. Nothing
      there runs and the C runtime never reads it, so its addresses outside `W2M_CODE_START..END` meet none of
      Sprint 255's limits; the installer only copies from it. Weighed: copying only the 128,456 blocks the batch run
-     installs, about 14.5 MB at the cache's 112.8 bytes a block, and not the rest. Not taken: which blocks a run reaches is known only after it, and the cache
+     installs, about 14.5 MB at the cache's 112.8 bytes a block, and not the rest.
+     Not taken: which blocks a run reaches is known only after it, and the cache
      serves any run. The file's table is written once and only read after, so several vCPUs read it with no lock,
      as QEMU's lookups are (below). The guest's memory today (`Layout::new`, `guest.rs` 229-262) is the monitor area
      (0xAA0_0000, 170 MiB), the process area, the loaded images, the heap (256 MiB) and the VirtualAlloc arena
