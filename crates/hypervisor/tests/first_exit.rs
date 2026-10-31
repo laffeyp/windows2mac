@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 //! Sprint 132's expected values: a few arm64 instructions run on one vCPU from Rust, with the MMU off, at EL1. One VM
-//! per process: nextest gives each test its own (the tests one binary from Sprint 300; `cargo test` on macOS would not).
+//! per process, so each scenario is its own test file.
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
 use hypervisor::{GuestMemory, Reg, Vcpu, Vm, memory};

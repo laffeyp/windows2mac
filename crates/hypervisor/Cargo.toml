@@ -5,11 +5,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-# one test binary, tests/all.rs (Sprint 300)
-autotests = false
+# a test binary a file, not one for the crate: Hypervisor.framework allows one VM a process, and `cargo test` runs a
+# binary's tests as threads of one process (Sprint 303, undoing Sprint 300's merge for this crate)
 
 [dependencies]
-
-[[test]]
-name = "all"
-path = "tests/all.rs"

@@ -96,13 +96,22 @@ register and a test of the writes' order.
   the table on the retry) change the C runtime's request return, a second concept past rule 6; they are card 304,
   with the count on the batch run and the recording test of the writes' order. This card keeps the read, its test and
   the design's precondition 4 stating the value.
-- **The change** (WORK-COMMIT): `hypervisor::sys_reg::ID_AA64MMFR2_EL1` (0xc03a, `hv_vcpu_types.h` 336);
+- **The change** (dcf9d9ae6): `hypervisor::sys_reg::ID_AA64MMFR2_EL1` (0xc03a, `hv_vcpu_types.h` 336);
   `tests/id_registers.rs`, `the_vcpu_reports_its_bbm_level`, printing the register and its BBM, failing on a level the
-  Arm ARM does not define or one the design does not state, declared in the root; the design's precondition 4 and
+  Arm ARM does not define or one the design does not state, its own binary once the merge below is undone; the design's precondition 4 and
   card 3 amended; and a consequence of Sprint 300 named: Hypervisor.framework allows one VM a process, nextest giving
   each test its own, `cargo test` on macOS would not, said in `hypervisor`'s root and `first_exit.rs`' header, whose
   "each scenario is its own test file" the merge had made untrue.
-- **Expected values:** BBM 0; the test and `every_file_is_a_module` passing.
+- **Sprint 300's merge undone for `hypervisor`, by measurement:** `WORKING_AGREEMENT.md` 142 expects `cargo test` to
+  exit 0; on this Mac `cargo test -p hypervisor --test all` exited 101, three tests panicking at `Vm::new`, the merged
+  binary running its VM tests as threads of one process where Hypervisor.framework allows one VM. `first_exit.rs`'s
+  header, "One VM per process, so each scenario is its own test file", had said why; Sprint 300 did not read it, and
+  its judge, nextest's count, gives each test a process and could not see it. `hypervisor` is a binary a file again
+  (`autotests` and `[[test]]` gone, `tests/all.rs` removed, the manifest saying why, the gates' timing step and
+  `first_exit.rs`' header as before 300, by `diff`), and `cargo test -p hypervisor` exits 0. The work commit after
+  dcf9d9ae6 carries it, the gates on dcf9d9ae6 stopped. `w2m_vm`'s one binary under `cargo test` on this Mac:
+  72 passed and 8 failed at `Vm::new`, seven `run_loop.rs`'s (one file, one process before 300 too), one `unmapped_image_faults`', which the merge made share; `w2m_vm` keeps its one binary, its VM tests run under nextest, and `WORKING_AGREEMENT.md` 142 says so.
+- **Expected values:** BBM 0; the register test passing; `cargo test -p hypervisor` exit 0.
 - **The gates:** GATES-LINE
 - **Plant 1,** restored by `cp` and checked by `cmp`: the card's plant reordered the split's writes, which this card
   no longer changes; the plant set the design's stated level to "BBM 2"; the test failed, "this vCPU reports BBM 0,
