@@ -165,7 +165,11 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    8; on one vCPU it holds already), the table written whole before its descriptor, and the requesting vCPU resumed
    through `FLUSH_STUB` (`dsb ishst; tlbi vmalle1is; dsb ish; isb; hvc #15`), which invalidates every vCPU's TLB
    before any vCPU touches memory again; at `hvc #15` the host puts it back where it stopped. No window leaves a page
-   unmapped, and the C runtime is unchanged. The sleeper run splits 3 blocks and flushes 3 times.)*
+   unmapped, and the C runtime is unchanged. The sleeper run splits 3 blocks and flushes 3 times. Not the Arm order on
+   the requester itself: the table is written before the flush, so in the stub's first two instructions its TLB may
+   hold the block while a speculative walk, which the architecture allows at any time, loads the table's entry, an
+   UNPREDICTABLE pair; the full order, the block invalid, the flush, then the table, needs the request's page writes
+   after the flush (`map_pages` writes into the table in the same request). BLACKBOARD Deferred (Sprint 304).)*
 5. Every dispatch writer stores a pair whole: met (Sprint 284).
 6. The host's miss service under the word: met (Sprint 286).
 7. The lock order: the word outermost (the guest-memory design's choice 6); `served` inside it, here.
@@ -192,7 +196,8 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    checking the word in debug builds and passed down as `&mut Served`, with card 2's plant; Deferred (Sprint 298)'s
    revisit clause checked at the card's start. A thread per vCPU, the stop, the kick, the merged outcome, FEAT_LSE2's
    refusal, the diagnostics refused by name, a child process held to one vCPU, the stop of every other vCPU for a model
-   step of a locked form, and a stop flag the take's spin reads, so a thread waiting for a word a cancelled vCPU's guest
+   step of a locked form and for a block split (precondition 4, Sprint 304: the split's flush stub assumes it), and a
+   stop flag the take's spin reads, so a thread waiting for a word a cancelled vCPU's guest
    held ends at the stop (reviewer-3's Low 1 at 294). Judge: `qpc` and `sleeper` on two vCPUs ending as on one; the race
    test of the guest-memory design's choice 6, a vCPU holding the word across a host request while the other misses, a
    step bound failing a hang, with its plant, `served` held across the take; a misaligned XCHG raced against an aligned
