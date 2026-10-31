@@ -47,9 +47,13 @@ fn root() -> PathBuf {
 }
 
 /// The run outputs whose stamps stand for `name` (Sprint 288): the game's stop file for the files its run writes
-/// beside it, each guest's stop for `guests.tsv`, which `gates.sh` gathers from them.
+/// beside it under its name, each guest's stop for `guests.tsv`, which `gates.sh` gathers from them, and any other
+/// file, a guest's output among them, its own.
 fn stamped_for(root: &Path, name: &str) -> Vec<PathBuf> {
     let dir = root.join("build/batch_run");
+    if name.starts_with("first-stop.") {
+        return vec![dir.join("first-stop.tsv")];
+    }
     if name == "guests.tsv" {
         let mut stops: Vec<PathBuf> = fs::read_dir(&dir)
             .into_iter()
@@ -62,7 +66,7 @@ fn stamped_for(root: &Path, name: &str) -> Vec<PathBuf> {
         stops.sort();
         return stops;
     }
-    vec![dir.join("first-stop.tsv")]
+    vec![dir.join(name)]
 }
 
 /// A file `gates.sh` writes under build/batch_run/; None when it has not run here, or ran on other sources than the
