@@ -1002,3 +1002,13 @@ C runtime does, and only inside the code area (`runtime.c` 245, `threads.c` 258)
 research read for the fourth building card found it, three cards after the design was approved. The question for a
 design that adds a kind of thing in a new place is: who reads that kind of thing, and do they all look there.
 
+### 2026-10-30 — Sprint 262: a confounder removed, its neighbour left
+
+**Finding (#109):** when a measurement is found to carry work that is not the thing measured, the fix lists every
+piece of host work done per exit, not the one that was caught. Sprint 257's records charged the whole-block judge's
+time to the exits, and its fix took the judge out of timed runs; the exit ledger, which hashes the process area at
+each exit and sat beside the judge in the same command, stayed. With 150,065 `hvc 1` exits against 1,091, the ledger
+weighed on one side only, and card 4 closed as 1.1% slower where, without it, the cache runs 3.0% faster
+(Sprint 262). A review found it two cards later. The question for a timed run is: what does the host do at each exit
+besides serving it, and is each of those off.
+

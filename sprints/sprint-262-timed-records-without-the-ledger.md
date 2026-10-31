@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 262
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -94,3 +94,34 @@ record from six records made alike.
 - [x] One concept: what a timed record measures.
 
 ## result
+
+- **The rule** (ff1926fdc): `scripts/batch-run-record.sh` in timed mode strips ` --exit-ledger …` as it strips
+  ` --judge-blocks …`, writes `exit_ledger = "off: …"` into the baseline, and refuses a command that keeps either;
+  `batch_record.rs`' `unmeasured_problems` holds every timed record named after 1793415127000000000 to a baseline with
+  both off, with its unit test `a_timed_record_with_its_judge_or_ledger_on_is_named`.
+- **The records:** six from ff1926fdc, alternating, run alone, load at start 2.71 to 4.08 (the machine busier than at
+  257): without the cache `store/runs/w2m-vm-game-1793415256000000000`, `-1793415309000000000`,
+  `-1793415362000000000`; with it `-1793415283000000000`, `-1793415336000000000`, `-1793415389000000000`; each
+  conforms, `check_records` 0 violations; each baseline says the judge and the ledger off.
+
+  | | without the cache | with it |
+  |---|---|---|
+  | rate, instructions a second | 3.065, 3.117, 3.079 billion | 3.182, 3.185, 3.174 billion |
+  | "vm" run seconds | 23.60, 23.41, 23.71 | 22.74, 22.72, 22.79 |
+  | host `hvc 1` | 0.042 s | 0.206 to 0.212 s |
+  | the VM's compile time | 1,276 to 1,278 ms | 589 to 596 ms |
+
+  The host's install is 3.0% faster on the means, the ranges apart (3.117 against 3.174): the VM gains about 0.82 s
+  and the host spends about 0.17 s more. Sprint 257's "1.1% slower" came from records that wrote the ledger, whose
+  hashing at each exit fell on the cached run's 150,065 against 1,091.
+- **The record annotated:** the design's card 4 and card 5's gate (6319fbdfc, 5e59fccf5), the Decision, census row 10
+  (its Sprint 240 records ledgered, its figure the lower).
+- **The gates:** `scripts/gates.sh` exit 0 in 596 s on 5e59fccf5, copied from `store/gates/passes.tsv`; the timing stage 651 ns an exit at load 3.93.
+- **KIT_DIARY #109:** a confounder removed, its neighbour left: the fix of a timed run lists every piece of host work done per exit.
+- **Plants,** run on 5e59fccf5, each restored by `cp` and checked by `cmp`, the planted record removed.
+- **Plant 1,** `scripts/batch-run-record.sh` refused the run, "batch-run-record.sh: the timed run's command still
+  writes the exit ledger", exit 2: the ledger's strip replaced by a statement that does nothing. A first try put `0`
+  there, which awk refused as a statement ("awk: illegal statement"), a fault of the plant, not a catch.
+- **Plant 2,** `every_stored_rust_batch_record_holds_its_rate` failed, "a timed record whose baseline's exit_ledger is
+  null, not off": the baseline's `exit_ledger` line left out and one timed record made with it. A first run of the
+  test was filtered by a wrong name and ran nothing; the record was made again and the test run by its name.
