@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 259
-status: active
+status: done
 phase: 6
 pass_kind: observation
 ---
@@ -93,3 +93,38 @@ measured difference, and card 5's design says what follows.
 - [x] One concept: where the VM's time goes.
 
 ## result
+
+- **The variants:** three temporary lines (`W2M_FLUSH` in the dispatcher after an in-VM compile, `W2M_ONLY` turning
+  installs off, a print of the code cursor), each file backed up by `cp` first; a cache made under the edited tree.
+  Twelve timed runs from fd840f005's tree with the lines, judge and ledger off, alternating, run alone, each ending at
+  the reference's stop. The machine's load at each start, 2.48 to 3.79: WindowServer near 48% of a CPU and "State
+  Transfer.app" near 15%, outside this project.
+- **A first batch, void:** the script handed `--cache` to `env` as a variable the command's text never saw, so the
+  runs named (a) and (b) ran without it, 1,091 `hvc 1` exits and the uncached cursor each; stopped after six runs and
+  made again with the flag as an argument. Its (d) runs stand with the second batch's.
+
+  | | "vm" run seconds | the VM's compile time | host `hvc 1` | code placed |
+  |---|---|---|---|---|
+  | (a) the cache installed | 23.06, 23.67, 23.33 | 606 to 613 ms | 0.22 s, 150,065 exits | 28,172,400 bytes |
+  | (b) the host compiles, nothing installed | 23.23, 23.63, 23.56 | 600 to 619 ms | 1.49 to 1.52 s | 28,203,708 |
+  | (c) no cache | 23.90, 24.30, 24.34 | 1,278 to 1,329 ms | 0.04 s, 1,091 | 29,867,536 |
+  | (d) no cache, the global invalidation after each in-VM compile | 24.24, 24.53, 24.34 | 1,475 to 1,496 ms | 0.04 s | 29,867,536 |
+
+- **What they show:** (a) against (b), −0.12 s on the means, inside the spread: the cached words and cuts cost no VM
+  time against the host's own compiles of the same starts (reviewer-3's Low 1 at 259: nothing to divide). (d) against
+  (c), +0.19 s over 274,837 invalidations, about 0.7 µs of VM time a use, so about 0.1 s over the cached run's
+  150,065. (b) against (c), −0.70 s, about the VM's compile time the host takes over. So without the ledger and the
+  judge the VM's run seconds fall with the cache, about 0.8 s on the means.
+- **A departure, the ledger:** Sprint 257's like records, whose harness command writes the exit ledger, showed the VM's
+  run seconds flat. Six runs with `--exit-ledger`, alternating: with the cache 24.92 (load 2.73), 30.78 (4.11), 25.96
+  (3.73); without 25.49 (3.20), 24.62 (5.14), 25.52 (4.82). The ledger adds 1 to 2 s each way, and under this load the
+  pairs disagree (−0.57, +6.16, +0.44): not settled. Deferred (Sprint 259) holds it for card 5's records.
+- **The design's card 5:** amended in a work commit (796590103): the figures, the install invalidating by range and
+  page as the in-VM compiler does, a miss-stub change an option off by default (reviewer-3's Low 2 at 259).
+- **The temporary lines:** the three files restored by `cp` and checked by `cmp`, `monitor_code.rs` first for the plant;
+  the tree clean before any commit.
+- **The gates:** `scripts/gates.sh` exit 0 in 284 s on 796590103, copied from `store/gates/passes.tsv`; the timing stage 696 ns an exit at load 9.33.
+- **Plant 1,** run with `monitor_code.rs` restored (the added invalidation left out) and `W2M_FLUSH=1` still set, load
+  3.13: the compile time 1,325 ms, inside (c)'s 1,278 to 1,329 and under (d)'s 1,475 to 1,496, so the (d) figure names
+  the invalidation and nothing else; the run seconds, 24.36, lie inside both (c)'s and (d)'s spread under this load,
+  and the compile time is the figure that names it.
