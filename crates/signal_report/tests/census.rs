@@ -9,8 +9,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const CENSUS: &str = "docs/step-4-census-2026-10-28.md";
-/// Step 5's close (Sprint 268), whose paths are held as the census's are.
+/// Step 5's close (Sprint 268) and step 6's census (Sprint 270), whose paths are held as the census's are.
 const STEP_5_CLOSE: &str = "docs/step-5-close-2026-10-30.md";
+const STEP_6_CENSUS: &str = "docs/step-6-census-2026-10-30.md";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -63,7 +64,7 @@ fn known(root: &Path, path: &str) -> bool {
 #[test]
 fn every_path_the_census_names_exists_or_existed() {
     let root = root();
-    for (document, least) in [(CENSUS, 21), (STEP_5_CLOSE, 5)] {
+    for (document, least) in [(CENSUS, 21), (STEP_5_CLOSE, 5), (STEP_6_CENSUS, 5)] {
         let text = std::fs::read_to_string(root.join(document)).unwrap();
         let named = paths(&text);
         let missing: Vec<&String> = named.iter().filter(|p| !known(&root, p)).collect();
