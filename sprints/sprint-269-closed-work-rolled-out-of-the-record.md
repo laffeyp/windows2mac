@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 269
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -92,3 +92,23 @@ points to each, and every check passes on the rolled record.
 - [x] One concept: closed work rolled out.
 
 ## result
+
+- **The tool** (f61221cc5, a01c2ae3e): `blackboard_roll` takes `--decisions ARCHIVE` and `--built THROUGH ARCHIVE`
+  beside `--surfaced`; one `roll` over a `Kind`, whose `chosen` picks the entries each moves and which `run` and the
+  tests both call; the Decisions and Built paragraphs go in the record's order, the reviews newest first as before;
+  each roll leaves one pointer line where its first entry stood, a second roll replacing it.
+- **The check:** `unbuilt` reads `docs/built-archive-2026-10-30.md` beside `## Built`.
+- **The roll:** `BLACKBOARD.md` 510,900 to 372,645 bytes; 2 Decisions, "Sequence after Sprint 214" and "Sequence for
+  step 5", to `docs/decisions-archive-2026-10-30.md` (19,025 bytes); 241 Built paragraphs, Sprints 000 to 242, to
+  `docs/built-archive-2026-10-30.md` (119,960 bytes). The old record's 771 lines, sorted, equal the new record's
+  less its two pointer lines and the archives' entries, sorted: every line kept once. `signal_report --check` passes
+  on the rolled record.
+- **The Decision** "Closed work rolled out of the record", agent-resolved, its grounds and revisit clause.
+- **Not as the card said:** the tests first carried their own copies of the selection rules beside `run`'s, so an
+  off-by-one in `run` would have passed them; found while setting plant 1, and the rules moved into `Kind::chosen`
+  (a01c2ae3e).
+- **The gates:** `scripts/gates.sh` exit 0 in 262 s on a01c2ae3e, copied from `store/gates/passes.tsv`; the timing stage 690 ns an exit at load 10.00.
+- **Plant 1,** restored by `cp` and checked by `cmp`: the Built bound `s <= number` made `s <= number + 1`; the test
+  failed, "assertion `left == right` failed, left: 3, right: 2", Sprint 243's paragraph moved.
+- **Plant 2,** restored by `cp` and checked by `cmp`: `unbuilt` reading `## Built` alone; the test failed, "left:
+  [184] right: []", a rolled sprint named as without its paragraph.
