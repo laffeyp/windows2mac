@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 273
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -89,3 +89,23 @@ record check refuses a closed entry whose pass was selected from any other.
 - [x] One concept: the gates' base.
 
 ## result
+
+- **The base** (4b5b59dea): `scripts/gates-base.sh` prints the newest commit, an ancestor of `HEAD`, whose subject
+  opens "Sprint N closed:" or "Sprint N closed-partial:" (`is_close`'s two forms), else the merge base with
+  `origin/main`; `gates.sh` takes the change from it, names the base and its subject in its first line, and writes it
+  as the pass row's ninth column, `base=<commit>` (the card said eleventh: the row has eight). A change to
+  `gates-base.sh` runs every gate, as one to `gates.sh` does. On this tree the base is eaf8723b8, Sprint 272's close, and
+  the change holds this card's commit, which was pushed: a pushed commit stays in view.
+- **The check:** `signal_report --check`, from Sprint 273, holds a closed entry's pass row to the previous sprint's
+  close as its base (`base_problem`, `FIRST_BASED_SPRINT`).
+- **WORKING_AGREEMENT:** the gates judge the sprint's change, pushed or not; the close's check before its push stands.
+- **The tests:** `the_gates_base_is_the_newest_close_whatever_was_pushed` runs the script in a scratch repository, a
+  partial close and a pushed work commit after it; `a_gates_run_is_held_to_the_previous_close_as_its_base` names a row
+  with another base and one with none.
+- **Not as the card said:** the base test runs `gates-base.sh`, a script split out of `gates.sh` so it can run alone,
+  not `gates.sh --plan` in a scratch repository, which would need the whole project's tree.
+- **The gates:** `scripts/gates.sh` exit 0 in 947 s on 4b5b59dea, every gate, copied from `store/gates/passes.tsv`, its ninth column `base=eaf8723b8d121dfdb9ee717d91c3d068871bc937`, Sprint 272's close; the timing stage 649 ns an exit at load 2.85.
+- **Plant 1,** restored by `cp` and checked by `cmp`: the base taken as `git merge-base HEAD origin/main` again; the
+  test failed, "assertion `left == right` failed: the newest close, not the pushed work commit".
+- **Plant 2,** restored by `cp` and checked by `cmp`: `base_problem` passing every base; the test failed, "called
+  `Option::unwrap()` on a `None` value", a row with another base passing.
