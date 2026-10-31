@@ -1,0 +1,21 @@
+# Sprint 264: the worst 60 Hz frames rebuilt from each call printed by a temporary probe (frames.awk, worst.awk,
+# ten.awk beside this file); two timed runs, judge and ledger off, counter frequency 24000000
+plain 1/60: calls 276560 frames 923 worst 11.864 ms (1633 calls, 0 installs) at 21.087 s
+plain 1/30: calls 276560 frames 514 worst 15.060 ms (3287 calls, 0 installs) at 16.911 s
+plain worst by range:
+  0x181000000: 1633 calls, 11.864 ms
+cache 1/60: calls 272805 frames 894 worst 7.345 ms (1819 calls, 0 installs) at 0.382 s
+cache 1/30: calls 272805 frames 495 worst 11.436 ms (2735 calls, 0 installs) at 0.397 s
+cache worst by range:
+  0x1180000000: 1819 calls, 7.345 ms
+cache, the ten worst frames: ms, start s, then range and ms
+7.345 0.382 0x1180000000 7.34
+6.441 0.337 0x1180000000 6.44
+6.296 0.882 0x1180000000 6.30
+6.022 15.194 0x1222000000 6.00 0x1180000000 0.02
+5.882 0.362 0x1180000000 5.88
+5.734 0.268 0x1180000000 5.73
+5.678 0.423 0x1180000000 5.68
+5.619 0.984 0x1180000000 5.62
+5.285 1.035 0x11c2000000 5.22 0x1180000000 0.07
+5.003 16.824 0x1222000000 4.96 0x180000000 0.02 0x1180000000 0.02 0x14a2000000 0.00
