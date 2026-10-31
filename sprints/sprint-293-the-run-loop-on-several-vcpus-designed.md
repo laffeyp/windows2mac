@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 293
-status: active
+status: done
 phase: 6
 pass_kind: design
 ---
@@ -85,4 +85,22 @@ The run loop's second vCPU has a design every field of `Guest` is placed in, wit
 
 ## result
 
-- **The gates:** GATES-LINE
+- **The design** (735844f18): `docs/design-run-loop-on-several-vcpus-2026-10-31.md`. Every one of `Guest`'s 45 fields
+  has a row, checked by name against the struct: 19 Load, 22 Served, 1 View, 3 Diagnostic. The rule: every service
+  that changes state two vCPUs share runs under the runtime word, its host state behind one host lock, `served`,
+  taken only inside the word; the host design's lock table replaces `served` after G4.
+- **What the design found in the code:** the switch stub releases the word before `hvc #12` (`switch_stub`:
+  `unlock_runtime`, then `hvc(HVC_SCHEDULE)`), and a slice's `hvc #4` comes from a translated block, so both reach the
+  host without the word and change `threads` and `link`; `hvc #13`'s hold is not established. Its first card makes the
+  three take the word as `hvc #1` does (Sprint 286).
+- **Break-before-make stays at run time:** splitting every block of the arena at load would cost 1 GiB of tables
+  (`VIRTUAL_SIZE` 0x80_0000_0000 in 2 MB blocks of one 4 KB table each); the split answers in two steps around the
+  runtime's broadcast invalidation, its count on the batch run's record.
+- **Expected values:** `design_check: 6 plans and designs state the goal and the systems`; the row check naming no
+  field missing.
+- **The gates:** `scripts/gates.sh` exit 0 in 14 s, kept in `store/gates/passes.tsv` as sprint 293 at 735844f18 with root=64fd88261 and "rust=none python=0 samples=0", no crate changed, base=b43e218fb, Sprint 292's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: the goal's heading renamed; `design_check` exited 1, "no \"##
+  Against the goal\" section".
+- **Plant 2,** restored by `cp` and checked by `cmp`: the `random` row's field name removed; the row check printed
+  "missing random". Its first `sed` used `|` as its separator and failed on the table's pipes, "bad flag in substitute
+  command", changing nothing; run again with `#`.
