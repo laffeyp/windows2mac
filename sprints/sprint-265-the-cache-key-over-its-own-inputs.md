@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 265
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -88,3 +88,17 @@ them leaves the key as it was.
 - [x] One concept: the key's inputs.
 
 ## result
+
+- **The key** (40026f382): `cache_file::KEY_INPUTS`, ten paths: `guest_runtime`, `pe_image`, `translator`,
+  `image_walk`, `a64_encoder`, `x86_decoder`, `cache_file.rs`, `specs`, `Cargo.lock`, `rust-toolchain.toml`;
+  `built_from::tree_of(root, inputs)`, `crates_tree` now its use for `INPUTS`; `w2m-vm`'s `cached_image` hashes
+  `tree_of(root, &KEY_INPUTS)`.
+- **The test:** `the_key_covers_every_crate_the_cache_is_made_from` follows every `path = "../…"` line from the maker's
+  four crates through their manifests and requires each crate reached, and `cache_file.rs`, among the key's inputs.
+- **The check by run:** the cache made on the committed tree, key `4be0c1d4…`; a comment added to line 1 of
+  `crates/w2m_vm/tests/run_loop.rs`, the key `4be0c1d4…` again; a comment added to line 1 of
+  `crates/translator/src/lib.rs`, the key `aa1bb594…`; each file restored by `cp` and checked by `cmp`.
+- **The gates:** `scripts/gates.sh` exit 0 in 649 s on 40026f382, copied from `store/gates/passes.tsv`; the timing stage 657 ns an exit at load 3.44.
+- **Plant 1,** run on 40026f382, restored by `cp` and checked by `cmp`: `"crates/x86_decoder"` replaced by a second
+  `"crates/a64_encoder"`, the test failed, "crates/x86_decoder, which the cache is made from, is not among the key's
+  inputs".
