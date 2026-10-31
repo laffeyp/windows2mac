@@ -431,7 +431,11 @@ fn vm_compiled(
     instructions_at: &mut InstructionsAt,
     mut host: Option<&mut HostCompiler>,
 ) {
-    use guest_runtime::layout::{PAGE, RECON_TABLE};
+    use guest_runtime::layout::{LOCK_OWNER, PAGE, RECON_TABLE};
+    // the log is read and reset under the runtime word, which every in-VM compile and install appends under (Sprint
+    // 275, census D6): on several vCPUs another's append between the read and the reset would be lost
+    let own = u32::try_from(read_u64(mem, MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0);
+    let took = crate::monitor_code::host_take_runtime_word(mem, own);
     let n = read_u64(mem, VM_COMPILER + VMC_LOG_COUNT);
     for i in 0..n {
         let at = VM_COMPILER + VMC_LOG + VMC_LOG_ENTRY * i;
@@ -482,6 +486,9 @@ fn vm_compiled(
         h.translations.push((start, end));
     }
     write_u64(mem, VM_COMPILER + VMC_LOG_COUNT, 0);
+    if took {
+        crate::monitor_code::host_release_runtime_word(mem);
+    }
 }
 
 /// Runs `guest`'s program from its entry on `vcpu`, one thread, until the first miss the host must compile or an exit
@@ -1130,5 +1137,82 @@ mod tests {
         let beyond = "the reconstruction table's count 3 is past its 8 entries or the memory";
         assert_eq!(recon_lookup(&t, 0, 3, 8, 0x110), Err(beyond.to_string()));
         assert!(recon_lookup(&t, 0, u64::MAX, u64::MAX, 0x110).is_err());
+    }
+
+    /// The guest memory's monitor area, as large as the compiler's area reaches, its runtime word held by `holder`
+    /// and this vCPU's `LOCK_OWNER` `own`.
+    fn monitor_area(holder: u32, own: u64) -> Vec<u8> {
+        use guest_runtime::layout::{LOCK_OWNER, MONITOR_DATA, RUN_TABLE, VM_COMPILER, VM_COMPILER_SIZE};
+        let mut mem = vec![0u8; (VM_COMPILER + VM_COMPILER_SIZE) as usize];
+        let at = (RUN_TABLE + crate::monitor_code::RUNTIME_LOCK) as usize;
+        mem[at..at + 4].copy_from_slice(&holder.to_le_bytes());
+        super::write_u64(&mut mem, MONITOR_DATA + LOCK_OWNER, own);
+        mem
+    }
+
+    /// Runs `f` on `mem` on another thread and says whether it returned within 50 ms while the word is held by
+    /// another, then frees the word and waits for `f`. Every access to the word on both threads is atomic.
+    fn waits_for_the_word(mem: &mut [u8], f: fn(&mut [u8])) -> bool {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let (p, len) = (mem.as_mut_ptr() as usize, mem.len());
+        let returned = AtomicBool::new(false);
+        let waited = std::thread::scope(|s| {
+            let returned = &returned;
+            let t = s.spawn(move || {
+                // SAFETY: the buffer outlives the scope; the two threads share only the runtime word, atomically
+                f(unsafe { std::slice::from_raw_parts_mut(p as *mut u8, len) });
+                returned.store(true, Ordering::Release);
+            });
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let waited = !returned.load(Ordering::Acquire);
+            crate::monitor_code::host_release_runtime_word(unsafe {
+                std::slice::from_raw_parts_mut(p as *mut u8, len)
+            });
+            t.join().unwrap();
+            waited
+        });
+        waited && returned.load(Ordering::Acquire)
+    }
+
+    /// Sprint 275 (census D6): the host's take of the runtime word waits while a vCPU holds it and goes on when it is
+    /// freed; it does not wait for the vCPU whose exit it serves, which holds the word across a host request; a free
+    /// word it takes, and releases.
+    #[test]
+    fn the_hosts_take_waits_for_another_vcpus_hold_of_the_runtime_word() {
+        use crate::monitor_code::{HOST_OWNER, RUNTIME_LOCK, host_release_runtime_word, host_take_runtime_word};
+        use guest_runtime::layout::RUN_TABLE;
+        let word = |mem: &[u8]| {
+            let at = (RUN_TABLE + RUNTIME_LOCK) as usize;
+            u32::from_le_bytes(mem[at..at + 4].try_into().unwrap())
+        };
+        let mut held = monitor_area(1, 2);
+        assert!(waits_for_the_word(&mut held, |mem| {
+            assert!(host_take_runtime_word(mem, 2));
+        }));
+        let mut own = monitor_area(2, 2);
+        assert!(!host_take_runtime_word(&mut own, 2), "its own vCPU's hold");
+        assert_eq!(word(&own), 2);
+        let mut free = monitor_area(0, 2);
+        assert!(host_take_runtime_word(&mut free, 2));
+        assert_eq!(word(&free), HOST_OWNER);
+        host_release_runtime_word(&mut free);
+        assert_eq!(word(&free), 0);
+    }
+
+    /// Sprint 275: the drain of the compile log waits while another vCPU holds the runtime word, as an append would
+    /// (plant 2 drains without it).
+    #[test]
+    fn the_logs_drain_waits_for_another_vcpus_hold_of_the_runtime_word() {
+        let mut held = monitor_area(1, 2);
+        assert!(waits_for_the_word(&mut held, |mem| {
+            super::vm_compiled(
+                mem,
+                &mut BTreeMap::new(),
+                &mut Vec::new(),
+                &mut Vec::new(),
+                &mut super::InstructionsAt::default(),
+                None,
+            );
+        }));
     }
 }

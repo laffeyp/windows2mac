@@ -127,6 +127,38 @@ pub fn lock_runtime(a: &mut Assembler) {
     a.bind(got);
 }
 
+/// The owner the host writes in the runtime word while it holds it (Sprint 275): no vCPU's `LOCK_OWNER`.
+pub const HOST_OWNER: u32 = u32::MAX;
+
+/// The runtime word in the guest's memory `mem` (offset `RUN_TABLE + RUNTIME_LOCK`), as an atomic for one access: the
+/// guest takes it by `CASA` and releases it by `STLR` on the same physical word, so a host atomic is the guest's word.
+fn runtime_word(mem: &mut [u8]) -> &std::sync::atomic::AtomicU32 {
+    let off = (RUN_TABLE + RUNTIME_LOCK) as usize;
+    let p = mem[off..off + 4].as_mut_ptr().cast::<u32>();
+    // SAFETY: the word is 4-byte aligned (`RUNTIME_LOCK` 0x80 in the page-aligned run table) and lives as long as `mem`;
+    // every access to it, the guest's and the host's, is atomic
+    unsafe { std::sync::atomic::AtomicU32::from_ptr(p) }
+}
+
+/// The host takes the runtime word (Sprint 275, census D6), waiting while a vCPU holds it, unless the vCPU whose exit
+/// the host serves holds it already (`own`, its `LOCK_OWNER`: the frozen host holds the word across a host request):
+/// whether the host took it, and so must release it.
+pub fn host_take_runtime_word(mem: &mut [u8], own: u32) -> bool {
+    use std::sync::atomic::Ordering;
+    loop {
+        match runtime_word(mem).compare_exchange(0, HOST_OWNER, Ordering::Acquire, Ordering::Relaxed) {
+            Ok(_) => return true,
+            Err(holder) if holder == own => return false,
+            Err(_) => std::hint::spin_loop(),
+        }
+    }
+}
+
+/// The host releases the runtime word it took.
+pub fn host_release_runtime_word(mem: &mut [u8]) {
+    runtime_word(mem).store(0, std::sync::atomic::Ordering::Release);
+}
+
 /// `unlock_runtime` (vm_backend 544-546).
 pub fn unlock_runtime(a: &mut Assembler) {
     a.emit(&a64::mov_imm(16, MONITOR_VA + RUN_TABLE + RUNTIME_LOCK));
