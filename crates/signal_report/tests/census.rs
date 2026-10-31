@@ -3,12 +3,14 @@
 //! Step 4's census closed (Sprint 242; reviewer-3's direction at 240): `docs/step-4-census-2026-10-28.md` names the
 //! records and tests that show each row's state, and every row not met goes somewhere. A path the census names exists,
 //! in the tree or, for one a later sprint removed, in the history; a row whose status does not begin "met" is named in
-//! BLACKBOARD's Deferred as "census row N".
+//! BLACKBOARD's Deferred as "census row N". Step 5's close (Sprint 268) has its paths held the same way.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const CENSUS: &str = "docs/step-4-census-2026-10-28.md";
+/// Step 5's close (Sprint 268), whose paths are held as the census's are.
+const STEP_5_CLOSE: &str = "docs/step-5-close-2026-10-30.md";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -61,29 +63,31 @@ fn known(root: &Path, path: &str) -> bool {
 #[test]
 fn every_path_the_census_names_exists_or_existed() {
     let root = root();
-    let text = std::fs::read_to_string(root.join(CENSUS)).unwrap();
-    let named = paths(&text);
-    let missing: Vec<&String> = named.iter().filter(|p| !known(&root, p)).collect();
-    assert!(
-        missing.is_empty(),
-        "{CENSUS} names {} path(s) never in the tree: {missing:?}",
-        missing.len()
-    );
-    // a record withdrawn to store/superseded/ is not evidence (Sprint 247; reviewer-3's Low 2 of its review of the
-    // rework: its history keeps the old path, so the check above passes it)
-    let withdrawn: Vec<&String> = named
-        .iter()
-        .filter(|p| {
-            p.strip_prefix("store/runs/")
-                .and_then(|rest| rest.split('/').next())
-                .is_some_and(|record| root.join("store/superseded").join(record).exists())
-        })
-        .collect();
-    assert!(
-        withdrawn.is_empty(),
-        "{CENSUS} cites record(s) withdrawn to store/superseded/: {withdrawn:?}"
-    );
-    assert!(named.len() > 20, "{} paths named", named.len());
+    for (document, least) in [(CENSUS, 21), (STEP_5_CLOSE, 5)] {
+        let text = std::fs::read_to_string(root.join(document)).unwrap();
+        let named = paths(&text);
+        let missing: Vec<&String> = named.iter().filter(|p| !known(&root, p)).collect();
+        assert!(
+            missing.is_empty(),
+            "{document} names {} path(s) never in the tree: {missing:?}",
+            missing.len()
+        );
+        // a record withdrawn to store/superseded/ is not evidence (Sprint 247; reviewer-3's Low 2 of its review of the
+        // rework: its history keeps the old path, so the check above passes it)
+        let withdrawn: Vec<&String> = named
+            .iter()
+            .filter(|p| {
+                p.strip_prefix("store/runs/")
+                    .and_then(|rest| rest.split('/').next())
+                    .is_some_and(|record| root.join("store/superseded").join(record).exists())
+            })
+            .collect();
+        assert!(
+            withdrawn.is_empty(),
+            "{document} cites record(s) withdrawn to store/superseded/: {withdrawn:?}"
+        );
+        assert!(named.len() >= least, "{document}: {} paths named", named.len());
+    }
 }
 
 #[test]

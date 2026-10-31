@@ -175,7 +175,10 @@ words in the real run; the VM's follows once the host's conforms.
    counter's ticks, which run while the host holds the vCPU off-core (Sprint 263's uncached runs 14.79 to 14.85 ms at
    load 3.3 to 4.2, Sprint 264's 11.86 ms at load near 2; reviewer-3's Medium at 264): the most compiles inside any
    window of 53,500,000 instructions retired, a 60 Hz frame at 3.21 billion instructions a second, the fastest rate
-   recorded (Sprint 263, the installer), so no frame the runs have held is wider; installs counted apart. The cached
+   recorded (Sprint 263, the installer), so no frame the runs have held is wider; installs counted apart. The window
+   is a fixed count, so on a slower run it spans more than 16.7 ms (20.2 ms at 2.646 billion instructions a second)
+   and holds at least a real frame's compiles, the conservative side for a bound on the burst. *(Amended 2026-10-30,
+   Sprint 268, reviewer-3's Low 2 at 266.)* The cached
    run's figure falls below the uncached run's, each from one untimed run, the instructions at each compile
    deterministic; the timed figure kept beside it. *(Amended 2026-10-30, Sprint 266, before any record.)* A cached run is another schedule of the same guest, conforming:
    a time slice ends at a block's stop
