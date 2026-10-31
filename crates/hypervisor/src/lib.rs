@@ -11,6 +11,9 @@
 //! - `hv_vcpu_create` "Creates a vCPU instance for the current thread", and every other vCPU call "Must be called by
 //!   the owning thread", so a `Vcpu` is neither `Send` nor `Sync`;
 //! - `hv_vcpus_exit` may be called from any thread, so a `VcpuHandle` is both.
+//! - `hv_vm.h` puts no thread on any VM call, and `hv_vcpu_create` adds that "Each thread can only have one vCPU
+//!   associated at a time", so several threads each make a vCPU of the one VM: a `Vm` is `Sync`, shared by reference
+//!   with the threads that build their `Vcpu`s on it, and not `Send`, made and destroyed on one thread (Sprint 274).
 //!
 //! On any other target the crate is empty: CI runs on Linux, and the VM's tests run in the gates on this Mac.
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -220,6 +223,11 @@ pub struct Vm {
     _not_send: PhantomData<*const ()>,
 }
 
+// SAFETY: a shared `&Vm` reaches only the VM calls `hv_vm.h` puts no thread on (map, unmap, protect) and
+// `hv_vcpu_create`, which makes a vCPU for the calling thread, one a thread; the `Vcpu` it returns stays on that
+// thread (neither `Send` nor `Sync`). Destroying the VM takes `&mut`/ownership, after every `Vcpu` borrowing it.
+unsafe impl Sync for Vm {}
+
 impl Vm {
     /// A VM with 4 KB IPA granules (the default is 16 KB, which refuses a 4 KB map; WORKING_AGREEMENT) and an IPA of
     /// `ipa_bits` bits (`vm_monitor.c` uses 40).
@@ -282,6 +290,12 @@ pub struct GuestMemory {
     ptr: *mut u8,
     len: usize,
 }
+
+// SAFETY: the pointer is to a mapping this value owns alone, made by `mmap` and unmapped in its `Drop`, with no state
+// tied to the thread that made it; moving it to another thread moves that ownership, as a `Vec`'s does. Several
+// threads reach it only through a lock that holds the value (Sprint 274: the litmus tests' vCPU threads compile under
+// one `Mutex` around the guest), while the VM's vCPUs reach the memory itself through the mapping, as before.
+unsafe impl Send for GuestMemory {}
 
 impl GuestMemory {
     /// `len` bytes, a multiple of the host's 16 KB page.
