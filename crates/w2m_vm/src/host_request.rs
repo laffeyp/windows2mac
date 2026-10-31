@@ -318,7 +318,7 @@ pub fn map_view(guest: &mut Guest, size: u64, fd: u64, protect: u64) -> Result<(
         .and_then(|f| f.view(fd, size))
         .ok_or_else(|| HostError::NotServed(format!("a file view of descriptor {fd}, which is not open")))??;
     let mut view = GuestView {
-        mem: guest.memory.as_mut_slice(),
+        mem: crate::guest::memory_view(&guest.memory),
         layout: &guest.layout,
     };
     let base = guest
@@ -455,7 +455,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         // second word (the error, or VirtualProtect's old protection with the error above it) at the transport's 48
         HOST_VIRTUAL_ALLOC | HOST_VIRTUAL_FREE | HOST_VIRTUAL_PROTECT | HOST_VIRTUAL_QUERY => {
             let mut view = GuestView {
-                mem: guest.memory.as_mut_slice(),
+                mem: crate::guest::memory_view(&guest.memory),
                 layout: &guest.layout,
             };
             let refused = |e: virtual_memory::Unimplemented| HostError::NotServed(format!("{e:?}"));
@@ -784,7 +784,7 @@ mod tests {
         assert_eq!(g.memory.as_slice()[at], 1, "the file's first byte at the base");
         assert_eq!(&g.memory.as_slice()[at..at + size as usize], &bytes[..]);
         let view = GuestView {
-            mem: g.memory.as_mut_slice(),
+            mem: crate::guest::memory_view(&g.memory),
             layout: &g.layout,
         };
         let info = g.arena.query(&view, base).unwrap();

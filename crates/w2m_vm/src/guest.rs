@@ -22,6 +22,7 @@ use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE
 
 use crate::GIGA_BLOCK;
 use crate::assembler::{Assembler, Target};
+use crate::concurrent_memory::ConcurrentGuestMemory;
 use crate::monitor_code::{
     self, MonitorCode, REG_BUDGET, STATE_REDIRECT, Site, budget_from_count, count_from_budget, record_taking,
     release_runtime, take_runtime, unlock_runtime,
@@ -293,13 +294,14 @@ fn write_u64(mem: &mut [u8], off: u64, v: u64) {
 }
 
 /// The code cache's cursor and its writes (vm_backend 2514-2520, 4401-4402, 4850-4859).
+/// Through the view (Sprint 278).
 struct CodeCache<'a> {
-    mem: &'a mut [u8],
+    mem: ConcurrentGuestMemory<'a>,
 }
 
 impl CodeCache<'_> {
     fn cursor(&self) -> u64 {
-        read_u64(self.mem, VM_COMPILER + VMC_CURSOR)
+        self.mem.read_u64(VM_COMPILER + VMC_CURSOR)
     }
 
     /// Puts `build`'s words at the cursor, advances it, and marks the code as not the guest's in the reconstruction
@@ -311,24 +313,24 @@ impl CodeCache<'_> {
         build(&mut a);
         let words = a.finish();
         let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        self.mem[off as usize..off as usize + bytes.len()].copy_from_slice(&bytes);
-        write_u64(self.mem, VM_COMPILER + VMC_CURSOR, off + bytes.len() as u64);
+        self.mem.write(off, &bytes);
+        self.mem.write_u64(VM_COMPILER + VMC_CURSOR, off + bytes.len() as u64);
         self.recon_append(&[(va, 0)])?;
         Ok(va)
     }
 
     /// `_recon_append` (vm_backend 4850-4859): (host code VA, x86 address) pairs after the table's entries.
     fn recon_append(&mut self, marks: &[(u64, u64)]) -> Result<(), GuestError> {
-        let n = read_u64(self.mem, RUN_TABLE + RECON_COUNT);
+        let n = self.mem.read_u64(RUN_TABLE + RECON_COUNT);
         if n + marks.len() as u64 > RECON_ENTRIES {
             return Err(GuestError::Layout("reconstruction table full".into()));
         }
         for (i, (host, guest)) in marks.iter().enumerate() {
             let at = RECON_TABLE + 16 * (n + i as u64);
-            write_u64(self.mem, at, *host);
-            write_u64(self.mem, at + 8, *guest);
+            self.mem.write_u64(at, *host);
+            self.mem.write_u64(at + 8, *guest);
         }
-        write_u64(self.mem, RUN_TABLE + RECON_COUNT, n + marks.len() as u64);
+        self.mem.write_u64(RUN_TABLE + RECON_COUNT, n + marks.len() as u64);
         Ok(())
     }
 }
@@ -519,7 +521,7 @@ fn traced_form(
     call_trace: &[String],
     function: &str,
     symbols: &BTreeMap<String, u64>,
-    mem: &mut [u8],
+    mem: ConcurrentGuestMemory<'_>,
     thunk: u64,
 ) -> Option<u64> {
     use guest_runtime::layout::{TRACE_OFF, TRACE_THUNKS, TRACE_WIDE_OFF};
@@ -530,7 +532,7 @@ fn traced_form(
     if let Some((_, mask)) = TRACE_WIDE_ARGS.iter().find(|(f, _)| *f == function)
         && index < TRACE_THUNKS
     {
-        mem[(MONITOR_SIZE + TRACE_OFF + TRACE_WIDE_OFF + index) as usize] = *mask;
+        mem.write(MONITOR_SIZE + TRACE_OFF + TRACE_WIDE_OFF + index, &[*mask]);
     }
     symbols.get("w2m_traced").copied()
 }
@@ -715,29 +717,29 @@ pub struct Guest {
 }
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
+/// Through the view (Sprint 278): no reference into guest memory.
 pub struct GuestView<'a> {
-    pub mem: &'a mut [u8],
+    pub mem: ConcurrentGuestMemory<'a>,
     pub layout: &'a Layout,
 }
 
 impl GuestView<'_> {
-    fn at(&self, va: u64, n: u64) -> std::ops::Range<usize> {
-        let off = self
-            .layout
+    fn at(&self, va: u64) -> u64 {
+        self.layout
             .offset(va)
-            .unwrap_or_else(|| panic!("guest address 0x{va:x} is not mapped")) as usize;
-        off..off + n as usize
+            .unwrap_or_else(|| panic!("guest address 0x{va:x} is not mapped"))
     }
 }
 
 impl GuestPages for GuestView<'_> {
     fn zero(&mut self, va: u64, n: u64) {
-        let r = self.at(va, n);
-        self.mem[r].fill(0);
+        self.mem.write(self.at(va), &vec![0; n as usize]);
     }
 
     fn read(&self, va: u64, n: u64) -> Vec<u8> {
-        self.mem[self.at(va, n)].to_vec()
+        let mut out = vec![0; n as usize];
+        self.mem.read(self.at(va), &mut out);
+        out
     }
 }
 
@@ -765,7 +767,21 @@ pub struct Exception {
 /// runtime.h 222: "ETIONw2x".
 pub const EXCEPTION_MAGIC: u64 = 0x7832_774E_4F49_5445;
 
+/// `memory` whole as a view that makes no reference into it (Sprint 278), for the borrow's life: what the host reads
+/// and writes while another vCPU may run goes through it (census D7). It borrows the field alone, so a service may
+/// hold it beside a mutable borrow of another field, as the arena's.
+pub fn memory_view(memory: &hypervisor::GuestMemory) -> ConcurrentGuestMemory<'_> {
+    // SAFETY: the mapping's own pointer, writable, live while `memory` is borrowed; the host makes slices of it only
+    // while every vCPU that may write it is stopped, the view's rule
+    unsafe { ConcurrentGuestMemory::from_raw_parts(memory.as_ptr(), memory.len()) }
+}
+
 impl Guest {
+    /// `memory_view` of this guest's memory.
+    pub fn memory_view(&self) -> ConcurrentGuestMemory<'_> {
+        memory_view(&self.memory)
+    }
+
     /// `VM.__init__`'s memory and code (vm_backend 2382-2424, 2461, 2472-2475, 2506-2508) for `loaded`, with the
     /// runtime `image`, its `services`, and `vm_compiler_symbols`, the stencil table's symbols in its order
     /// (`vm_compiler_symbols`); with the COM vtables (2488, 3078-3093) and the symbol table (2509-2510).
@@ -831,7 +847,10 @@ impl Guest {
             },
         );
         let switch = image.symbols["w2m_switch"];
-        let mut cache = CodeCache { mem };
+        // load time, no vCPU yet: the slice stands, and the cache takes it as a view for its life
+        let mut cache = CodeCache {
+            mem: ConcurrentGuestMemory::new(mem),
+        };
         let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va, timed))?;
         let switch_slice_va = cache.put(|a| switch_stub(a, true, switch, code.dispatch_va, timed))?;
         let thunks = loaded.thunks.clone();
@@ -855,7 +874,7 @@ impl Guest {
             let va = *image.symbols.get(name).ok_or_else(|| {
                 GuestError::Layout(format!("the stencil table names {name}, which the runtime lacks"))
             })?;
-            write_u64(cache.mem, VM_COMPILER + VMC_SYMBOLS + 8 * i as u64, va);
+            cache.mem.write_u64(VM_COMPILER + VMC_SYMBOLS + 8 * i as u64, va);
         }
         // the arena (2498-2505): the program's images, the main stack, the heap, every mapped range and the thunks'
         // 4 GB, and each writable image page as loaded
@@ -870,7 +889,7 @@ impl Guest {
         arena.mapped = layout.maps.iter().map(|(va, _, size)| (*va, *size)).collect();
         arena.mapped.push((THUNK_BASE, 1 << 32));
         arena.snapshot(&GuestView {
-            mem: memory.as_mut_slice(),
+            mem: memory_view(&memory),
             layout: &layout,
         });
         Guest {
@@ -955,7 +974,7 @@ impl Guest {
         // dispatcher, the slice stub, the block that opens the trace (0: from the start)
         let (switch_slice_va, dispatch_va) = (self.switch_slice_va, self.code.dispatch_va);
         let mut cache = CodeCache {
-            mem: self.memory.as_mut_slice(),
+            mem: crate::guest::memory_view(&self.memory),
         };
         self.slice_va = cache.put(|a| slice_stub(a, switch_slice_va))?;
         self.entry_va = cache.put(|a| entry_stub(a, dispatch_va))?;
@@ -1127,11 +1146,11 @@ impl Guest {
             &self.call_trace,
             function,
             &self.symbols,
-            self.memory.as_mut_slice(),
+            memory_view(&self.memory),
             thunk,
         );
         let mut cache = CodeCache {
-            mem: self.memory.as_mut_slice(),
+            mem: crate::guest::memory_view(&self.memory),
         };
         let va = cache.put(|a| bridge(a, service, thunk, dispatch_va, switch_va, timed, traced))?;
         self.bridges.insert(thunk, va);
@@ -1378,7 +1397,7 @@ impl Guest {
     /// before.
     pub fn code_page(&mut self, code: &[u8]) -> Result<u64, GuestError> {
         let mut view = GuestView {
-            mem: self.memory.as_mut_slice(),
+            mem: crate::guest::memory_view(&self.memory),
             layout: &self.layout,
         };
         let (va, err) = self
@@ -1396,8 +1415,7 @@ impl Guest {
                 "a host code page: VirtualAlloc error {err}"
             )));
         }
-        let r = view.at(va, code.len() as u64);
-        view.mem[r].copy_from_slice(code);
+        view.mem.write(view.at(va), code);
         Ok(va)
     }
 

@@ -16,6 +16,7 @@ use guest_runtime::layout::{
 use pe_loader::TLS_SLOTS;
 use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE, STACK_GUARD_PAGES};
 
+use crate::concurrent_memory::ConcurrentGuestMemory;
 use crate::guest::{Guest, GuestView};
 use crate::modules::ModuleError;
 use crate::process::{CLOCK_MODE, CLOCK_RATE, CLOCK_WARP};
@@ -78,16 +79,24 @@ pub fn entry(index: u64) -> u64 {
     RUN_TABLE + RT_ENTRIES + RUN_ENTRY * index
 }
 
-fn read_u64(mem: &[u8], off: u64) -> u64 {
-    u64::from_le_bytes(mem[off as usize..off as usize + 8].try_into().unwrap())
+// Guest memory through the view (Sprint 278, census D7): the scheduler makes no reference into it.
+fn read_u64(mem: ConcurrentGuestMemory<'_>, off: u64) -> u64 {
+    mem.read_u64(off)
 }
 
-fn write_u64(mem: &mut [u8], off: u64, v: u64) {
-    mem[off as usize..off as usize + 8].copy_from_slice(&v.to_le_bytes());
+fn write_u64(mem: ConcurrentGuestMemory<'_>, off: u64, v: u64) {
+    mem.write_u64(off, v);
 }
 
-fn put(mem: &mut [u8], off: u64, bytes: &[u8]) {
-    mem[off as usize..off as usize + bytes.len()].copy_from_slice(bytes);
+fn put(mem: ConcurrentGuestMemory<'_>, off: u64, bytes: &[u8]) {
+    mem.write(off, bytes);
+}
+
+/// `n` bytes from `off`, copied out.
+fn bytes(mem: ConcurrentGuestMemory<'_>, off: u64, n: u64) -> Vec<u8> {
+    let mut out = vec![0; n as usize];
+    mem.read(off, &mut out);
+    out
 }
 
 /// Guest bytes at `va`, through the layout.
@@ -96,7 +105,7 @@ fn write_guest(guest: &mut Guest, va: u64, bytes: &[u8]) -> Result<(), String> {
         .layout
         .offset(va)
         .ok_or_else(|| format!("guest address 0x{va:x} is not mapped"))?;
-    put(guest.memory.as_mut_slice(), at, bytes);
+    guest.memory_view().write(at, bytes);
     Ok(())
 }
 
@@ -104,8 +113,10 @@ fn read_guest(guest: &Guest, va: u64, n: u64) -> Result<Vec<u8>, String> {
     let at = guest
         .layout
         .offset(va)
-        .ok_or_else(|| format!("guest address 0x{va:x} is not mapped"))? as usize;
-    Ok(guest.memory.as_slice()[at..at + n as usize].to_vec())
+        .ok_or_else(|| format!("guest address 0x{va:x} is not mapped"))?;
+    let mut out = vec![0; n as usize];
+    guest.memory_view().read(at, &mut out);
+    Ok(out)
 }
 
 /// `VirtualAlloc` in the arena for the host: the base, or the error named.
@@ -121,7 +132,7 @@ fn alloc(guest: &mut Guest, address: u64, size: u64, kind: u32, what: &str) -> R
 /// when the arena itself fails.
 fn arena_alloc(guest: &mut Guest, address: u64, size: u64, kind: u32) -> Result<(u64, u32), String> {
     let mut view = GuestView {
-        mem: guest.memory.as_mut_slice(),
+        mem: crate::guest::memory_view(&guest.memory),
         layout: &guest.layout,
     };
     guest
@@ -133,7 +144,7 @@ fn arena_alloc(guest: &mut Guest, address: u64, size: u64, kind: u32) -> Result<
 /// `_add_thread` (3328-3344): a new thread's run table entry, after the others (the table's order is the ids', the
 /// switch's rotation), ready, its vector slot given (`_vslot`); the first thread is current on vCPU 0.
 pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
-    let mem = guest.memory.as_mut_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let n = read_u64(mem, RUN_TABLE + RT_COUNT);
     if n == RUN_THREADS {
         return Err(format!("more than {RUN_THREADS} threads in one process"));
@@ -164,7 +175,7 @@ pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
 /// `current_tid` (3316-3321): the id of the thread vCPU 0 runs, its current entry's (`w2m_switch` changes it in the
 /// VM).
 pub fn current_tid(guest: &Guest) -> u64 {
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     if read_u64(mem, RUN_TABLE + RT_COUNT) == 0 {
         // `_first_tid` (vm_backend 2497): the start's thread id, a child's from the Machine (Sprint 206: it was 4)
         return guest.start.tid;
@@ -241,7 +252,7 @@ pub fn thread_static_tls(guest: &mut Guest) -> Result<u64, String> {
 /// vm_backend 3963), not its exit code, which a thread can set to STILL_ACTIVE itself and which THREAD_END sets
 /// while the thread still runs its detach callbacks (reviewer-3's Medium 1 of its review of Sprint 218).
 pub fn ended(guest: &Guest, index: u64) -> bool {
-    read_u64(guest.memory.as_slice(), entry(index) + E_STATUS) == ENDED
+    read_u64(crate::guest::memory_view(&guest.memory), entry(index) + E_STATUS) == ENDED
 }
 
 /// `_late_static_tls` (3953-3978; Sprint 218): static TLS for a DLL loaded after the start, `pe` placed at `base`, as
@@ -384,11 +395,11 @@ pub fn suspend(guest: &mut Guest, tid: u32, resume: bool) -> Result<u64, String>
         .get(&u64::from(tid))
         .map(|t| t.index)
         .ok_or_else(|| format!("a thread request ({sub}) for thread id {tid}, which w2m did not create"))?;
-    let mem = guest.memory.as_mut_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let at = entry(index);
     let count = read_u64(mem, at + E_SUSPEND);
     let ended = ended(guest, index);
-    let mem = guest.memory.as_mut_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     Ok(match (resume, ended, count) {
         (false, true, _) => u64::MAX,
         (false, false, n) => {
@@ -430,7 +441,7 @@ pub fn thread_context(guest: &mut Guest, tid: u32, buffer: u64) -> Result<u64, S
             "GetThreadContext of the calling thread {tid}, which is not in the rows"
         ));
     }
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let at = entry(t.index);
     let x: Vec<u64> = (0..31).map(|i| read_u64(mem, at + E_X + 8 * i)).collect();
     // the monitor ranges the thread keeps: lazy AF and DF (0x20-0x40), MXCSR (0x50), the x87 control word (0x70)
@@ -440,7 +451,7 @@ pub fn thread_context(guest: &mut Guest, tid: u32, buffer: u64) -> Result<u64, S
         read_u64(mem, monitor(0, 8)),
         read_u64(mem, monitor(0, 16)),
     );
-    let df = u32::from(mem[monitor(0, DF_BYTE - 0x20) as usize] & 1);
+    let df = u32::from(bytes(mem, monitor(0, DF_BYTE - 0x20), 1)[0] & 1);
     let mxcsr = read_u64(mem, monitor(1, 0)) as u32;
     let fcw = read_u64(mem, monitor(2, 0)) as u16;
     let undefined = x[REG_UNDEFINED_FLAGS as usize];
@@ -464,8 +475,8 @@ pub fn thread_context(guest: &mut Guest, tid: u32, buffer: u64) -> Result<u64, S
     } else {
         x[17]
     };
-    let slot = read_u64(mem, at + E_VSLOT) as usize;
-    let xmm = mem[slot..slot + 256].to_vec();
+    let slot = read_u64(mem, at + E_VSLOT);
+    let xmm = bytes(mem, slot, 256);
     let mut buf = read_guest(guest, buffer, 1232)?;
     let flags = u32::from_le_bytes(buf[48..52].try_into().unwrap());
     let put = |buf: &mut Vec<u8>, off: usize, bytes: &[u8]| buf[off..off + bytes.len()].copy_from_slice(bytes);
@@ -501,7 +512,7 @@ pub fn thread_context(guest: &mut Guest, tid: u32, buffer: u64) -> Result<u64, S
 /// `GuestThread.status`'s setter (scheduler.py 83-89): the entry's status, and the header's count of blocked threads,
 /// which threads.c `w2m_signal` reads.
 pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
-    let mem = guest.memory.as_mut_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let at = entry(index);
     let was = read_u64(mem, at + E_STATUS);
     if (was == BLOCKED) != (status == BLOCKED) {
@@ -535,7 +546,7 @@ unsafe extern "C" {
 /// warp; else the host's monotonic clock in 100 ns units (`monotonic_count`, kernel32.py 36-38, which is
 /// `mach_absolute_time` on macOS, the counter the guest reads as CNTVCT_EL0).
 pub fn counter_now(guest: &Guest) -> u64 {
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     if read_u64(mem, MONITOR_DATA + CLOCK_MODE) == 2 {
         let executed = u128::from(read_u64(mem, MONITOR_DATA));
         let rate = u128::from(read_u64(mem, MONITOR_DATA + CLOCK_RATE));
@@ -554,11 +565,11 @@ pub fn counter_now(guest: &Guest) -> u64 {
 /// machine's clock `machine` is moved to it by its warp, as time passed for it while it waited; at its start too
 /// (`VM.steps`, 5055-5080; Sprint 199, reviewer-2's High 1 of its review of 196-198).
 pub fn catch_up(guest: &mut Guest, machine: u64, processes: usize) {
-    if read_u64(guest.memory.as_slice(), MONITOR_DATA + CLOCK_MODE) != 2 {
+    if read_u64(crate::guest::memory_view(&guest.memory), MONITOR_DATA + CLOCK_MODE) != 2 {
         return;
     }
     let lag = crate::machine::catch_up(counter_now(guest), machine, processes);
-    let mem = guest.memory.as_mut_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let warp = read_u64(mem, RUN_TABLE + CLOCK_WARP);
     write_u64(mem, RUN_TABLE + CLOCK_WARP, warp + lag);
 }
@@ -566,7 +577,7 @@ pub fn catch_up(guest: &mut Guest, machine: u64, processes: usize) {
 /// `_wake_expired` (4897-4905): every blocked thread whose deadline has passed is ready.
 pub fn wake_expired(guest: &mut Guest) {
     let now = counter_now(guest);
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let expired: Vec<u64> = guest
         .threads
         .values()
@@ -584,7 +595,7 @@ pub fn wake_expired(guest: &mut Guest) {
 /// What a process reports of itself at the end of its turn (`VM.ready`, `waits_with_deadline`, vm_backend 3653-3690):
 /// a thread ready and not suspended, and a thread blocked with a deadline.
 pub fn turn_state(guest: &Guest) -> crate::turns::State {
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
     let deadline = guest
         .threads
@@ -609,7 +620,7 @@ pub fn turn_state(guest: &Guest) -> crate::turns::State {
 /// earliest deadline of a blocked, unsuspended thread (the lowest tid among equals) and that thread made ready; false
 /// when no thread waits with a deadline or the clock is another.
 pub fn warp_to_deadline(guest: &mut Guest) -> bool {
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     if read_u64(mem, MONITOR_DATA + CLOCK_MODE) != 2 {
         return false;
     }
@@ -625,7 +636,7 @@ pub fn warp_to_deadline(guest: &mut Guest) -> bool {
     };
     let now = counter_now(guest);
     if deadline > now {
-        let mem = guest.memory.as_mut_slice();
+        let mem = crate::guest::memory_view(&guest.memory);
         let warp = read_u64(mem, RUN_TABLE + CLOCK_WARP);
         write_u64(mem, RUN_TABLE + CLOCK_WARP, warp + deadline - now);
     }
@@ -638,7 +649,7 @@ pub fn warp_to_deadline(guest: &mut Guest) -> bool {
 /// `_switch` from the thread that went idle.
 pub fn resume_idle(guest: &mut Guest, x: &mut [u64; 31], cur_tid: u64, bits: u32) -> Result<Switch, String> {
     wake_expired(guest);
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
     if !guest
         .threads
@@ -677,7 +688,8 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
         .get(&current)
         .ok_or_else(|| format!("thread {current} hands over, and the host holds no such thread"))?
         .clone();
-    let word = |guest: &Guest, t: &Thread, off: u64| read_u64(guest.memory.as_slice(), entry(t.index) + off);
+    let word =
+        |guest: &Guest, t: &Thread, off: u64| read_u64(crate::guest::memory_view(&guest.memory), entry(t.index) + off);
     if bits & SCHEDULE_END != 0 {
         set_status(guest, cur.index, ENDED);
         let blocked: Vec<u64> = guest
@@ -691,7 +703,11 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
         }
     } else if bits & SCHEDULE_RETRY != 0 && word(guest, &cur, E_STATUS) == BLOCKED {
         let deadline = u64::from_le_bytes(read_guest(guest, cur.teb + SCRATCH_OFF, 8)?.try_into().unwrap());
-        write_u64(guest.memory.as_mut_slice(), entry(cur.index) + E_DEADLINE, deadline);
+        write_u64(
+            crate::guest::memory_view(&guest.memory),
+            entry(cur.index) + E_DEADLINE,
+            deadline,
+        );
     }
     if guest.threads.values().all(|t| word(guest, t, E_STATUS) == ENDED) {
         return Ok(Switch::Ended(cur.exit_code)); // the last thread ended: the process ends with it
@@ -705,14 +721,18 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
 /// still ahead. Else the host sleeps `pause` (1 ms there) and readies the first timed waiter, which checks its own
 /// wait again in guest code and blocks again if its deadline has not come.
 fn timed_waiter(guest: &mut Guest, timed: &[Thread], pause: std::time::Duration) -> Thread {
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let deadline = |t: &Thread| read_u64(mem, entry(t.index) + E_DEADLINE);
     let chosen = if read_u64(mem, MONITOR_DATA + CLOCK_MODE) == 2 {
         let first = timed.iter().min_by_key(|t| (deadline(t), t.tid)).unwrap().clone();
         let (at, now) = (deadline(&first), counter_now(guest));
         if at > now {
             let warp = read_u64(mem, RUN_TABLE + CLOCK_WARP);
-            write_u64(guest.memory.as_mut_slice(), RUN_TABLE + CLOCK_WARP, warp + at - now);
+            write_u64(
+                crate::guest::memory_view(&guest.memory),
+                RUN_TABLE + CLOCK_WARP,
+                warp + at - now,
+            );
         }
         first
     } else {
@@ -727,7 +747,7 @@ fn timed_waiter(guest: &mut Guest, timed: &[Thread], pause: std::time::Duration)
 /// after `cur` in id order, round robin, `cur` last. With none ready and one waiting with a deadline, `timed_waiter`
 /// readies one (Sprint 234); with none waiting with a deadline the threads are deadlocked.
 fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Result<Switch, String> {
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
     let order: Vec<&Thread> = guest.threads.values().collect();
     let i = order.iter().position(|t| t.tid == cur.tid).unwrap();
@@ -755,7 +775,7 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     // the thread given vCPU 0 is ready, whichever path chose it: the frozen `_switch` only ever takes a ready one, and a
     // blocked one run anyway leaves the run table's state and blocked count wrong for the rest of the run, unseen by
     // any run's output (Sprint 234; reviewer-3's Low 1 of its review at 234)
-    let status = read_u64(guest.memory.as_slice(), entry(next.index) + E_STATUS);
+    let status = read_u64(crate::guest::memory_view(&guest.memory), entry(next.index) + E_STATUS);
     if status != READY {
         return Err(format!(
             "thread {} given vCPU 0 while not ready (status {status})",
@@ -769,7 +789,7 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
         return Ok(Switch::Go { vectors: None });
     }
     // `_save_thread` (3467-3479)
-    let mem = guest.memory.as_mut_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let (from, to) = (entry(cur.index), entry(next.index));
     let (executed, pauses) = (read_u64(mem, MONITOR_DATA), read_u64(mem, MONITOR_DATA + PAUSE_COUNT));
     let (begun, begun_pauses) = (
@@ -793,10 +813,10 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     }
     let state = MONITOR_SIZE + STATE_OFF;
     for (p, (a, b)) in E_MONITOR_AT.iter().zip(PER_THREAD_MONITOR) {
-        let data = mem[(MONITOR_DATA + a) as usize..(MONITOR_DATA + b) as usize].to_vec();
+        let data = bytes(mem, MONITOR_DATA + a, b - a);
         put(mem, from + E_MONITOR + p, &data);
     }
-    let data = mem[state as usize..(state + STATE_SIZE) as usize].to_vec();
+    let data = bytes(mem, state, STATE_SIZE);
     put(mem, from + E_STATE, &data);
     write_u64(mem, from + E_VCPU, 0);
     // `set_current` (3323-3326)
@@ -810,10 +830,10 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
         ));
     }
     for (p, (a, b)) in E_MONITOR_AT.iter().zip(PER_THREAD_MONITOR) {
-        let data = mem[(to + E_MONITOR + p) as usize..(to + E_MONITOR + p + b - a) as usize].to_vec();
+        let data = bytes(mem, to + E_MONITOR + p, b - a);
         put(mem, MONITOR_DATA + a, &data);
     }
-    let data = mem[(to + E_STATE) as usize..(to + E_STATE + STATE_SIZE) as usize].to_vec();
+    let data = bytes(mem, to + E_STATE, STATE_SIZE);
     put(mem, state, &data);
     write_u64(mem, MONITOR_DATA + SLICE_COUNT, executed);
     write_u64(mem, MONITOR_DATA + SLICE_PAUSES, pauses);
@@ -856,7 +876,7 @@ pub fn stack_grow(guest: &mut Guest, tid: u64, address: u64, probe: bool) -> Res
     while limit > page {
         let new = if probe { limit - PAGE } else { page };
         let mut view = GuestView {
-            mem: guest.memory.as_mut_slice(),
+            mem: crate::guest::memory_view(&guest.memory),
             layout: &guest.layout,
         };
         guest.arena.commit(
@@ -868,7 +888,7 @@ pub fn stack_grow(guest: &mut Guest, tid: u64, address: u64, probe: bool) -> Res
         );
         guest.map_pages(new, limit, true)?;
         let mut view = GuestView {
-            mem: guest.memory.as_mut_slice(),
+            mem: crate::guest::memory_view(&guest.memory),
             layout: &guest.layout,
         };
         guest.arena.commit(
@@ -929,7 +949,7 @@ pub fn create_thread(
     alloc(guest, limit, commit, MEM_COMMIT, "a thread's stack commit")?;
     {
         let mut view = GuestView {
-            mem: guest.memory.as_mut_slice(),
+            mem: crate::guest::memory_view(&guest.memory),
             layout: &guest.layout,
         };
         guest.arena.commit(
@@ -985,7 +1005,7 @@ pub fn create_thread(
         },
     )?;
     let at = entry(index);
-    let mem = guest.memory.as_mut_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     for (i, r) in x.iter().enumerate() {
         write_u64(mem, at + E_X + 8 * i as u64, *r);
     }
@@ -1022,7 +1042,7 @@ pub fn create_thread(
 pub fn set_budget(guest: &mut Guest) {
     // a process of a machine shares the vCPU's time with the others too (Sprint 197)
     let shared = guest.threads.len() > 1 || guest.link.is_some();
-    let mem = guest.memory.as_mut_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let (executed, max_steps) = (read_u64(mem, MONITOR_DATA), read_u64(mem, MONITOR_DATA + RUN_END));
     let limit = if shared {
         max_steps.min(executed + TIME_SLICE)
@@ -1041,7 +1061,7 @@ pub fn slice_until(guest: &Guest) -> u64 {
     if guest.link.as_ref().is_some_and(|l| l.others_due(counter_now(guest))) {
         return 0;
     }
-    let mem = guest.memory.as_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     let current = current_tid(guest);
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
     if let Some(cur) = guest.threads.get(&current)
@@ -1158,17 +1178,16 @@ mod tests {
             // blocked through `set_status`, which keeps the run table's count of blocked threads
             for (t, d) in [(&a, da), (&b, db)] {
                 super::set_status(g, t.index, BLOCKED);
-                write_u64(g.memory.as_mut_slice(), entry(t.index) + E_DEADLINE, d);
+                write_u64(g.memory_view(), entry(t.index) + E_DEADLINE, d);
             }
-            let mem = g.memory.as_mut_slice();
+            let mem = g.memory_view();
             write_u64(mem, MONITOR_DATA + CLOCK_MODE, 2);
             write_u64(mem, MONITOR_DATA + CLOCK_RATE, 1_400_000_000);
             write_u64(mem, MONITOR_DATA, 1_400_000_000); // one second: the clock reads 10,000,000
             write_u64(mem, RUN_TABLE + CLOCK_WARP, 0);
         };
-        let status =
-            |g: &crate::guest::Guest, t: &super::Thread| read_u64(g.memory.as_slice(), entry(t.index) + E_STATUS);
-        let warp = |g: &crate::guest::Guest| read_u64(g.memory.as_slice(), RUN_TABLE + CLOCK_WARP);
+        let status = |g: &crate::guest::Guest, t: &super::Thread| read_u64(g.memory_view(), entry(t.index) + E_STATUS);
+        let warp = |g: &crate::guest::Guest| read_u64(g.memory_view(), RUN_TABLE + CLOCK_WARP);
         let both = [a.clone(), b.clone()];
 
         set(&mut g, 30_000_000, 20_000_000);
@@ -1191,7 +1210,7 @@ mod tests {
         assert_eq!(warp(&g), 0, "a deadline already passed moves no clock");
 
         set(&mut g, 30_000_000, 20_000_000);
-        write_u64(g.memory.as_mut_slice(), MONITOR_DATA + CLOCK_MODE, 0);
+        write_u64(g.memory_view(), MONITOR_DATA + CLOCK_MODE, 0);
         assert_eq!(
             timed_waiter(&mut g, &both, Duration::ZERO).tid,
             a.tid,
@@ -1279,7 +1298,7 @@ mod tests {
         assert_eq!(suspend(&mut g, t, true), Ok(0), "a thread not suspended");
         // the thread's saved state: RAX, RSP, RIP, CF set, every flag defined, lazy PF and AF, DF
         let at = entry(g.threads[&tid].index);
-        let mem = g.memory.as_mut_slice();
+        let mem = g.memory_view();
         write_u64(mem, at + E_X, 0x1111);
         write_u64(mem, at + E_X + 8 * 4, 0x7_0000_1000);
         write_u64(mem, at + E_X + 8 * 17, 0x1_4000_2000);
@@ -1289,7 +1308,7 @@ mod tests {
         write_u64(mem, lazy, 0x10);
         write_u64(mem, lazy + 8, 0);
         write_u64(mem, lazy + 16, 0x03);
-        mem[(lazy + 0x18) as usize] = 1;
+        mem.write(lazy + 0x18, &[1]);
         // a CONTEXT asking for control, integer, segments and floating point (0x10000F)
         let buffer = HEAP_VA + 0x800;
         let off = g.layout.offset(buffer).unwrap() as usize;
@@ -1309,7 +1328,7 @@ mod tests {
         assert_eq!(u16::from_le_bytes(ctx[56..58].try_into().unwrap()), 0x33, "CS");
         assert_eq!(d(48), 0x0010_000F, "ContextFlags stays as asked");
         // an ended thread
-        write_u64(g.memory.as_mut_slice(), at + E_STATUS, ENDED);
+        write_u64(g.memory_view(), at + E_STATUS, ENDED);
         assert_eq!(suspend(&mut g, t, false), Ok(u64::MAX));
         assert_eq!(suspend(&mut g, t, true), Ok(0));
     }
@@ -1335,7 +1354,7 @@ mod tests {
         };
         let query = |g: &mut Guest, va: u64| {
             let view = GuestView {
-                mem: g.memory.as_mut_slice(),
+                mem: crate::guest::memory_view(&g.memory),
                 layout: &g.layout,
             };
             let info = g.arena.query(&view, va).unwrap();

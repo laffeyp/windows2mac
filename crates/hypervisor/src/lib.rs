@@ -353,6 +353,12 @@ impl GuestMemory {
         self.len == 0
     }
 
+    /// The mapping's own pointer, writable for the value's life (Sprint 278): a view that makes no reference starts
+    /// from it, not from a pointer taken through `as_slice`, which would write through a shared reference.
+    pub fn as_ptr(&self) -> *mut u8 {
+        self.ptr
+    }
+
     pub fn as_slice(&self) -> &[u8] {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }

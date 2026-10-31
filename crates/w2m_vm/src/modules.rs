@@ -210,7 +210,7 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
     // its static TLS in every thread before the snapshot and before it joins the images (vm_backend 3938-3940)
     crate::threads::late_static_tls(guest, &pe, base)?;
     let view = crate::guest::GuestView {
-        mem: guest.memory.as_mut_slice(),
+        mem: crate::guest::memory_view(&guest.memory),
         layout: &guest.layout,
     };
     guest.arena.snapshot_image(&view, base, &pe);
