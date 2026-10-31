@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 303
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -96,7 +96,7 @@ register and a test of the writes' order.
   the table on the retry) change the C runtime's request return, a second concept past rule 6; they are card 304,
   with the count on the batch run and the recording test of the writes' order. This card keeps the read, its test and
   the design's precondition 4 stating the value.
-- **The change** (dcf9d9ae6): `hypervisor::sys_reg::ID_AA64MMFR2_EL1` (0xc03a, `hv_vcpu_types.h` 336);
+- **The change** (dcf9d9ae6, and cd8e7ebd5 for the undo below): `hypervisor::sys_reg::ID_AA64MMFR2_EL1` (0xc03a, `hv_vcpu_types.h` 336);
   `tests/id_registers.rs`, `the_vcpu_reports_its_bbm_level`, printing the register and its BBM, failing on a level the
   Arm ARM does not define or one the design does not state, its own binary once the merge below is undone; the design's precondition 4 and
   card 3 amended; and a consequence of Sprint 300 named: Hypervisor.framework allows one VM a process, nextest giving
@@ -112,7 +112,7 @@ register and a test of the writes' order.
   dcf9d9ae6 carries it, the gates on dcf9d9ae6 stopped. `w2m_vm`'s one binary under `cargo test` on this Mac:
   72 passed and 8 failed at `Vm::new`, seven `run_loop.rs`'s (one file, one process before 300 too), one `unmapped_image_faults`', which the merge made share; `w2m_vm` keeps its one binary, its VM tests run under nextest, and `WORKING_AGREEMENT.md` 142 says so.
 - **Expected values:** BBM 0; the register test passing; `cargo test -p hypervisor` exit 0.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 1167 s, kept in `store/gates/passes.tsv` as sprint 303 at cd8e7ebd5 with root=f79c0c87a and "rust=all python=0 samples=1", `--all` (the gates' script changed), 331 tests, base=606de58f8, Sprint 302's close, the run on dcf9d9ae6 stopped for the undo; multi-vCPU: not run (Python gates not run)
 - **Plant 1,** restored by `cp` and checked by `cmp`: the card's plant reordered the split's writes, which this card
   no longer changes; the plant set the design's stated level to "BBM 2"; the test failed, "this vCPU reports BBM 0,
   which the design's precondition 4 does not state".
