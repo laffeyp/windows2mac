@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 266
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -131,7 +131,7 @@ carries it.
   in the program.
 - **Card 5's gate:** the most compiles in a frame of instructions 19,201 with the cache against 54,996 without, card
   4's count (80,307,872,496) unchanged, and the compile time below Sprint 248's (Sprint 263: 678 to 694 ms): met.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 271 s on 977dca5b2, copied from `store/gates/passes.tsv`; the timing stage 694 ns an exit at load 6.05.
 - **Plant 1,** restored by `cp` and checked by `cmp`: `>=` in `most_in_window` made `>`, the window's end closed; the
   test failed, "assertion `left == right` failed, left: 2, right: 1".
 - **Plant 2,** restored by `cp` and checked by `cmp`: `vm_compiled` pushing 0 for an install; the run test failed,
