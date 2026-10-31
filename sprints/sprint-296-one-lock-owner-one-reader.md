@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 296
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -83,4 +83,18 @@ The runtime word's owner offset is defined once, where the C runtime's header ta
 
 ## result
 
-- **The gates:** GATES-LINE
+- **The change** (50eea43e1): `monitor_code::vcpu_owner`, the one read of a vCPU's owner, for `take_word`, the drain
+  and `threads::schedule`, `run::own_word` gone; its unit test; `tests/layout_constants.rs`.
+- **A class, not one name, a departure:** the card named `LOCK_OWNER`; a search found seven names `w2m_vm/src` defined
+  again from `layout.rs`, all equal: `AP_READ_ONLY` (`tables.rs` 81), `CLOCK_WARP` (`process.rs` 25), `FCW_OFF`,
+  `LOCK_OWNER`, `MXCSR_OFF`, `RUN_END` (`run.rs` 32-35), `PER_THREAD_MONITOR` (`threads.rs` 49). Each is now a
+  `pub use` of `layout.rs`' on the same line, its importers unchanged; the test fails on any `layout.rs` name
+  defined again in `w2m_vm/src`. Reviewer-3's Low 1 at 296 found the class wider still, across `crates/`; card 297.
+- **Expected values:** one definition of each of the seven; 175 tests in the pre-commit run, the batch-run step
+  first; the run loop's tests with `served_outside_word` 0.
+- **The gates:** `scripts/gates.sh` exit 0 in 892 s, kept in `store/gates/passes.tsv` as sprint 296 at 50eea43e1 with root=8ce0426a4 and "rust=crates python=0 samples=0", rdeps(w2m_vm), 175 tests, base=05646ee7d, Sprint 295's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: `vcpu_owner` reading 8 bytes past the owner's word;
+  `the_owner_is_the_monitor_datas_lock_owner_word` failed, "left: 9 right: 3".
+- **Plant 2,** restored by `cp` and checked by `cmp`: `pub const LOCK_OWNER: u64 = 0xB0;` written into `run.rs`
+  again; `no_layout_constant_is_defined_again_in_w2m_vm` failed, "defined again outside layout.rs: LOCK_OWNER in
+  …/w2m_vm/src/run.rs".
