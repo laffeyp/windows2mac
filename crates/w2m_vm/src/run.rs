@@ -554,12 +554,17 @@ fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
     Ok(())
 }
 
+/// The exiting vCPU's owner in the runtime word, its `LOCK_OWNER` in its monitor data.
+pub(crate) fn own_word(guest: &Guest) -> u32 {
+    u32::try_from(guest.memory_view().read_u64(MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0)
+}
+
 /// The runtime word taken for a service that changes state two vCPUs share (`hvc #1`, `#4`, `#12`, `#13`;
 /// `docs/design-run-loop-on-several-vcpus-2026-10-31.md`, "The exits"): whether the host took it, and so must release
 /// it; a vCPU that holds it already (a miss inside the runtime) keeps it. A service found outside it after the take,
 /// the word held neither by the host nor by this vCPU, is counted in `outside`.
 fn take_word(guest: &Guest, outside: &mut u64) -> bool {
-    let own = u32::try_from(guest.memory_view().read_u64(MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0);
+    let own = own_word(guest);
     let took = crate::monitor_code::host_take_runtime_word(guest.memory_view(), own);
     let holder = guest
         .memory_view()

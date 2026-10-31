@@ -162,6 +162,13 @@ pub fn host_take_runtime_word_waiting(
     }
 }
 
+/// Whether the runtime word is held by the host or by the vCPU whose owner is `own` (Sprint 294): what a service that
+/// changes state two vCPUs share checks at its start, so a caller that skipped the take fails there.
+pub fn runtime_word_held(mem: ConcurrentGuestMemory<'_>, own: u32) -> bool {
+    let holder = runtime_word(mem).load(std::sync::atomic::Ordering::Relaxed);
+    holder == HOST_OWNER || (own != 0 && holder == own)
+}
+
 /// The host releases the runtime word it took.
 pub fn host_release_runtime_word(mem: ConcurrentGuestMemory<'_>) {
     runtime_word(mem).store(0, std::sync::atomic::Ordering::Release);

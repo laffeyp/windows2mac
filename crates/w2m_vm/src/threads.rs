@@ -682,6 +682,12 @@ pub fn resume_idle(guest: &mut Guest, x: &mut [u64; 31], cur_tid: u64, bits: u32
 /// handle signals; waiters check again). SCHEDULE_RETRY: a thread `w2m_block` blocked keeps its wait's deadline. Then
 /// `_switch`, unless every thread has ended, which leaves in `x` the registers of the thread that goes on.
 pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switch, String> {
+    // the threads and the turn are every vCPU's services' to change, under the runtime word (Sprint 294): a caller
+    // that skipped the take fails here in debug builds, the tests'
+    debug_assert!(
+        crate::monitor_code::runtime_word_held(guest.memory_view(), crate::run::own_word(guest)),
+        "the scheduler entered without the runtime word"
+    );
     let current = current_tid(guest);
     let cur = guest
         .threads
