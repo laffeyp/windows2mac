@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 299
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -84,7 +84,7 @@ The record holds the Decisions in force; the rest are in the archive, verbatim, 
   reference, a standing fact plan step 7 relies on, which the 2026-10-16 user Decision on "earlier direction" did not
   replace. Its report that no entry had continuation lines was wrong for the record (the 2026-10-29 user Decision has
   them) and right for the 76, checked line by line.
-- **The change** (WORK-COMMIT): 75 marks, each the entry's last annotation, `*(Superseded 2026-10-31, Sprint 299: by
+- **The change** (68acf79b4): 75 marks, each the entry's last annotation, `*(Superseded 2026-10-31, Sprint 299: by
   the <date> <who> Decision "<its opening words> …")*` for 54 and `*(Closed 2026-10-31, Sprint 299: <the sprints that
   ran it>)*` for 21, the targets' heads and opening words checked against the list first; then `blackboard_roll
   --decisions`, 75 moved.
@@ -92,7 +92,7 @@ The record holds the Decisions in force; the rest are in the archive, verbatim, 
   mark, the line count 562 unchanged; after the roll 483 lines, the 75, the old pointer and 4 blank separators gone,
   one pointer line new, "77 Decisions marked closed or superseded, 2026-10-03 to 2026-10-30"; each of the 75 found
   whole in the archive, its earlier text unchanged byte for byte.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 312 s, kept in `store/gates/passes.tsv` as sprint 299 at 68acf79b4 with root=8e6c93cca and "rust=crates python=0 samples=0", rdeps(signal_report), 39 tests, base=eba6b6447, Sprint 298's close; multi-vCPU: not run (Python gates not run)
 - **Plant 1,** restored by `cp` and checked by `cmp`: the pointer's count written 78; `the_records_pointers_are_their_archives`
   failed, "BLACKBOARD.md's pointer to docs/decisions-archive-2026-10-30.md".
 
