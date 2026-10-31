@@ -25,6 +25,12 @@
 set -eu
 root=$1
 shift
+# the record's own directory, new, as gates.sh names it (build/batch_run/record-<ns>): `.` wrote a record into the
+# repository root at Sprints 247 and 266
+if [ -e "$root" ]; then
+  echo "batch-run-record.sh: $root exists; the record's directory must be a new one, such as store/runs/w2m-vm-game-<ns>" >&2
+  exit 2
+fi
 timed=
 counted=
 cache=

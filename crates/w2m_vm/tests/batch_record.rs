@@ -594,6 +594,29 @@ fn compile_problems(ours: &[Value], reference: &[Value], by_image_due: bool) -> 
         variants(ours).into_iter().partition(|(v, _)| by_image(v));
     let want = variants(reference);
     let mut found = Vec::new();
+    // the bursts on the guest's own clock (Sprint 266), on a run that counted them alone: both rows or neither, the
+    // compiles' above zero, and the installs' above zero on a run that installed (Sprint 266's plant 2)
+    let (compiled, installed) = (
+        w2m_vm::record::MOST_COMPILED_IN_A_FRAME,
+        w2m_vm::record::MOST_INSTALLED_IN_A_FRAME,
+    );
+    let installs = have.get(w2m_vm::record::INSTALLED).copied().unwrap_or(0.0);
+    match (have.remove(compiled), have.remove(installed)) {
+        (None, None) => {}
+        (Some(c), Some(i)) => {
+            if c <= 0.0 {
+                found.push(format!("vm_compile_blocks {compiled:?} is {c}"));
+            }
+            if installs > 0.0 && i <= 0.0 {
+                found.push(format!(
+                    "vm_compile_blocks {installed:?} is {i} beside {installs} installs"
+                ));
+            }
+        }
+        _ => found.push(format!(
+            "vm_compile_blocks holds one of {compiled:?} and {installed:?}, not both"
+        )),
+    }
     // the installs from the translation cache (Sprint 257), on a run with one alone: a cache that installs nothing
     // was not in use, and with one in use the miss stub sends every miss in its image to the host, so the in-VM
     // compiler compiles none there (Sprint 257's plant 2: the range test planted to send nothing still left 60 installs,
@@ -764,6 +787,37 @@ fn a_missing_extra_or_empty_compile_count_is_named() {
             "vm_compile_blocks \"compiled in UnityPlayer.dll\" is 300 beside the installs: the miss stub kept the image \
              from the host"
         ]
+    );
+    // the bursts in a frame of instructions (Sprint 266): allowed beside the reference's, both or neither, the compiles'
+    // above zero, the installs' above zero beside installs
+    let (most_compiled, most_installed) = (
+        w2m_vm::record::MOST_COMPILED_IN_A_FRAME,
+        w2m_vm::record::MOST_INSTALLED_IN_A_FRAME,
+    );
+    let counted = |c: f64, i: f64| {
+        let mut ms = installed(9.0);
+        ms.extend([m(most_compiled, c), m(most_installed, i)]);
+        ms
+    };
+    assert_eq!(
+        compile_problems(&counted(40.0, 3.0), &reference, false),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        compile_problems(&counted(0.0, 3.0), &reference, false),
+        [format!("vm_compile_blocks {most_compiled:?} is 0")]
+    );
+    assert_eq!(
+        compile_problems(&counted(40.0, 0.0), &reference, false),
+        [format!("vm_compile_blocks {most_installed:?} is 0 beside 9 installs")]
+    );
+    let mut one = installed(9.0);
+    one.push(m(most_compiled, 40.0));
+    assert_eq!(
+        compile_problems(&one, &reference, false),
+        [format!(
+            "vm_compile_blocks holds one of {most_compiled:?} and {most_installed:?}, not both"
+        )]
     );
 }
 
