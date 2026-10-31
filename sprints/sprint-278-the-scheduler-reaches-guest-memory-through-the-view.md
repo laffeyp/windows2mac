@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 278
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -94,3 +94,21 @@ census's count.
 - [x] One concept: one module's access moved, held by a count.
 
 ## result
+
+- **The access** (01188b254): `GuestMemory::as_ptr`; `guest::memory_view(&GuestMemory)`, a free function so a
+  service holds the view of the `memory` field beside a mutable borrow of another field (the arena's), and
+  `Guest::memory_view` calling it.
+- **Moved to the view:** `threads.rs`'s 31 slice calls outside its tests, its helpers `read_u64`, `write_u64`, `put`
+  and a new `bytes`, `read_guest` and `write_guest`; `GuestView` and its 11 builders in four files; `CodeCache` and
+  `traced_form` in `guest.rs`, which the substitution for `GuestView`'s builders also matched, writes at load before
+  any vCPU, moved with it, and named here though the card did not name them. `Guest::new` keeps its slices: it runs
+  before any vCPU exists.
+- **The count:** 126 slice calls in `crates/w2m_vm/src/`, from 174; `threads.rs` 6, all in its tests.
+  `crates/w2m_vm/tests/slice_calls.rs` holds each file at census row D7's figure.
+- **Expected values:** the `w2m_vm` library tests, 81; before the commit, under WORKING_AGREEMENT's amended rule, the
+  `hypervisor` and `w2m_vm` tests, 159 passed, 1 skipped, the only crates the change reaches (`cargo tree -i`).
+- **The gates:** `scripts/gates.sh` exit 0 in 729 s, kept in `store/gates/passes.tsv` as sprint 278 at 01188b254 with root=e8c57ffb5 and "rust=crates python=0 samples=0", rdeps(hypervisor) and rdeps(w2m_vm), 159 tests, base=1fd21adc7, Sprint 277's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: the scheduler's `write_u64` writing at its offset plus 8; three
+  scheduler tests failed, the first "assertion `left == right` failed: the earliest deadline left: 4 right: 8".
+- **Plant 2,** restored by `cp` and checked by `cmp`: an `as_slice()` added to `threads.rs` outside its tests; the
+  count test failed, "threads.rs: 7 slice calls, census D7 allows 6".
