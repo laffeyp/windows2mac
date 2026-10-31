@@ -809,6 +809,8 @@ mod run {
                 .find(|i| i.name == CACHED_IMAGE)
                 .ok_or("--cache: the game loads no UnityPlayer.dll")?;
             start.host_range = Some((image.base, image.base + u64::from(image.pe.size_of_image)));
+            // installed inside the VM (Sprint 263, card 5), the host's install for what the installer declines
+            start.install_in_vm = true;
         }
         // the Producer's input, one JSON line, read so the pipe closes, as a guest run reads it
         let mut input = String::new();

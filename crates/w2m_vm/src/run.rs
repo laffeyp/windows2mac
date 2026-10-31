@@ -107,7 +107,7 @@ pub fn exit_count(vcpu: &Vcpu<'_>, mem: &mut [u8], tails: &Tails, give_back: Giv
     Ok(())
 }
 /// VM_COMPILER + this: the log's entry count (vm_backend 197).
-pub const VMC_LOG_COUNT: u64 = 0x10;
+pub use crate::monitor_code::VMC_LOG_COUNT;
 
 /// `fpcr_for` (vm_backend 1138-1143): FPCR for an MXCSR: AH always; FIZ = DAZ; FZ = FTZ; RMode from RC.
 pub fn fpcr_for(mxcsr: u32) -> u64 {
@@ -426,20 +426,29 @@ fn vm_compiled(
         let at = VM_COMPILER + VMC_LOG + VMC_LOG_ENTRY * i;
         let (start, end, code) = (read_u64(mem, at), read_u64(mem, at + 8), read_u64(mem, at + 16));
         blocks.insert(start, code);
-        translations.push(Translation { start, end, code });
-        vm_compile_starts.push(start);
-        let Some(h) = host.as_deref_mut() else {
-            continue;
-        };
         let u32_at = |off: u64| {
             u64::from(u32::from_le_bytes(
                 mem[(at + off) as usize..(at + off + 4) as usize].try_into().unwrap(),
             ))
         };
-        let (first, count, npages) = (u32_at(24), u32_at(32), u32_at(48));
+        let (first, count, npages, installed) = (u32_at(24), u32_at(32), u32_at(48), u32_at(52) == 1);
         let hosts: Vec<u64> = (1..=count)
             .map(|k| read_u64(mem, RECON_TABLE + 16 * (first + k)))
             .collect();
+        if installed {
+            // an install by the installer inside the VM (Sprint 263; card 5's V), not a compile; `pad` cleared, the C
+            // leaving it unwritten in a slot it reuses
+            mem[(at + 52) as usize..(at + 56) as usize].fill(0);
+            if let Some(h) = host.as_deref_mut() {
+                h.installed_in_vm(mem, start, end, code, &hosts);
+            }
+            continue;
+        }
+        translations.push(Translation { start, end, code });
+        vm_compile_starts.push(start);
+        let Some(h) = host.as_deref_mut() else {
+            continue;
+        };
         h.tails.note(&hosts);
         h.blocks.insert(start, code);
         let mut page = start & !(PAGE - 1);

@@ -978,6 +978,21 @@ pub const CASA_WZR_W18_X16: u32 = 0x88FF_7E12;
 pub const STLR_WZR_X16: u32 = 0x889F_FE1F;
 pub const DSB_ISH: u32 = 0xD503_3B9F;
 pub const ISB: u32 = 0xD503_3FDF;
+/// The cache type register: the smallest data and instruction cache lines, `4 << DminLine` (bits 16-19) and
+/// `4 << IminLine` (bits 0-3) bytes (Sprint 263, the installer's range sync, as `block_compiler.c` 166-176 reads it).
+pub const CTR_EL0: SysReg = (3, 3, 0, 0, 1);
+
+/// dc cvau, xt: the data cache line at xt cleaned to the point of unification (Sprint 263).
+pub fn dc_cvau(rt: u32) -> u32 {
+    r(&[rt]);
+    0xD50B_7B20 | rt
+}
+
+/// ic ivau, xt: the instruction cache line at xt invalidated to the point of unification (Sprint 263).
+pub fn ic_ivau(rt: u32) -> u32 {
+    r(&[rt]);
+    0xD50B_7520 | rt
+}
 
 #[cfg(test)]
 mod tests {
@@ -998,5 +1013,14 @@ mod tests {
         assert_eq!(mrs(0, CNTVCT_EL0), 0xd53b_e040);
         assert_eq!(mrs(16, CNTVCT_EL0), 0xd53b_e050);
         assert_eq!(mrs(0, CNTFRQ_EL0), 0xd53b_e000);
+    }
+
+    /// clang's words, 2026-10-30 (Sprint 263, `--target=aarch64-linux-gnu`): `dc cvau, x0`, `ic ivau, x1`,
+    /// `mrs x0, ctr_el0`.
+    #[test]
+    fn the_cache_maintenance_words_are_clangs() {
+        assert_eq!(dc_cvau(0), 0xd50b_7b20);
+        assert_eq!(ic_ivau(1), 0xd50b_7521);
+        assert_eq!(mrs(0, CTR_EL0), 0xd53b_0020);
     }
 }

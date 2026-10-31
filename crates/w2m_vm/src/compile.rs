@@ -292,7 +292,7 @@ impl HostCompiler {
                 let mem = guest.memory.as_mut_slice();
                 let desc = read_u64(mem, at);
                 write_u64(mem, at, desc | AP_READ_ONLY);
-                self.page_set_add(guest, page);
+                self.page_set_add(mem, page);
             }
             self.code_pages.entry(page).or_default().insert(owner);
             page += PAGE;
@@ -301,8 +301,7 @@ impl HostCompiler {
     }
 
     /// `_page_set_add` (2527-2539): the page in the VM's open-addressed code page set (1 marks a removed slot).
-    fn page_set_add(&mut self, guest: &mut Guest, page: u64) {
-        let mem = guest.memory.as_mut_slice();
+    fn page_set_add(&mut self, mem: &mut [u8], page: u64) {
         let (mut i, mut free) = (page_set_slot(page), None);
         loop {
             let v = read_u64(mem, CODE_PAGE_SET + 8 * i);
@@ -324,8 +323,7 @@ impl HostCompiler {
     }
 
     /// `_page_set_remove` (2541-2556).
-    fn page_set_remove(&mut self, guest: &mut Guest, page: u64) {
-        let mem = guest.memory.as_mut_slice();
+    fn page_set_remove(&mut self, mem: &mut [u8], page: u64) {
         let mut i = page_set_slot(page);
         loop {
             let v = read_u64(mem, CODE_PAGE_SET + 8 * i);
@@ -345,8 +343,28 @@ impl HostCompiler {
             self.page_set_removed = 0;
             let pages: Vec<u64> = self.code_pages.keys().copied().collect();
             for p in pages {
-                self.page_set_add(guest, p);
+                self.page_set_add(mem, p);
             }
+        }
+    }
+
+    /// A block the installer inside the VM placed (Sprint 263; card 5's IV and V), from the compile log's replay: its
+    /// tails noted, its start recorded, its pages joined to the code-page set and their owners as a host install's are
+    /// (`protect_code`; card 4 made them read-only at load), and counted among the cache's installs.
+    pub fn installed_in_vm(&mut self, mem: &mut [u8], start: u64, end: u64, code: u64, hosts: &[u64]) {
+        self.tails.note(hosts);
+        self.blocks.insert(start, code);
+        let mut page = start & !(PAGE - 1);
+        while page < end {
+            if !self.code_pages.contains_key(&page) {
+                self.page_set_add(mem, page);
+            }
+            self.code_pages.entry(page).or_default().insert(start);
+            page += PAGE;
+        }
+        if let Some(c) = self.cache.as_mut() {
+            c.installed.push(start);
+            c.installs += 1;
         }
     }
 
@@ -359,7 +377,7 @@ impl HostCompiler {
         let Some(blocks) = self.code_pages.remove(&page) else {
             return Ok(stopped);
         };
-        self.page_set_remove(guest, page);
+        self.page_set_remove(guest.memory.as_mut_slice(), page);
         for start in blocks {
             self.drop_block(guest, start);
         }
@@ -396,6 +414,12 @@ impl HostCompiler {
             return Ok(false);
         };
         cache.stopped_at = Some(address);
+        // the installer inside the VM reads it first and installs no more (Sprint 263; card 5's VI)
+        write_u64(
+            guest.memory.as_mut_slice(),
+            VM_COMPILER + crate::monitor_code::VMC_INSTALL_STOP,
+            1,
+        );
         let installed = std::mem::take(&mut cache.installed);
         let guarded = std::mem::take(&mut cache.guarded);
         for start in installed {

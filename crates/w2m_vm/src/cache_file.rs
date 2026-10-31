@@ -379,8 +379,63 @@ fn put(out: &mut Vec<u8>, v: u32) {
     out.extend_from_slice(&v.to_le_bytes());
 }
 
+/// Where a file's tables lie in its bytes (Sprint 263, card 5's I): the image's base, the block count, and the offsets
+/// of the block table (`BLOCK_BYTES` an entry), the words, the marks and the fix-ups; what the installer inside the VM
+/// reads the file by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sections {
+    pub base: u64,
+    pub nblocks: u64,
+    pub blocks: u64,
+    pub words: u64,
+    pub marks: u64,
+    pub fixups: u64,
+}
+
+/// A block's entry in the file: ten `u32`s.
+pub const BLOCK_BYTES: u64 = 40;
+
+/// The sections of a file's bytes, `to_bytes`' layout read without its tables; Err when the bytes are not a version 2
+/// file whose tables end where it does.
+pub fn sections(b: &[u8]) -> Result<Sections, String> {
+    let u32_at = |at: u64| -> Result<u64, String> {
+        b.get(at as usize..at as usize + 4)
+            .map(|s| u64::from(u32::from_le_bytes(s.try_into().unwrap())))
+            .ok_or_else(|| format!("the file ends before byte {at}"))
+    };
+    if b.get(..8) != Some(MAGIC.as_slice()) || u32_at(8)? != u64::from(VERSION) {
+        return Err(format!("not a version {VERSION} w2m translation cache"));
+    }
+    let base = u64::from_le_bytes(b.get(76..84).ok_or("the file ends in its header")?.try_into().unwrap());
+    let n: Vec<u64> = (0..5).map(|k| u32_at(84 + 4 * k)).collect::<Result<_, _>>()?;
+    let blocks = 104;
+    let words = blocks + BLOCK_BYTES * n[0];
+    let marks = words + 4 * n[1];
+    let mut at = marks + 8 * n[2];
+    for _ in 0..n[3] {
+        at += 8 + 4 * u32_at(at + 4)?;
+    }
+    if at + 4 * n[4] != b.len() as u64 {
+        return Err(format!(
+            "the fix-ups end at byte {}, the file at {}",
+            at + 4 * n[4],
+            b.len()
+        ));
+    }
+    Ok(Sections {
+        base,
+        nblocks: n[0],
+        blocks,
+        words,
+        marks,
+        fixups: at,
+    })
+}
+
 /// The file's bytes: the magic, the version, the key, the base, then the counts and the tables, little-endian.
 pub fn to_bytes(c: &CacheFile) -> Vec<u8> {
+    // the header holds a sha256 in hex, 64 bytes, which `from_bytes` and `sections` read by that width
+    assert_eq!(c.key.len(), 64, "a cache key of {} bytes", c.key.len());
     let mut out = MAGIC.to_vec();
     put(&mut out, VERSION);
     out.extend_from_slice(c.key.as_bytes());

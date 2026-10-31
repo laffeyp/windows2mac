@@ -9,9 +9,10 @@ use std::collections::BTreeMap;
 
 use a64_encoder as a64;
 use guest_runtime::layout::{
-    DISPATCH_BITS, DISPATCH_ENTRIES, DISPATCH_TABLE, LOCK_OWNER, MAX_VCPUS, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA,
-    PAGE, PROCESS_VA, RUN_TABLE, RUNTIME_STACK, RUNTIME_STACK_SIZE, SAVE_AREA, STATE_OFF, VCPU_AREA, VCPU_STRIDE,
-    VM_COMPILER,
+    CACHE_CODE_VA, CODE_CACHE, CODE_CACHE_SIZE, DISPATCH_BITS, DISPATCH_ENTRIES, DISPATCH_TABLE, LOCK_OWNER, MAX_VCPUS,
+    MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, PAGE, PROCESS_VA, RECON_COUNT, RECON_ENTRIES, RECON_TABLE, RUN_TABLE,
+    RUNTIME_STACK, RUNTIME_STACK_SIZE, SAVE_AREA, STATE_OFF, VCPU_AREA, VCPU_STRIDE, VM_COMPILER, VMC_LOG,
+    VMC_LOG_ENTRIES, VMC_LOG_ENTRY,
 };
 
 use crate::assembler::{Assembler, Target};
@@ -29,6 +30,28 @@ pub const VMC_FRAME_TICKS: u64 = 0x1D0;
 pub const VMC_FRAME_MOST: u64 = 0x1D8;
 /// A 60 Hz display's frames (Sprint 248): the span whose compiling the probe's frames sum.
 pub const FRAMES_A_SECOND: u64 = 60;
+/// VM_COMPILER + these, the C compiler's own words (`block_compiler.c` 18): the code cursor, an offset from
+/// `MONITOR_VA`, and the compile log's count. Here, not in `guest` and `run`, since the installer reads them and every
+/// target builds the monitor code (Sprint 263).
+pub const VMC_CURSOR: u64 = 0x08;
+pub const VMC_LOG_COUNT: u64 = 0x10;
+/// VM_COMPILER + these (Sprint 263; card 5's III and VI), past `VMC_SAVE`'s 0x90 bytes: the installer's stop word,
+/// nonzero once a write to the cached image's code stopped the cache; the installer's address, 0 when the run has
+/// none; and, written by the host when it places the cache file, the image's base, then the guest addresses of the
+/// file's block table, its block count, and its words, marks and fix-ups.
+pub const VMC_INSTALL_STOP: u64 = 0x300;
+pub const VMC_INSTALLER: u64 = 0x308;
+pub const VMC_CACHE_BASE: u64 = 0x310;
+pub const VMC_CACHE_BLOCKS: u64 = 0x318;
+pub const VMC_CACHE_NBLOCKS: u64 = 0x320;
+pub const VMC_CACHE_WORDS: u64 = 0x328;
+pub const VMC_CACHE_MARKS: u64 = 0x330;
+pub const VMC_CACHE_FIXUPS: u64 = 0x338;
+/// A cached block's entry in the file (`cache_file::to_bytes`): ten u32s, start, end, word, nwords, mark, nmarks, live,
+/// insns, fixup, nfixups, at these byte offsets.
+const BLOCK_ENTRY: u64 = crate::cache_file::BLOCK_BYTES;
+// the installer finds a log entry by a shift
+const _: () = assert!(VMC_LOG_ENTRY.is_power_of_two());
 
 /// The compile probe's figures at a stop, in counter ticks; all 0 unless `Timing::compile` asked for them.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -272,6 +295,9 @@ pub struct Timing {
 pub struct Options {
     pub timing: Timing,
     pub host_range: Option<(u64, u64)>,
+    /// with a host range, the range's misses go to the installer inside the VM (Sprint 263), the host's `hvc 1` only
+    /// for what it declines
+    pub install_in_vm: bool,
 }
 
 /// After the call of `w2m_vm_compile`, x26 holding the counter at the call: the compile's ticks added to the sum
@@ -320,10 +346,295 @@ fn compile_probe(d: &mut Assembler) {
     ]);
 }
 
+/// The miss stub's call of a compiler or the installer, the callee's address put in x16 by `load`: the runtime word
+/// taken, x0 to x15, x17 and x30 saved at `VMC_SAVE`, the runtime stack, the target in x0, the call timed when
+/// `timing.compile` asks, the registers restored, the word released, then the code in x0 run or the target sent to
+/// `host`.
+fn call_path(d: &mut Assembler, timing: Timing, load: &dyn Fn(&mut Assembler), host: Target) {
+    let timed = timing.runtime_word;
+    take_runtime(d, timed);
+    d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE));
+    for r in (0..16).step_by(2) {
+        d.emit(&[a64::stp(r, r + 1, 16, 8 * i64::from(r))]);
+    }
+    d.emit(&[a64::stp(17, 30, 16, 128)]);
+    d.emit(&a64::mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE));
+    d.emit(&[a64::addi(31, 16, 0), a64::mov(0, 17)]);
+    if timing.compile {
+        // x26, dead between blocks and kept by the C call (AAPCS64), holds the counter at the call (Sprint 247)
+        d.emit(&[a64::ISB, a64::mrs(26, a64::CNTVCT_EL0)]);
+    }
+    load(d);
+    d.emit(&[a64::blr(16), a64::mov(25, 0)]);
+    if timing.compile {
+        compile_probe(d);
+    }
+    d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE));
+    for r in (0..16).step_by(2) {
+        d.emit(&[a64::ldp(r, r + 1, 16, 8 * i64::from(r))]);
+    }
+    d.emit(&[a64::ldp(17, 30, 16, 128)]);
+    // x25 holds the compiled code; x16, x18 and x26 are free (x18 and x26 are temporaries, dead between blocks)
+    release_runtime(d, timed, Site::Compile, (16, 18, 26));
+    d.branch(|off| a64::cbz(25, off), host);
+    d.emit(&[a64::br(25)]);
+}
+
+/// The installer (Sprint 263; card 5's III to VI), called by the miss stub's `call_path` with the target in x0: x0
+/// the installed block's code, or 0 to send the target to `hvc 1`. It reads the cache file the host placed at
+/// `CACHE_FILE_VA` through the `VMC_CACHE_*` words, and declines when a write stopped the cache, the target is not a
+/// cached start, the code area, the reconstruction table or the log is full, or a branch's move would leave its reach.
+/// It copies the block's words to the code cursor, patches its fix-ups by the move's distance, appends its marks rebased
+/// to the cursor, makes the words visible by range as `block_compiler.c` 166-176 does, logs it with `pad` 1 for the
+/// host's replay, moves the counts last as the C does, and writes the dispatch pair as `dispatch_insert` does
+/// (`block_compiler.c` 146-162). It uses x0 to x16 and x30, which `call_path` saves, and no stack.
+pub fn installer(a: &mut Assembler) {
+    let decline = a.label();
+    // x15 the VM compiler's words; x2 the image's base; x3 the target's RVA, under 4 GiB
+    a.emit(&a64::mov_imm(15, MONITOR_VA + VM_COMPILER));
+    a.emit(&[a64::ldr(8, 1, 15, VMC_INSTALL_STOP as u32)]);
+    a.branch(|o| a64::cbnz(1, o), decline);
+    a.emit(&[a64::ldr(8, 2, 15, VMC_CACHE_BASE as u32), a64::subs(3, 0, 2)]);
+    a.branch(|o| a64::bcond("lo", o), decline);
+    a.emit(&[a64::lsri(1, 3, 32)]);
+    a.branch(|o| a64::cbnz(1, o), decline);
+    // the first block whose start is not below the RVA, by bisection: x4 the table, x5 its count, x6 lo, x7 hi
+    let (search, below, found) = (a.label(), a.label(), a.label());
+    a.emit(&[
+        a64::ldr(8, 4, 15, VMC_CACHE_BLOCKS as u32),
+        a64::ldr(8, 5, 15, VMC_CACHE_NBLOCKS as u32),
+        a64::mov(7, 5),
+    ]);
+    a.emit(&a64::mov_imm(6, 0));
+    a.emit(&a64::mov_imm(9, BLOCK_ENTRY));
+    a.bind(search);
+    a.emit(&[a64::cmp(6, 7)]);
+    a.branch(|o| a64::bcond("hs", o), found);
+    a.emit(&[
+        a64::add(8, 6, 7, a64::LSL, 0),
+        a64::lsri(8, 8, 1),
+        a64::mul(10, 8, 9),
+        a64::ldr_reg(4, 11, 4, 10, false),
+        a64::cmp(11, 3),
+    ]);
+    a.branch(|o| a64::bcond("hs", o), below);
+    a.emit(&[a64::addi(6, 8, 1)]);
+    a.branch(a64::b, search);
+    a.bind(below);
+    a.emit(&[a64::mov(7, 8)]);
+    a.branch(a64::b, search);
+    a.bind(found);
+    // x10 the block's entry, when it is in the table and starts at the RVA
+    a.emit(&[a64::cmp(6, 5)]);
+    a.branch(|o| a64::bcond("hs", o), decline);
+    a.emit(&[
+        a64::mul(10, 6, 9),
+        a64::add(10, 4, 10, a64::LSL, 0),
+        a64::ldr(4, 11, 10, 0),
+        a64::cmp(11, 3),
+    ]);
+    a.branch(|o| a64::bcond("ne", o), decline);
+    // room: x1 the cursor, x12 the block's first word, x13 its word count, x14 the code at the cursor
+    a.emit(&[
+        a64::ldr(8, 1, 15, VMC_CURSOR as u32),
+        a64::ldr(4, 12, 10, 8),
+        a64::ldr(4, 13, 10, 12),
+        a64::add(16, 1, 13, a64::LSL, 2),
+    ]);
+    a.emit(&a64::mov_imm(9, CODE_CACHE + CODE_CACHE_SIZE));
+    a.emit(&[a64::cmp(16, 9)]);
+    a.branch(|o| a64::bcond("hi", o), decline);
+    a.emit(&a64::mov_imm(14, MONITOR_VA));
+    a.emit(&[a64::add(14, 14, 1, a64::LSL, 0)]);
+    // x7 the run table, x8 the reconstruction table's count, x11 the block's marks; x6 the log's count
+    a.emit(&a64::mov_imm(7, MONITOR_VA + RUN_TABLE));
+    a.emit(&[
+        a64::ldr(8, 8, 7, RECON_COUNT as u32),
+        a64::ldr(4, 11, 10, 20),
+        a64::add(16, 8, 11, a64::LSL, 0),
+    ]);
+    a.emit(&a64::mov_imm(9, RECON_ENTRIES));
+    a.emit(&[a64::cmp(16, 9)]);
+    a.branch(|o| a64::bcond("hi", o), decline);
+    a.emit(&[a64::ldr(8, 6, 15, VMC_LOG_COUNT as u32)]);
+    a.emit(&a64::mov_imm(9, VMC_LOG_ENTRIES));
+    a.emit(&[a64::cmp(6, 9)]);
+    a.branch(|o| a64::bcond("hs", o), decline);
+    // the words copied: x4 the block's words in the file, x5 the index
+    let (copy, copied) = (a.label(), a.label());
+    a.emit(&[
+        a64::ldr(8, 4, 15, VMC_CACHE_WORDS as u32),
+        a64::add(4, 4, 12, a64::LSL, 2),
+    ]);
+    a.emit(&a64::mov_imm(5, 0));
+    a.bind(copy);
+    a.emit(&[a64::cmp(5, 13)]);
+    a.branch(|o| a64::bcond("hs", o), copied);
+    a.emit(&[
+        a64::ldr_reg(4, 9, 4, 5, true),
+        a64::str_reg(4, 9, 14, 5, true),
+        a64::addi(5, 5, 1),
+    ]);
+    a.branch(a64::b, copy);
+    a.bind(copied);
+    // x12 the marks' rebase, code - 4 * word (the words were assembled at CACHE_CODE_VA + 4 * word); x9 the move in
+    // words for a branch leaving the block, (CACHE_CODE_VA + 4 * word - code) / 4
+    a.emit(&[a64::ubfm(12, 12, 62, 61), a64::sub(12, 14, 12)]);
+    a.emit(&a64::mov_imm(9, CACHE_CODE_VA));
+    a.emit(&[a64::sub(9, 9, 12), a64::sbfx(9, 9, 2, 62)]);
+    // the fix-ups: x4 the block's list, x5 its count, x16 the index; x3 the word's index, x11 the word, x13 its
+    // offset; a moved offset out of the 26 bits' reach declines
+    let (fix, fixed) = (a.label(), a.label());
+    a.emit(&[
+        a64::ldr(8, 4, 15, VMC_CACHE_FIXUPS as u32),
+        a64::ldr(4, 5, 10, 32),
+        a64::add(4, 4, 5, a64::LSL, 2),
+        a64::ldr(4, 5, 10, 36),
+    ]);
+    a.emit(&a64::mov_imm(16, 0));
+    a.bind(fix);
+    a.emit(&[a64::cmp(16, 5)]);
+    a.branch(|o| a64::bcond("hs", o), fixed);
+    a.emit(&[
+        a64::ldr_reg(4, 3, 4, 16, true),
+        a64::ldr_reg(4, 11, 14, 3, true),
+        a64::sbfx(13, 11, 0, 26),
+        a64::add(13, 13, 9, a64::LSL, 0),
+        a64::sbfx(2, 13, 0, 26),
+        a64::cmp(2, 13),
+    ]);
+    a.branch(|o| a64::bcond("ne", o), decline);
+    a.emit(&[
+        a64::bfi(11, 13, 0, 26),
+        a64::str_reg(4, 11, 14, 3, true),
+        a64::addi(16, 16, 1),
+    ]);
+    a.branch(a64::b, fix);
+    a.bind(fixed);
+    // the marks appended at the reconstruction table's count: x4 the block's marks in the file, x5 their count, x3 the
+    // table's entry; each (host offset, RVA) written as (host offset + x12, RVA + base)
+    let (mark, marked) = (a.label(), a.label());
+    a.emit(&[
+        a64::ldr(8, 2, 15, VMC_CACHE_BASE as u32),
+        a64::ldr(8, 4, 15, VMC_CACHE_MARKS as u32),
+        a64::ldr(4, 5, 10, 16),
+        a64::add(4, 4, 5, a64::LSL, 3),
+        a64::ldr(4, 5, 10, 20),
+    ]);
+    a.emit(&a64::mov_imm(3, MONITOR_VA + RECON_TABLE));
+    a.emit(&[a64::add(3, 3, 8, a64::LSL, 4)]);
+    a.bind(mark);
+    a.branch(|o| a64::cbz(5, o), marked);
+    a.emit(&[
+        a64::ldr(4, 11, 4, 0),
+        a64::ldr(4, 13, 4, 4),
+        a64::add(11, 11, 12, a64::LSL, 0),
+        a64::add(13, 13, 2, a64::LSL, 0),
+        a64::str(8, 11, 3, 0),
+        a64::str(8, 13, 3, 8),
+        a64::addi(4, 4, 8),
+        a64::addi(3, 3, 16),
+        a64::subi(5, 5, 1),
+    ]);
+    a.branch(a64::b, mark);
+    a.bind(marked);
+    // the words made visible to instruction fetch by range: x9 the data line, x16 the instruction line, x5 the end
+    let (clean, cleaned, invalidate, invalidated) = (a.label(), a.label(), a.label(), a.label());
+    a.emit(&[
+        a64::mrs(16, a64::CTR_EL0),
+        a64::ubfx(9, 16, 16, 4),
+        a64::ubfx(16, 16, 0, 4),
+    ]);
+    a.emit(&a64::mov_imm(11, 4));
+    a.emit(&[
+        a64::lslv(9, 11, 9),
+        a64::lslv(16, 11, 16),
+        a64::ldr(4, 13, 10, 12),
+        a64::add(5, 14, 13, a64::LSL, 2),
+        a64::subi(11, 9, 1),
+        a64::bic(4, 14, 11),
+    ]);
+    a.bind(clean);
+    a.emit(&[a64::cmp(4, 5)]);
+    a.branch(|o| a64::bcond("hs", o), cleaned);
+    a.emit(&[a64::dc_cvau(4), a64::add(4, 4, 9, a64::LSL, 0)]);
+    a.branch(a64::b, clean);
+    a.bind(cleaned);
+    a.emit(&[a64::DSB_ISH, a64::subi(11, 16, 1), a64::bic(4, 14, 11)]);
+    a.bind(invalidate);
+    a.emit(&[a64::cmp(4, 5)]);
+    a.branch(|o| a64::bcond("hs", o), invalidated);
+    a.emit(&[a64::ic_ivau(4), a64::add(4, 4, 16, a64::LSL, 0)]);
+    a.branch(a64::b, invalidate);
+    a.bind(invalidated);
+    a.emit(&[a64::DSB_ISH, a64::ISB]);
+    // the log entry (`block_compiler.c` 31-42): start, end, code, the marks' first index and count, the instructions,
+    // no cut, the block's live flags as both, no scanned pages, `pad` 1 for an install
+    a.emit(&a64::mov_imm(3, MONITOR_VA + VM_COMPILER + VMC_LOG));
+    a.emit(&[
+        a64::add(3, 3, 6, a64::LSL, VMC_LOG_ENTRY.trailing_zeros()),
+        a64::str(8, 0, 3, 0),
+        a64::ldr(4, 11, 10, 4),
+        a64::add(11, 11, 2, a64::LSL, 0),
+        a64::str(8, 11, 3, 8),
+        a64::str(8, 14, 3, 16),
+        a64::str(4, 8, 3, 24),
+        a64::ldr(4, 11, 10, 20),
+        a64::str(4, 11, 3, 28),
+        a64::ldr(4, 11, 10, 28),
+        a64::str(4, 11, 3, 32),
+        a64::str(4, 31, 3, 36),
+        a64::ldr(4, 11, 10, 24),
+        a64::str(4, 11, 3, 40),
+        a64::str(4, 11, 3, 44),
+        a64::str(4, 31, 3, 48),
+    ]);
+    a.emit(&a64::mov_imm(11, 1));
+    a.emit(&[a64::str(4, 11, 3, 52)]);
+    // the counts last: the reconstruction table's, the cursor, the log's
+    a.emit(&[
+        a64::ldr(4, 11, 10, 20),
+        a64::add(11, 8, 11, a64::LSL, 0),
+        a64::str(8, 11, 7, RECON_COUNT as u32),
+        a64::ldr(4, 13, 10, 12),
+        a64::add(13, 1, 13, a64::LSL, 2),
+        a64::str(8, 13, 15, VMC_CURSOR as u32),
+        a64::addi(6, 6, 1),
+        a64::str(8, 6, 15, VMC_LOG_COUNT as u32),
+    ]);
+    // the dispatch pair: the first slot if empty or the target's, else the second, else the first moved to the second
+    let bits = DISPATCH_BITS as u32;
+    let (first, second, inserted) = (a.label(), a.label(), a.label());
+    a.emit(&[a64::eor(9, 0, 0, a64::LSR, bits), a64::eor(9, 9, 0, a64::LSR, 2 * bits)]);
+    a.emit(&a64::mov_imm(11, (1 << DISPATCH_BITS) - 2));
+    a.emit(&[a64::and(9, 9, 11)]);
+    a.emit(&a64::mov_imm(3, MONITOR_VA + DISPATCH_TABLE));
+    a.emit(&[a64::add(3, 3, 9, a64::LSL, 4)]);
+    a.emit(&a64::mov_imm(11, EMPTY_TARGET));
+    a.emit(&[a64::ldr(8, 4, 3, 0), a64::cmp(4, 11)]);
+    a.branch(|o| a64::bcond("eq", o), first);
+    a.emit(&[a64::cmp(4, 0)]);
+    a.branch(|o| a64::bcond("eq", o), first);
+    a.emit(&[a64::ldr(8, 4, 3, 16), a64::cmp(4, 11)]);
+    a.branch(|o| a64::bcond("eq", o), second);
+    a.emit(&[a64::cmp(4, 0)]);
+    a.branch(|o| a64::bcond("eq", o), second);
+    a.emit(&[a64::ldp(4, 5, 3, 0), a64::str(8, 5, 3, 24), a64::str(8, 4, 3, 16)]);
+    a.bind(first);
+    a.emit(&[a64::str(8, 14, 3, 8), a64::str(8, 0, 3, 0)]);
+    a.branch(a64::b, inserted);
+    a.bind(second);
+    a.emit(&[a64::str(8, 14, 3, 24), a64::str(8, 0, 3, 16)]);
+    a.bind(inserted);
+    a.emit(&[a64::mov(0, 14), a64::ret()]);
+    a.bind(decline);
+    a.emit(&a64::mov_imm(0, 0));
+    a.emit(&[a64::ret()]);
+}
+
 /// The dispatcher (vm_backend 4217-4258): its words and the miss stub's address, written as `options` asks.
 pub fn dispatcher(symbols: &BTreeMap<String, u64>, options: Options) -> (Vec<u32>, u64) {
     let timing = options.timing;
-    let timed = timing.runtime_word;
     let mut d = Assembler::new(MONITOR_VA + DISPATCHER);
     let (top, miss) = (d.label(), d.label());
     d.bind(top);
@@ -347,8 +658,9 @@ pub fn dispatcher(symbols: &BTreeMap<String, u64>, options: Options) -> (Vec<u32
     d.bind(miss);
     // the compiler inside the VM first (Sprint 083; VMC_ENABLED)
     let host = d.label();
-    // a target in the host's range goes to the host first, which installs it from the translation cache (Sprint 257);
-    // x16 is free here
+    // a target in the host's range goes to the host first, which installs it from the translation cache (Sprint 257),
+    // or with `install_in_vm` to the installer inside the VM (Sprint 263); x16 is free here
+    let install = (options.host_range.is_some() && options.install_in_vm).then(|| d.label());
     if let Some((lo, hi)) = options.host_range {
         let outside = d.label();
         d.emit(&a64::mov_imm(16, lo));
@@ -356,38 +668,27 @@ pub fn dispatcher(symbols: &BTreeMap<String, u64>, options: Options) -> (Vec<u32
         d.branch(|off| a64::bcond("lo", off), outside);
         d.emit(&a64::mov_imm(16, hi));
         d.emit(&[a64::cmp(17, 16)]);
-        d.branch(|off| a64::bcond("lo", off), host);
+        d.branch(|off| a64::bcond("lo", off), install.unwrap_or(host));
         d.bind(outside);
     }
     d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER));
     d.emit(&[a64::ldr(8, 16, 16, VMC_ENABLED as u32)]);
     d.branch(|off| a64::cbz(16, off), host);
-    take_runtime(&mut d, timed);
-    d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE));
-    for r in (0..16).step_by(2) {
-        d.emit(&[a64::stp(r, r + 1, 16, 8 * i64::from(r))]);
+    let compiler = symbols["w2m_vm_compile"];
+    call_path(&mut d, timing, &|d| d.emit(&a64::mov_imm(16, compiler)), host);
+    if let Some(install) = install {
+        // the installer inside the VM (Sprint 263; card 5's III), its address at `VMC_INSTALLER`
+        d.bind(install);
+        call_path(
+            &mut d,
+            timing,
+            &|d| {
+                d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER));
+                d.emit(&[a64::ldr(8, 16, 16, VMC_INSTALLER as u32)]);
+            },
+            host,
+        );
     }
-    d.emit(&[a64::stp(17, 30, 16, 128)]);
-    d.emit(&a64::mov_imm(16, MONITOR_VA + RUNTIME_STACK + RUNTIME_STACK_SIZE));
-    d.emit(&[a64::addi(31, 16, 0), a64::mov(0, 17)]);
-    if timing.compile {
-        // x26, dead between blocks and kept by the C call (AAPCS64), holds the counter at the call (Sprint 247)
-        d.emit(&[a64::ISB, a64::mrs(26, a64::CNTVCT_EL0)]);
-    }
-    d.emit(&a64::mov_imm(16, symbols["w2m_vm_compile"]));
-    d.emit(&[a64::blr(16), a64::mov(25, 0)]);
-    if timing.compile {
-        compile_probe(&mut d);
-    }
-    d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE));
-    for r in (0..16).step_by(2) {
-        d.emit(&[a64::ldp(r, r + 1, 16, 8 * i64::from(r))]);
-    }
-    d.emit(&[a64::ldp(17, 30, 16, 128)]);
-    // x25 holds the compiled code; x16, x18 and x26 are free (x18 and x26 are temporaries, dead between blocks)
-    release_runtime(&mut d, timed, Site::Compile, (16, 18, 26));
-    d.branch(|off| a64::cbz(25, off), host);
-    d.emit(&[a64::br(25)]);
     d.bind(host);
     let miss_va = d.here();
     // drop stale TLB entries too, on every vCPU (Sprint 104)

@@ -17,8 +17,9 @@ use std::path::{Path, PathBuf};
 
 use cpu_cases::sha256;
 use guest_runtime::layout::{
-    AP_READ_ONLY, CACHE_FILE_SIZE, CACHE_FILE_VA, IPA_BASE, PAGE, PROCESS_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE,
-    RUNTIME_IMAGE_VA, STATE_OFF, runtime_defines,
+    AP_READ_ONLY, CACHE_CODE_VA, CACHE_FILE_SIZE, CACHE_FILE_VA, CODE_CACHE, CODE_CACHE_SIZE, DISPATCH_TABLE, IPA_BASE,
+    MONITOR_DATA, MONITOR_VA, PAGE, PROCESS_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE, RUNTIME_IMAGE_VA, STATE_OFF,
+    VM_COMPILER, VMC_LOG, runtime_defines,
 };
 use hypervisor::{Vcpu, Vm, memory};
 use pe_loader::{Loaded, load};
@@ -26,6 +27,7 @@ use translator::lower::RuntimeCalls;
 use w2m_vm::cache_file::{self, Exits};
 use w2m_vm::compile::HostCompiler;
 use w2m_vm::guest::{Guest, vm_compiler_symbols};
+use w2m_vm::monitor_code::{VMC_INSTALLER, VMC_LOG_COUNT};
 use w2m_vm::process::Start;
 use w2m_vm::run::{JUDGE_KIND, Outcome, Stop, run_compiling};
 use w2m_vm::tables::{block_descriptor, page_descriptor};
@@ -88,13 +90,14 @@ fn guest_with(root: &Path, loaded: &Loaded, start: &Start) -> Guest {
 
 /// `tests/data/timed_waits/<name>.exe` with the translation cache of its own image in use (Sprint 257): the miss stub
 /// sends the image's range to the host, and the cache is made from the image's bytes under the guest's setup, as
-/// `w2m-vm --make-cache` makes UnityPlayer.dll's.
-fn cached_guest(root: &Path, name: &str) -> (Loaded, Guest, HostCompiler) {
+/// `w2m-vm --make-cache` makes UnityPlayer.dll's. With `in_vm`, the installer inside the VM installs first (Sprint 263).
+fn cached_guest(root: &Path, name: &str, in_vm: bool) -> (Loaded, Guest, HostCompiler) {
     let data = fs::read(root.join(format!("tests/data/timed_waits/{name}.exe"))).unwrap();
     let loaded = load(&data, None, "probe.exe").unwrap();
     let program = &loaded.images[0];
     let mut start = Start::console("probe.exe");
     start.host_range = Some((program.base, program.base + u64::from(program.pe.size_of_image)));
+    start.install_in_vm = in_vm;
     let mut guest = guest_with(root, &loaded, &start);
     let exits = Exits {
         exit_va: guest.code.dispatch_va,
@@ -102,7 +105,8 @@ fn cached_guest(root: &Path, name: &str) -> (Loaded, Guest, HostCompiler) {
         state_va: PROCESS_VA + STATE_OFF,
         runtime: RuntimeCalls::from_symbols(|s| guest.symbols.get(s).copied()),
     };
-    let (file, _) = cache_file::make(&program.pe, &data, program.base, &exits, name.to_string());
+    let key = format!("{name:0>64}"); // a key's width, 64
+    let (file, _) = cache_file::make(&program.pe, &data, program.base, &exits, key);
     assert!(!file.blocks.is_empty(), "{name}'s cache holds no block");
     guest.place_cache_file(&cache_file::to_bytes(&file)).unwrap();
     let mut host = HostCompiler::default();
@@ -248,7 +252,7 @@ fn qpc_runs_past_its_first_decline_compiling_as_the_python_host() {
 fn qpc_runs_with_its_blocks_installed_from_the_cache() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
-    let (loaded, mut guest, mut host) = cached_guest(&root, "qpc");
+    let (loaded, mut guest, mut host) = cached_guest(&root, "qpc", false);
     let before = monotonic_count();
     let out = run(&mut guest, &loaded, &mut host);
     let after = monotonic_count();
@@ -320,7 +324,7 @@ fn the_judges_time_is_counted_apart_from_the_exits() {
 #[test]
 fn a_cached_guest_holds_the_file_read_only_at_its_region() {
     let root = root();
-    let (_, guest, host) = cached_guest(&root, "qpc");
+    let (_, guest, host) = cached_guest(&root, "qpc", false);
     let bytes = cache_file::to_bytes(&host.cache.as_ref().unwrap().file);
     let at = guest.layout.offset(CACHE_FILE_VA).expect("no map at CACHE_FILE_VA") as usize;
     assert_eq!(
@@ -347,12 +351,147 @@ fn a_cached_guest_holds_the_file_read_only_at_its_region() {
     );
 }
 
+/// The installer inside the VM called once, alone, with `target` in x0, in a VM of its own over the guest's memory: its
+/// x0, the code or 0. Its return lands on an `hvc #0x55` at the code area's last word.
+fn call_installer(guest: &mut Guest, target: u64) -> u64 {
+    use hypervisor::{Exit, Reg};
+    let mem = guest.memory.as_mut_slice();
+    let read = |mem: &[u8], at: u64| u64::from_le_bytes(mem[at as usize..at as usize + 8].try_into().unwrap());
+    let installer = read(mem, VM_COMPILER + VMC_INSTALLER);
+    assert_ne!(installer, 0, "the guest has no installer");
+    let back = CODE_CACHE + CODE_CACHE_SIZE - 4;
+    mem[back as usize..back as usize + 4].copy_from_slice(&a64_encoder::hvc(0x55).to_le_bytes());
+    let vm = Vm::new(40).unwrap();
+    vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
+        .unwrap();
+    let vcpu = Vcpu::new(&vm).unwrap();
+    w2m_vm::monitor::set_system_registers(&vcpu, guest.ttbr).unwrap();
+    for (r, v) in [(0, target), (28, MONITOR_VA + MONITOR_DATA), (30, MONITOR_VA + back)] {
+        vcpu.set_reg(Reg::X(r), v).unwrap();
+    }
+    vcpu.set_reg(Reg::Cpsr, w2m_vm::CPSR_EL1H).unwrap();
+    vcpu.set_reg(Reg::Pc, installer).unwrap();
+    loop {
+        match vcpu.run().unwrap() {
+            Exit::VtimerActivated => vcpu.set_vtimer_mask(true).unwrap(),
+            e => {
+                assert_eq!(e.hvc_immediate(), Some(0x55), "the installer stopped otherwise: {e:?}");
+                return vcpu.reg(Reg::X(0)).unwrap();
+            }
+        }
+    }
+}
+
+/// Sprint 263 (card 5's III, V, VII; reviewer-3's Low 2 at 261): the installer inside the VM installs a cached start,
+/// its words those `relocate` gives at the code, its marks rebased there, its log entry marked an install and its
+/// dispatch pair written; and declines a start below the image, before its first block and after its last.
+#[test]
+fn the_installer_installs_a_cached_start_and_declines_the_rest() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let (_, mut guest, host) = cached_guest(&root, "qpc", true);
+    let file = host.cache.as_ref().unwrap().file.clone();
+    let b = *file.blocks.iter().max_by_key(|b| b.nfixups).unwrap();
+    assert!(b.nfixups > 0, "qpc's cache holds no block with a fix-up");
+    let start = file.base + u64::from(b.start);
+    let read = |m: &[u8], at: u64| u64::from_le_bytes(m[at as usize..at as usize + 8].try_into().unwrap());
+    // the guest's memory is sparse and over 513 GiB: read in place, never copied
+    let n = read(guest.memory.as_slice(), RUN_TABLE + RECON_COUNT);
+    let code = call_installer(&mut guest, start);
+    assert_ne!(code, 0, "the cached start 0x{start:x} declined");
+    let after = guest.memory.as_slice();
+    // the words, as `relocate` moves them
+    let from = CACHE_CODE_VA + 4 * u64::from(b.word);
+    let want = cache_file::relocate(&file.words[b.word as usize..(b.word + b.nwords) as usize], from, code).unwrap();
+    let at = guest.layout.offset(code).unwrap() as usize;
+    let got: Vec<u32> = (0..want.len())
+        .map(|k| u32::from_le_bytes(after[at + 4 * k..at + 4 * k + 4].try_into().unwrap()))
+        .collect();
+    for k in 0..want.len() {
+        assert_eq!(got[k], want[k], "block 0x{start:x}'s word {k}");
+    }
+    // the marks, from the count before
+    assert_eq!(read(after, RUN_TABLE + RECON_COUNT), n + u64::from(b.nmarks));
+    for j in 0..u64::from(b.nmarks) {
+        let (h, x) = file.marks[(u64::from(b.mark) + j) as usize];
+        let entry = RECON_TABLE + 16 * (n + j);
+        assert_eq!(
+            (read(after, entry), read(after, entry + 8)),
+            (u64::from(h) + code - 4 * u64::from(b.word), file.base + u64::from(x)),
+            "block 0x{start:x}'s mark {j}"
+        );
+    }
+    // the log entry, an install, and the dispatch pair
+    let log = VM_COMPILER + VMC_LOG;
+    assert_eq!(read(after, VM_COMPILER + VMC_LOG_COUNT), 1);
+    assert_eq!((read(after, log), read(after, log + 16)), (start, code));
+    assert_eq!(
+        &after[(log + 52) as usize..(log + 56) as usize],
+        &1u32.to_le_bytes(),
+        "pad"
+    );
+    let slot = DISPATCH_TABLE + 16 * w2m_vm::monitor_code::dispatch_slot(start);
+    assert!(
+        [slot, slot + 16]
+            .iter()
+            .any(|s| (read(after, *s), read(after, s + 8)) == (start, code)),
+        "no dispatch pair (0x{start:x}, 0x{code:x})"
+    );
+    // the misses: below the image, before the first block, after the last
+    let (first, last) = (file.blocks[0].start, file.blocks.last().unwrap().start);
+    for (what, target) in [
+        ("below the image", file.base - 1),
+        ("before the first block", file.base + u64::from(first) - 1),
+        ("after the last block", file.base + u64::from(last) + 1),
+    ] {
+        assert_eq!(call_installer(&mut guest, target), 0, "{what}, 0x{target:x}, installed");
+    }
+}
+
+/// Sprint 263 (card 5's VI, VII): `qpc` runs with its blocks installed inside the VM to the stop, the output and the
+/// instruction count of its run with the host's install, with fewer `hvc 1` exits; a write to the image's code then
+/// stops the installer.
+#[test]
+fn qpc_runs_with_its_blocks_installed_inside_the_vm() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let (loaded, mut by_host, mut host_install) = cached_guest(&root, "qpc", false);
+    let hosts = run(&mut by_host, &loaded, &mut host_install);
+    let (loaded, mut guest, mut host) = cached_guest(&root, "qpc", true);
+    let out = run(&mut guest, &loaded, &mut host);
+    assert_eq!(out.stop, Stop::ExitProcess { code: 0 });
+    let cache = host.cache.as_ref().unwrap();
+    assert!(cache.installs > 0, "nothing installed");
+    assert_eq!(
+        cache.installs,
+        host_install.cache.as_ref().unwrap().installs,
+        "the installs"
+    );
+    assert_eq!(out.executed, hosts.executed, "the instructions retired");
+    assert!(
+        out.exits.get(&1) < hosts.exits.get(&1),
+        "hvc 1 exits {:?}, the host's install {:?}",
+        out.exits.get(&1),
+        hosts.exits.get(&1)
+    );
+    // the write rule: the stop word set, the installer declining after it
+    let (_, mut guest, mut host) = cached_guest(&root, "qpc", true);
+    let file = host.cache.as_ref().unwrap().file.clone();
+    let start = file.base + u64::from(file.blocks[0].start);
+    assert!(host.code_written(&mut guest, start).unwrap(), "the write was not taken");
+    assert_eq!(
+        call_installer(&mut guest, start),
+        0,
+        "the installer installed after the write"
+    );
+}
+
 /// Sprint 257, the write rule: a write into the image's code stops the cache for the rest of the run, drops every block
 /// installed from it, makes the image's pages no block is behind writable again, and installs nothing after.
 #[test]
 fn a_write_to_the_image_code_stops_the_cache() {
     let root = root();
-    let (loaded, mut guest, mut host) = cached_guest(&root, "qpc");
+    let (loaded, mut guest, mut host) = cached_guest(&root, "qpc", false);
     let entry = loaded.image_entry;
     let va = host
         .install(&mut guest, entry)

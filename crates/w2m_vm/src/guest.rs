@@ -33,7 +33,7 @@ pub use crate::{VIRTUAL_SIZE, VIRTUAL_VA};
 /// vm_backend 261: the process area's size.
 pub const PROCESS_SIZE: u64 = guest_runtime::layout::TRACE_OFF + TRACE_SIZE;
 /// VM_COMPILER + this: the code cache's next free offset from MONITOR_VA (vm_backend 197, 2514-2520).
-pub const VMC_CURSOR: u64 = 0x08;
+pub use crate::monitor_code::VMC_CURSOR;
 /// VM_COMPILER + this: the dispatcher's, the slice stub's and the trace's addresses (vm_backend 197, 2508).
 pub const VMC_EXIT: u64 = 0x18;
 /// The state block's schedule word (vm_backend 1133).
@@ -826,10 +826,16 @@ impl Guest {
             monitor_code::Options {
                 timing,
                 host_range: start.host_range,
+                install_in_vm: start.install_in_vm,
             },
         );
         let switch = image.symbols["w2m_switch"];
         let mut cache = CodeCache { mem };
+        if start.host_range.is_some() && start.install_in_vm {
+            // the installer in the code area, the miss stub reaching it through `VMC_INSTALLER` (Sprint 263)
+            let installer = cache.put(monitor_code::installer)?;
+            write_u64(cache.mem, VM_COMPILER + monitor_code::VMC_INSTALLER, installer);
+        }
         let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va, timed))?;
         let switch_slice_va = cache.put(|a| switch_stub(a, true, switch, code.dispatch_va, timed))?;
         let thunks = loaded.thunks.clone();
@@ -994,7 +1000,20 @@ impl Guest {
                 bytes.len()
             ));
         }
-        self.memory.as_mut_slice()[off as usize..off as usize + bytes.len()].copy_from_slice(bytes);
+        let s = crate::cache_file::sections(bytes)?;
+        let mem = self.memory.as_mut_slice();
+        mem[off as usize..off as usize + bytes.len()].copy_from_slice(bytes);
+        // where the installer finds the file's tables (Sprint 263)
+        for (slot, value) in [
+            (monitor_code::VMC_CACHE_BASE, s.base),
+            (monitor_code::VMC_CACHE_BLOCKS, CACHE_FILE_VA + s.blocks),
+            (monitor_code::VMC_CACHE_NBLOCKS, s.nblocks),
+            (monitor_code::VMC_CACHE_WORDS, CACHE_FILE_VA + s.words),
+            (monitor_code::VMC_CACHE_MARKS, CACHE_FILE_VA + s.marks),
+            (monitor_code::VMC_CACHE_FIXUPS, CACHE_FILE_VA + s.fixups),
+        ] {
+            write_u64(mem, VM_COMPILER + slot, value);
+        }
         Ok(())
     }
 
