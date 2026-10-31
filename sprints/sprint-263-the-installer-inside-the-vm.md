@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 263
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -110,3 +110,65 @@ cached count, and card 5's gate read on ledger-free timed records.
 - [x] One concept: the installer inside the VM.
 
 ## result
+
+- **The installer** (229734920): `monitor_code::installer`, placed by `Guest::new` when `Start::install_in_vm` asks,
+  reached by the miss stub through `VMC_INSTALLER` and `call_path`, the compile path now shared with
+  `w2m_vm_compile` (its words without the option as before, the frozen-word tests passing). Its steps, the stop word,
+  bisection, room, copy, fix-ups, marks, sync by range, the log entry with `pad` 1, the counts last, the dispatch pair,
+  as choice III has them. `cache_file::sections` gives the file's tables, and `place_cache_file` writes them to the
+  `VMC_CACHE_*` words; the replay counts a `pad` 1 entry as an install (`HostCompiler::installed_in_vm`) and clears
+  `pad`; a write sets `VMC_INSTALL_STOP`. `a64_encoder`: `dc_cvau`, `ic_ivau`, `CTR_EL0`, held to clang's words.
+- **Two faults found and fixed:**
+  - Placed before the slice stub, the installer moved it, so the cache's key, which hashes the stub's address, named
+    no file; it is placed last (72fc65bdd), held by `the_installer_moves_no_exit_a_cached_block_embeds` (c28554525).
+  - The first batch run retired 79,815,503,799 instructions against card 4's 80,307,872,496; `ledger_parting` against
+    Sprint 258's card 4 ledger named the 156th request, a `FILE_STAT` asked from a runtime stack 0x50 bytes shallower.
+    The C declines the target at `VMC_HOST_ONLY`, the call trace's first block, which the host's compile opens the trace
+    at; the installer had installed it. It declines it now (72fc65bdd), held by the installer test. KIT_DIARY #110.
+- **The C's declines against the cached path** (reviewer-3's Low 1 at 263):
+
+  | the C declines | the cached path |
+  |---|---|
+  | `VMC_HOST_ONLY`, the trace's first block | the installer declines it |
+  | not a code page, a page needing a split | card 4 makes every executable page of the image read-only at load |
+  | the log full | the installer declines |
+  | a decode refusal | no cached block starts at an instruction that does not lift (6,339 left out): not a cached start |
+  | a block starting at PAUSE, for its yield | the cache's blocks are cut as the host's compiles are, and the Rust lowering of `Op::Pause` yields (`lower.rs` 2058) |
+
+- **The tests:** `the_installer_installs_a_cached_start_and_declines_the_rest` runs the installer alone in a VM over
+  `qpc`'s cache: the words `relocate` gives at the code, the marks rebased, the log entry an install, the dispatch pair,
+  and declines below the image, before the first block, after the last, and at `VMC_HOST_ONLY`;
+  `qpc_runs_with_its_blocks_installed_inside_the_vm`: the run's stop, its instructions equal to the host install's, fewer
+  `hvc 1`, and a write stopping the installer.
+- **The records:** six from c28554525, judge and ledger off, alternating, run alone, load at start 3.31 to 4.21:
+  without the cache `store/runs/w2m-vm-game-1793419013000000000`, `-1793419066000000000`, `-1793419118000000000`;
+  with it `-1793419040000000000`, `-1793419092000000000`, `-1793419145000000000`; each conforms, `check_records` 0
+  violations.
+
+  | | without the cache | with the installer |
+  |---|---|---|
+  | rate, instructions a second | 3.082, 3.106, 3.107 billion | 3.200, 3.184, 3.210 billion |
+  | "vm" run seconds | 23.72, 23.53, 23.52 | 22.72, 22.82, 22.63 |
+  | host `hvc 1` | 0.041 s, 1,091 exits | 0.088 s, 4,498 exits |
+  | compile time, installs included | 1,296, 1,295, 1,285 ms | 694, 685, 678 ms |
+  | the most in a 60 Hz frame | 14.81, 14.79, 14.85 ms | 14.42, 14.61, 14.85 ms |
+  | instructions retired | 80,306,813,574 | 80,307,872,496, card 4's |
+
+  Installs 145,570 a run against card 4's 128,456; "compiled" 125,515 as at card 4.
+- **Card 5's gate:** the compile time below Sprint 248's, met; the most in a 60 Hz frame below 248's 10.9 to 12.0 ms,
+  not met: 14.4 to 14.9 ms, unmoved against the same batch's uncached 14.8 (and 248's at a load near 2). Step 5 is not
+  met; Deferred (Sprint 263) names what fills the worst frame as the next card.
+- **A void batch:** the first six records' fourth refused its cache, "No such file or directory": the placement test
+  was added to `run_loop.rs` while they ran, and the key hashes the crates' tree. The four records made were removed and
+  all six made again after the test's commit.
+- **Files beyond the artifact contract:** `crates/w2m_vm/src/cache_file.rs` (`sections`, `BLOCK_BYTES`, the key's
+  width asserted in `to_bytes`) and `src/process.rs` (`Start::install_in_vm`).
+- **Choice I's figure:** version 2's in a work commit (da9348db9).
+- **The gates:** `scripts/gates.sh` exit 0 in 693 s on 26a531615, copied from `store/gates/passes.tsv`; the timing stage 666 ns an exit at load 3.82.
+- **Plants,** run on 26a531615, each restored by `cp` and checked by `cmp`.
+- **Plant 1,** `the_installer_installs_a_cached_start_and_declines_the_rest` failed, "block 0x140001040's word 23":
+  the fix-up's `bfi` made a `mov x11, x11`.
+- **Plant 2,** the same test failed, "block 0x140001040's mark 0 … left: (288, 5368713280)": the marks' rebase made a
+  `mov x11, x11`.
+- **Plant 3,** `qpc_runs_with_its_blocks_installed_inside_the_vm` failed, "the installer installed after the write":
+  the stop word's `cbnz` made a `mov x1, x1`.

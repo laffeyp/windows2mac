@@ -1012,3 +1012,13 @@ weighed on one side only, and card 4 closed as 1.1% slower where, without it, th
 (Sprint 262). A review found it two cards later. The question for a timed run is: what does the host do at each exit
 besides serving it, and is each of those off.
 
+### 2026-10-30 — Sprint 263: a second path for one decision keeps the first's exceptions
+
+**Finding (#110):** code that takes over part of another component's work lists that component's declines and
+exceptions before it is written, not after a run parts. The installer inside the VM took the in-VM compiler's misses in
+UnityPlayer.dll's range; the C compiler declines one target, `VMC_HOST_ONLY`, the call trace's first block, so the
+host's compile opens the trace. The installer installed it, the trace never opened, and every traced service ran one
+stack frame shallower: the run parted from card 4's at its 156th host request, found by `ledger_parting` after the
+instruction count came out 492,368,697 short. The design's lookup listed the shared structures, the cursor, the table,
+the log; it did not list the C's `return 0` lines. The question for a second path: what does the first refuse, and why.
+
