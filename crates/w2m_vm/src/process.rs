@@ -80,6 +80,9 @@ pub struct Start {
     /// the miss stub's call of the in-VM compiler timed in the monitor code (Sprint 247); false writes the Python's
     /// words
     pub time_compile: bool,
+    /// the instructions retired at each in-VM compile and install written by the monitor code (Sprint 266); false
+    /// writes the Python's words
+    pub instructions_at_compile: bool,
     /// `[lo, hi)`: the miss stub sends a target in it to the host before the in-VM compiler, which installs it from the
     /// cache (Sprint 257); None writes the Python's words
     pub host_range: Option<(u64, u64)>,
@@ -117,6 +120,7 @@ impl Start {
             call_trace_from: None,
             time_runtime_word: false,
             time_compile: false,
+            instructions_at_compile: false,
             host_range: None,
             install_in_vm: false,
             app_root: None,

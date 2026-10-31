@@ -208,6 +208,15 @@ mod run {
             }
             None => false,
         };
+        // the instructions retired at each in-VM compile and install, written by the monitor code (Sprint 266), for
+        // card 5's gate; off, the monitor code is the Python's word for word
+        let instructions_at_compile = match args.iter().position(|a| a == "--instructions-at-compile") {
+            Some(i) => {
+                args.remove(i);
+                true
+            }
+            None => false,
+        };
         // a family's start (Sprint 231): the JSON object `family_known` prints in the lookup's column 7
         let family_start = match args.iter().position(|a| a == "--start") {
             Some(i) if args.len() >= i + 2 => {
@@ -286,7 +295,7 @@ mod run {
         let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json> | --stop \
                      <tsv>] [--beside <name> <file>] [--exit-ledger <tsv>] [--instruction-clock] \
                      | w2m-vm --game <directory> <program.exe> --output <file> --stop <tsv> [--log-lines <count> \
-                     --main-thread-calls <tsv>] [--time-compile] | w2m-vm --wfe-probe";
+                     --main-thread-calls <tsv>] [--time-compile] [--instructions-at-compile] | w2m-vm --wfe-probe";
         if let [flag, page_fd, memory_fd, slot] = args.as_slice()
             && flag == "--child"
         {
@@ -307,6 +316,7 @@ mod run {
                     ledger: ledger.as_deref(),
                     end,
                     time_compile,
+                    instructions_at_compile,
                     judge: judge.as_deref(),
                     make_cache: make_cache.as_deref(),
                     cache: cache.as_deref(),
@@ -762,6 +772,7 @@ mod run {
         ledger: Option<&'a str>,
         end: Option<(usize, String)>,
         time_compile: bool,
+        instructions_at_compile: bool,
         judge: Option<&'a str>,
         make_cache: Option<&'a str>,
         cache: Option<&'a str>,
@@ -778,6 +789,7 @@ mod run {
             ledger,
             end,
             time_compile,
+            instructions_at_compile,
             judge,
             make_cache,
             cache,
@@ -801,6 +813,7 @@ mod run {
         start.app_root = Some(directory.to_path_buf());
         start.program_path = Some(directory.join(program));
         start.time_compile = time_compile;
+        start.instructions_at_compile = instructions_at_compile;
         // the translation cache (Sprint 257): a miss in its image's range goes to the host, which installs from it
         if cache.is_some() {
             let image = loaded
@@ -974,6 +987,23 @@ mod run {
         } else {
             None
         };
+        // the bursts on the guest's own clock (Sprint 266): a counted run whose calls logged blocks and wrote no count
+        // is named, not recorded as no burst
+        let most_in_a_frame_of_instructions = if instructions_at_compile {
+            let at = &out.instructions_at;
+            for (what, counts) in [("compiled", &at.compiles), ("installed", &at.installs)] {
+                if counts.len() > 1 && counts.iter().all(|&c| c == 0) {
+                    return Err(format!(
+                        "--instructions-at-compile: {} blocks {what} in the VM and no count written",
+                        counts.len()
+                    ));
+                }
+            }
+            let most = |counts: &[u64]| w2m_vm::record::most_in_window(counts, w2m_vm::record::FRAME_INSTRUCTIONS);
+            Some((most(&at.compiles), most(&at.installs)))
+        } else {
+            None
+        };
         // the compiles by where their code lies (Sprint 249); a count that misses a compile is named, not recorded
         let images: Vec<(&str, u64, u64)> = guest
             .images
@@ -1017,6 +1047,7 @@ mod run {
             compiles_by_image,
             installs: host.cache.as_ref().map(|c| c.installs),
             compile_ms,
+            most_in_a_frame_of_instructions,
             exits: out.exits.iter().map(|(k, n)| (*k, *n)).collect(),
             end,
             calls: (&sha256(calls.as_bytes()), calls.lines().count() as u64),

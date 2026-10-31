@@ -23,7 +23,7 @@ use crate::host_request::{HOST_THREAD, THREAD_END, THREAD_EXIT_CODE, THREAD_EXIT
 use crate::monitor::set_system_registers;
 use crate::monitor_code::{
     EMPTY_TARGET, HVC_CODE_WRITE, HVC_FAULT_GIVE_BACK, LOCK_ENTRIES, LOCK_ENTRY, LOCK_EXITS, LOCK_TAKINGS,
-    LOCK_TAKINGS_COUNT, LOCK_TIMING, REG_BUDGET, dispatch_slot,
+    LOCK_TAKINGS_COUNT, LOCK_TIMING, REG_BUDGET, VMC_LOG_EXECUTED, dispatch_slot,
 };
 use crate::threads::{STILL_ACTIVE, Switch, Thread, add_thread, slice_until};
 
@@ -310,6 +310,16 @@ pub struct Outcome {
     /// the start of each block the in-VM compiler compiled, in its log's order, the host's compiles not among them
     /// (Sprint 249: the compiles by image)
     pub vm_compile_starts: Vec<u64>,
+    /// the instructions retired at each in-VM compile and install, in its log's order (Sprint 266), from the words
+    /// `Timing::instructions_at_compile` writes; all 0 without it
+    pub instructions_at: InstructionsAt,
+}
+
+/// The instructions retired at the calls that logged a block inside the VM (Sprint 266), compiles and installs apart.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InstructionsAt {
+    pub compiles: Vec<u64>,
+    pub installs: Vec<u64>,
 }
 
 /// A translated block: its guest range [start, end) and its code address.
@@ -418,6 +428,7 @@ fn vm_compiled(
     blocks: &mut BTreeMap<u64, u64>,
     translations: &mut Vec<Translation>,
     vm_compile_starts: &mut Vec<u64>,
+    instructions_at: &mut InstructionsAt,
     mut host: Option<&mut HostCompiler>,
 ) {
     use guest_runtime::layout::{PAGE, RECON_TABLE};
@@ -432,6 +443,12 @@ fn vm_compiled(
             ))
         };
         let (first, count, npages, installed) = (u32_at(24), u32_at(32), u32_at(48), u32_at(52) == 1);
+        let executed = read_u64(mem, at + VMC_LOG_EXECUTED);
+        if installed {
+            instructions_at.installs.push(executed);
+        } else {
+            instructions_at.compiles.push(executed);
+        }
         let hosts: Vec<u64> = (1..=count)
             .map(|k| read_u64(mem, RECON_TABLE + 16 * (first + k)))
             .collect();
@@ -580,6 +597,7 @@ fn run(
         handovers: Vec::new(),
         translations: Vec::new(),
         vm_compile_starts: Vec::new(),
+        instructions_at: InstructionsAt::default(),
     };
     if let Err(why) = add_thread(guest, first) {
         out.stop = Stop::Exit(format!("the first thread's entry: {why}")); // a guest run before
@@ -702,6 +720,7 @@ fn run(
             &mut out.blocks,
             &mut out.translations,
             &mut out.vm_compile_starts,
+            &mut out.instructions_at,
             host.as_deref_mut(),
         );
         let pc = vcpu.reg(Reg::Pc)?;

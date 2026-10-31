@@ -819,6 +819,7 @@ impl Guest {
         let timing = monitor_code::Timing {
             runtime_word: timed,
             compile: start.time_compile,
+            instructions_at_compile: start.instructions_at_compile,
         };
         let code = monitor_code::write(
             mem,

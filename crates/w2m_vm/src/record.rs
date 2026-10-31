@@ -177,6 +177,9 @@ pub struct Execution<'a> {
     /// the in-VM compiler's time on the critical path (Sprint 247: `w2m_vm_compile` bracketed by the virtual counter),
     /// with the longest compile and the most in a frame (Sprint 248); None on an untimed run
     pub compile_ms: Option<CompileMs>,
+    /// the most in-VM compiles and installs in one window of `FRAME_INSTRUCTIONS` (Sprint 266), by `most_in_window`;
+    /// None on a run that did not count them
+    pub most_in_a_frame_of_instructions: Option<(u64, u64)>,
     /// the exits by hvc number (0: an exit other than an hvc)
     pub exits: Vec<(u16, u64)>,
     pub end: RunEnd,
@@ -334,6 +337,21 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
     if let Some(n) = e.installs {
         rows.push((Metric::VmCompileBlocks, INSTALLED.to_string(), n as f64, "blocks"));
     }
+    // the bursts on the guest's own clock, card 5's gate (Sprint 266)
+    if let Some((compiled, installed)) = e.most_in_a_frame_of_instructions {
+        rows.push((
+            Metric::VmCompileBlocks,
+            MOST_COMPILED_IN_A_FRAME.to_string(),
+            compiled as f64,
+            "blocks",
+        ));
+        rows.push((
+            Metric::VmCompileBlocks,
+            MOST_INSTALLED_IN_A_FRAME.to_string(),
+            installed as f64,
+            "blocks",
+        ));
+    }
     // compilation on the critical path (v0.2 456; Sprint 247), the VM's part; the host's is `run_seconds` "host hvc 1";
     // how it bunches beside it (Sprint 248)
     if let Some(ms) = e.compile_ms {
@@ -412,6 +430,29 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
 pub fn quantile(sorted: &[u64], q: f64) -> u64 {
     let rank = ((q * sorted.len() as f64).ceil() as usize).clamp(1, sorted.len());
     sorted[rank - 1]
+}
+
+/// A 60 Hz frame in instructions retired (card 5's gate, Sprint 266): 1/60 s at 3.21 billion instructions a second, the
+/// fastest rate recorded (Sprint 263, the installer), so no frame the runs have held is wider.
+pub const FRAME_INSTRUCTIONS: u64 = 53_500_000;
+/// The variants of `vm_compile_blocks` that carry `most_in_window` over `FRAME_INSTRUCTIONS` (Sprint 266).
+pub const MOST_COMPILED_IN_A_FRAME: &str = "most compiled in a 60 Hz frame of instructions";
+pub const MOST_INSTALLED_IN_A_FRAME: &str = "most installed in a 60 Hz frame of instructions";
+
+/// The most of `at` (instructions retired, in any order) inside one window `[c, c + width)`, over every `c`: the window
+/// that holds the most starts at one of them, so two indices over the sorted counts find it.
+pub fn most_in_window(at: &[u64], width: u64) -> u64 {
+    let mut sorted = at.to_vec();
+    sorted.sort_unstable();
+    let mut first = 0;
+    let mut most = 0;
+    for (last, &c) in sorted.iter().enumerate() {
+        while c - sorted[first] >= width {
+            first += 1;
+        }
+        most = most.max(last + 1 - first);
+    }
+    most as u64
 }
 
 /// One MEASUREMENT_RECORDED line of the step-3 measurements' record (Sprint 163), in a Python batch run's conventions
@@ -562,6 +603,19 @@ mod tests {
     }
 
     #[test]
+    fn the_most_in_a_window_counts_its_start_and_not_its_end() {
+        // by hand, width 10: [0, 10) holds 0, 3, 9; [9, 19) holds 9, 10, 12, 18; [10, 20) holds 10, 12, 18; 20 alone
+        let at = [18, 0, 9, 3, 12, 10, 20];
+        assert_eq!(most_in_window(&at, 10), 4);
+        // a window as wide as two counts' distance holds the first and not the second
+        assert_eq!(most_in_window(&[5, 15], 10), 1);
+        assert_eq!(most_in_window(&[5, 15], 11), 2);
+        assert_eq!(most_in_window(&[], 10), 0);
+        assert_eq!(most_in_window(&[7, 7, 7], 1), 3);
+        assert_eq!(FRAME_INSTRUCTIONS, 3_210_000_000 / 60);
+    }
+
+    #[test]
     fn a_time_is_not_compared_and_a_block_is() {
         let a = events(&translation_lines(
             IMAGE,
@@ -613,6 +667,7 @@ mod tests {
                 compiles_by_image: vec![],
                 installs: None,
                 compile_ms: None,
+                most_in_a_frame_of_instructions: None,
                 exits: vec![(8, 779)],
                 end,
                 calls: (IMAGE, 925),
@@ -728,6 +783,7 @@ mod tests {
                 compiles_by_image: vec![],
                 installs: None,
                 compile_ms,
+                most_in_a_frame_of_instructions: None,
                 exits: vec![(1, 40)],
                 end: RunEnd::Exited(0),
                 calls: (IMAGE, 925),

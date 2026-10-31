@@ -92,12 +92,24 @@ fn guest_with(root: &Path, loaded: &Loaded, start: &Start) -> Guest {
 /// sends the image's range to the host, and the cache is made from the image's bytes under the guest's setup, as
 /// `w2m-vm --make-cache` makes UnityPlayer.dll's. With `in_vm`, the installer inside the VM installs first (Sprint 263).
 fn cached_guest(root: &Path, name: &str, in_vm: bool) -> (Loaded, Guest, HostCompiler) {
+    cached_guest_with(root, name, in_vm, false)
+}
+
+/// `cached_guest`, the instructions at each in-VM compile and install written when `instructions_at_compile` (Sprint
+/// 266).
+fn cached_guest_with(
+    root: &Path,
+    name: &str,
+    in_vm: bool,
+    instructions_at_compile: bool,
+) -> (Loaded, Guest, HostCompiler) {
     let data = fs::read(root.join(format!("tests/data/timed_waits/{name}.exe"))).unwrap();
     let loaded = load(&data, None, "probe.exe").unwrap();
     let program = &loaded.images[0];
     let mut start = Start::console("probe.exe");
     start.host_range = Some((program.base, program.base + u64::from(program.pe.size_of_image)));
     start.install_in_vm = in_vm;
+    start.instructions_at_compile = instructions_at_compile;
     let mut guest = guest_with(root, &loaded, &start);
     let exits = Exits {
         exit_va: guest.code.dispatch_va,
@@ -289,6 +301,59 @@ fn qpc_runs_with_its_blocks_installed_from_the_cache() {
         installed += 1;
     }
     assert_eq!(installed, cache.installs, "the installs counted");
+}
+
+/// Sprint 266 (card 5's gate on the guest's own clock): with the instructions at each call written, every in-VM compile
+/// (`qpc.exe` without the cache, the C compiling its blocks) and every install (with it, the installer installing them)
+/// carries a count, in the log's order never falling, none past the run's and none 0 but the first, the entry's,
+/// compiled before any instruction ran; without, every word is 0, as the C leaves it. The limit is absolute,
+/// `executed + TIME_SLICE` with threads (`threads::set_budget`), so the count is the run's and not the slice's.
+#[test]
+fn each_compile_and_install_carries_the_instructions_retired_at_it() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let uncached = |counted: bool| {
+        let data = fs::read(root.join("tests/data/timed_waits/qpc.exe")).unwrap();
+        let loaded = load(&data, None, "probe.exe").unwrap();
+        let mut start = Start::console("probe.exe");
+        start.instructions_at_compile = counted;
+        let guest = guest_with(&root, &loaded, &start);
+        (loaded, guest, HostCompiler::default())
+    };
+    for (counted, cached) in [(true, false), (true, true), (false, false)] {
+        let (loaded, mut guest, mut host) = if cached {
+            cached_guest_with(&root, "qpc", true, counted)
+        } else {
+            uncached(counted)
+        };
+        let out = run(&mut guest, &loaded, &mut host);
+        assert_eq!(out.stop, Stop::ExitProcess { code: 0 });
+        let at = &out.instructions_at;
+        let (what, counts) = if cached {
+            ("install", &at.installs)
+        } else {
+            ("compile", &at.compiles)
+        };
+        assert!(!counts.is_empty(), "no {what} inside the VM");
+        if !counted {
+            assert!(
+                counts.iter().all(|&c| c == 0),
+                "an uncounted run wrote a {what}'s count"
+            );
+            continue;
+        }
+        for (i, &c) in counts.iter().enumerate() {
+            assert!(
+                (i == 0 || 0 < c) && c <= out.executed,
+                "{what} {i}: {c} instructions, the run's {}",
+                out.executed
+            );
+        }
+        assert!(
+            counts.windows(2).all(|w| w[0] <= w[1]),
+            "the {what}s' counts fall in the log's order"
+        );
+    }
 }
 
 /// Sprint 257 (reviewer-3's Medium 1 at 257): the whole-block judge's host time is its own kind, not the exit's it

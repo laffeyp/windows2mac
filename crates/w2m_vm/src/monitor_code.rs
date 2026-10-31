@@ -289,7 +289,16 @@ pub struct Timing {
     /// the miss stub's call of `w2m_vm_compile`, its ticks summed at `VM_COMPILER + VMC_COMPILE_TICKS` (Sprint 247),
     /// the longest and the most in a frame beside them (Sprint 248)
     pub compile: bool,
+    /// the instructions retired at each call of the in-VM compiler or the installer that logged a block, written into
+    /// that log entry's `VMC_LOG_EXECUTED` word (Sprint 266): the guest's own clock, which the host's load does not move
+    pub instructions_at_compile: bool,
 }
+
+/// A log entry's last word, past `struct log_entry`'s 120 bytes (`block_compiler.c` 31-42), which the C never writes:
+/// the instructions retired at the call that logged it, when `Timing::instructions_at_compile` asks; 0 otherwise. The
+/// C's text stays the frozen host's, whose image `python_image.rs` judges byte for byte, so the word has no C name.
+pub const VMC_LOG_EXECUTED: u64 = 120;
+const _: () = assert!(VMC_LOG_EXECUTED + 8 == VMC_LOG_ENTRY);
 
 /// How the monitor code is written: what it times, and the targets its miss stub sends to the host before the in-VM
 /// compiler (Sprint 257: the translation cache's image, `[base, base + size)`, which the host installs from the cache).
@@ -371,6 +380,26 @@ fn call_path(d: &mut Assembler, timing: Timing, load: &dyn Fn(&mut Assembler), h
     d.emit(&[a64::blr(16), a64::mov(25, 0)]);
     if timing.compile {
         compile_probe(d);
+    }
+    if timing.instructions_at_compile {
+        // a nonzero x0 logged one entry, the last (the C moves `VMC_LOG_COUNT` before its return, the installer before
+        // its dispatch pair): into its last word the limit at x28 + 8 less the budget left in x23, the count
+        // `count_from_budget` writes, both registers kept by the call (AAPCS64); x16, x18 and x26 free, as above
+        let logged = d.label();
+        d.branch(|off| a64::cbz(25, off), logged);
+        d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER));
+        d.emit(&[a64::ldr(8, 18, 16, VMC_LOG_COUNT as u32)]);
+        d.emit(&a64::mov_imm(
+            16,
+            MONITOR_VA + VM_COMPILER + VMC_LOG + VMC_LOG_EXECUTED - VMC_LOG_ENTRY,
+        ));
+        d.emit(&[
+            a64::add(16, 16, 18, a64::LSL, VMC_LOG_ENTRY.trailing_zeros()),
+            a64::ldr(8, 26, 28, 8),
+            a64::sub(26, 26, REG_BUDGET),
+            a64::str(8, 26, 16, 0),
+        ]);
+        d.bind(logged);
     }
     d.emit(&a64::mov_imm(16, MONITOR_VA + VM_COMPILER + VMC_SAVE));
     for r in (0..16).step_by(2) {
@@ -848,7 +877,10 @@ pub fn insert(mem: &mut [u8], target: u64, code: u64, second: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{MONITOR_VA, Options, Timing, VM_COMPILER, VMC_COMPILE_TICKS, dispatcher};
+    use super::{
+        MONITOR_VA, Options, REG_BUDGET, Timing, VM_COMPILER, VMC_COMPILE_TICKS, VMC_LOG, VMC_LOG_ENTRY,
+        VMC_LOG_EXECUTED, dispatcher,
+    };
     use a64_encoder as a64;
     use std::collections::BTreeMap;
 
@@ -908,6 +940,50 @@ mod tests {
             timed_miss - plain_miss,
             4 * probe as u64,
             "the miss stub moves by the probe"
+        );
+    }
+
+    /// The instructions at a compile (Sprint 266): off by default, so the default dispatcher is the Python's; on, the
+    /// call path adds the store of the limit less the budget into the last log entry's last word, and nothing else.
+    #[test]
+    fn the_instructions_at_a_compile_are_off_by_default_and_written_from_the_budget() {
+        let symbols: BTreeMap<String, u64> = [("w2m_vm_compile".to_string(), 0x7f00_0418_0000)].into();
+        let (plain, plain_miss) = dispatcher(&symbols, Options::default());
+        let (counted, counted_miss) = dispatcher(
+            &symbols,
+            Options {
+                timing: Timing {
+                    instructions_at_compile: true,
+                    ..Timing::default()
+                },
+                ..Options::default()
+            },
+        );
+        let from_budget = [
+            a64::ldr(8, 26, 28, 8),
+            a64::sub(26, 26, REG_BUDGET),
+            a64::str(8, 26, 16, 0),
+        ];
+        assert!(
+            !plain.windows(3).any(|w| w == from_budget),
+            "the default dispatcher writes the count"
+        );
+        assert!(
+            counted.windows(3).any(|w| w == from_budget),
+            "the counted dispatcher does not write it"
+        );
+        let compiler = a64::mov_imm(16, MONITOR_VA + VM_COMPILER).len();
+        let last_word = a64::mov_imm(
+            16,
+            MONITOR_VA + VM_COMPILER + VMC_LOG + VMC_LOG_EXECUTED - VMC_LOG_ENTRY,
+        )
+        .len();
+        let store = 1 + compiler + 1 + last_word + 4; // cbz; the area; ldr; the word's address; add, ldr, sub, str
+        assert_eq!(counted.len() - plain.len(), store, "the store's words");
+        assert_eq!(
+            counted_miss - plain_miss,
+            4 * store as u64,
+            "the miss stub moves by the store"
         );
     }
 
