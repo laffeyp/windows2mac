@@ -1,0 +1,86 @@
+# Sprint 304 — A block split breaks before it makes
+
+```yaml
+---
+id: 304
+status: active
+phase: 6
+pass_kind: functional
+---
+```
+
+## scope
+
+The second vCPU's precondition 4 (`docs/design-run-loop-on-several-vcpus-2026-10-31.md`), sized by Sprint 303: a vCPU
+reads `ID_AA64MMFR2_EL1.BBM` 0, so a valid block made a table while another vCPU may hold it in its TLB needs the
+block invalid, a broadcast invalidation, then the table (the Arm ARM's break-before-make; without it the result is
+UNPREDICTABLE, a TLB conflict among the outcomes). `Guest::page_descriptor` (`guest.rs` 1064-1096) splits a block in
+one store today. Its callers, the two requests that can split:
+
+- a stack mapped or unmapped, `map_pages` from `threads.rs` 919 and 997 (THREAD_CREATE, THREAD_STACK_GROW), after which
+  the runtime invalidates every vCPU's TLB (`threads.c` 318, `w2m_tlb_flush`, `tlbi vmalle1is`);
+- a code page guarded at a host compile, `compile.rs` 212, 303, 399 and 443, after which the C invalidates that page on
+  every vCPU (`block_compiler.c` 115, `tlbi vaae1is`).
+
+- **The work:** a split in two steps, as the design states: `page_descriptor` finding a valid block makes it invalid
+  and answers "split pending", the request it serves returning to the guest marked to retry; the guest's runtime
+  invalidates every vCPU's TLB (`tlbi vmalle1is`, the stronger of the two forms, since a block covers many pages) and
+  issues the request again; on the retry the block is invalid and the table is written whole before its descriptor, a
+  Release store. Each of the two requests' paths in the C retries on that answer. A count of valid blocks split, on the
+  batch run's record.
+- **Not here:** the second vCPU; splitting at load, which the design rejected for its size (1 GiB of tables).
+
+## prerequisites
+
+- 303 (closed)
+
+## context_files
+
+- the design's precondition 4 and card 3; `guest.rs` (`page_descriptor`, `map_pages`); `threads.rs` 900-1000;
+  `compile.rs` 195-450; `tools/guest_runtime/threads.c` 300-330; `tools/guest_runtime/block_compiler.c` 100-120;
+  `runtime.h` 328-335
+- the Arm ARM (DDI 0487) on break-before-make, cited by section in the result
+
+## signal contract
+
+### Emits
+
+- None; an order of writes, held by a test and the runs.
+
+### Invariants
+
+- Every run as held; one vCPU; the runtime image's departures from the frozen C named in `python_image.rs`.
+
+## artifact contract
+
+### Files modified
+
+- `crates/w2m_vm/src/` (`guest.rs`, `threads.rs`, `compile.rs`, the record's count), the C's two request paths, a
+  test, `python_image.rs`' departures
+
+### Command exit codes
+
+- `scripts/gates.sh` returns 0
+
+## observation contract
+
+- **Expected values:** the count of valid blocks split on the batch run; each split's writes in order: the block
+  invalid, the request's retry, the table's entries, the table's descriptor.
+- **Planted faults:** (1) the split made in one step again (the table written at the first call): the recording test
+  must name the write that came before the retry.
+
+## done criteria
+
+No valid block becomes a table without first being invalid with every vCPU's TLB invalidated.
+
+## self-review checklist
+
+- [x] Scope names one verifiable property: break-before-make for every split.
+- [x] context_files cite the design, the callers, the C and the Arm ARM.
+- [x] Emits: none.
+- [x] Artifact contract gradable by command.
+- [x] Observation contract: values and a plant changing what its judge reads.
+- [x] One concept: a split's order, across its two request paths.
+
+## result
+
