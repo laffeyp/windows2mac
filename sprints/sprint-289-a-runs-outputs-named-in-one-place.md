@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 289
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -83,4 +83,17 @@ stamp would stand for.
 
 ## result
 
-- **The gates:** GATES-LINE
+- **The module** (628e19224): `run_outputs`, `WRITTEN`, `STOP_COMPANIONS`, `companion`, `written` and `clear`;
+  `w2m-vm`'s start is `run_outputs::clear`, 30 lines of its own gone, and its four companion names call `companion`,
+  no `trim_end_matches(".tsv")` left in it; `batch_run.rs`' `stamped_for` takes the companions from the list.
+- **Expected values:** `a_runs_start_clears_an_earlier_runs_files` leaves `["b/other.tsv", "l/rust.tsv.blocks"]`; the
+  batch-run step writes the stop, its stamp and the four companions; 172 tests in the pre-commit run, the step first.
+- **The gates:** `scripts/gates.sh` exit 0 in 896 s, kept in `store/gates/passes.tsv` as sprint 289 at 628e19224 with root=29268bead and "rust=crates python=0 samples=0", rdeps(w2m_vm), 172 tests, base=bf504ba2d, Sprint 288's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: `clear` leaving the stop's companions; the test failed, left
+  `["b/other.tsv", "b/stop.calls.strings.tsv", "b/stop.calls.tsv", "b/stop.in-flight.tsv", "b/stop.unity.log",
+  "l/rust.tsv.blocks"]`.
+- **Plant 2,** restored by `cp` and checked by `cmp`: `clear` removing every `<ledger>.<anything>`; the test failed,
+  left `["b/other.tsv"]`, `l/rust.tsv.blocks` gone.
+- **The review's case:** `build/stamp-check/` with an earlier run's stop, its stamp, its four companions, `out.txt`
+  and `keep.tsv`; `w2m-vm --game /nonexistent-depot x.exe` into them exited 1, "x.exe: No such file or directory",
+  and left `keep.tsv` alone.
