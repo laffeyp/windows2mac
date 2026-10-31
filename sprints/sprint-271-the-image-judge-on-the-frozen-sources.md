@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 271
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -88,3 +88,21 @@ second test says when the working tree's C has left the tag's.
 - [x] One concept: the judge's reference.
 
 ## result
+
+- **The judge** (dfc12fd11): `python_image.rs` exports `frozen-python-2026-10-29`'s `tools/`, `specs/` and the code
+  pages' probe run `store/probe-runs/38044229348` (`headers.rs` 70, a fourth input the card's lookup missed: the
+  first run failed on its absence) by `git archive` into `build/guest_runtime_frozen/`, keys the frozen sources there,
+  and builds at the repository's root while its C keys the same, else at the export; the image held byte for byte to
+  `build/guest_runtime/<key>.bin` as before.
+- **The second test**, `the_working_trees_c_is_the_frozen_c`: the working tree's key equals the frozen one today.
+- **The check by run:** a comment added to line 1 of `tools/guest_runtime/runtime.c`: the frozen judge and the two
+  key tests passed, 3 of 4, and the second test failed, "the working tree's C has left frozen-python-2026-10-29's: the
+  image the VM runs is no longer the one judged byte for byte"; the file restored by `cp` and checked by `cmp`.
+- **The Decision** "Sequence for step 6" annotated: 272 the XCHG, 273 two vCPUs, each card after one later.
+- **Not as the card said:** the plant named an export from `HEAD`, but `HEAD`'s C is the tag's, so that export builds
+  the frozen image and nothing fires; the plant run instead builds at the repository's root whatever its key.
+- **The gates:** `scripts/gates.sh` exit 0 in 243 s on dfc12fd11, copied from `store/gates/passes.tsv`; the timing stage 690 ns an exit at load 9.05.
+- **Plant 1,** both files restored by `cp` and checked by `cmp`: `frozen_build_root` returning the repository's root
+  always, with `runtime.c` changed; the judge failed, "assertion `left == right` failed, left:
+  \"d9a92321bab28e9baca19ba3988e0187ca94299a4d39f455025c697722d080ca\", right:
+  \"91e639a070f276e16a39c2444a91b1adf91f8406d489cfcc8a3d917478629b5d\"", the working tree's key against the frozen one.
