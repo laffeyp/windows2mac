@@ -1381,7 +1381,9 @@ fn run() -> Result<bool, String> {
             );
         }
         let archive = fs::read_to_string(root.join(TAIL_ARCHIVE)).map_err(|e| format!("{TAIL_ARCHIVE}: {e}"))?;
-        let unbuilt = unbuilt(&blackboard, &archive);
+        // the Built archive exists once a roll has made it
+        let built_archive = fs::read_to_string(root.join(BUILT_ARCHIVE)).unwrap_or_default();
+        let unbuilt = unbuilt(&blackboard, &archive, &built_archive);
         for n in &unbuilt {
             eprintln!(
                 "sprint {n:03}: its entry has left the tail for {TAIL_ARCHIVE}, and ## Built has no paragraph for it"
@@ -1415,16 +1417,27 @@ const TAIL_ARCHIVE: &str = "docs/sprint-tail-archive-2026-10-08.md";
 /// had rolled with none, against the kit's `templates/BLACKBOARD.md` 58).
 const FIRST_BUILT_SPRINT: u32 = 183;
 
-/// The sprints from `FIRST_BUILT_SPRINT` whose entry is in the tail archive and which `## Built` has no paragraph
-/// for: none of its lines holds "— Sprint N (" (Sprint 232).
-fn unbuilt(blackboard: &str, archive: &str) -> Vec<u32> {
+/// Where `## Built`'s paragraphs of closed plan steps go, verbatim, when they leave the record (Sprint 269,
+/// `blackboard_roll --built`).
+const BUILT_ARCHIVE: &str = "docs/built-archive-2026-10-30.md";
+
+/// The sprints from `FIRST_BUILT_SPRINT` whose entry is in the tail archive and which neither `## Built` nor the
+/// Built archive (`built_archive`, Sprint 269) has a paragraph for: none of their lines holds "— Sprint N (" (Sprint
+/// 232).
+fn unbuilt(blackboard: &str, archive: &str, built_archive: &str) -> Vec<u32> {
     let built = section(blackboard, "## Built");
     let mut missing: Vec<u32> = archive
         .lines()
         .filter_map(|l| l.strip_prefix("### Sprint "))
         .filter_map(|l| l.split(' ').next()?.parse::<u32>().ok())
         .filter(|n| *n >= FIRST_BUILT_SPRINT)
-        .filter(|n| !built.lines().any(|l| l.contains(&format!("— Sprint {n} ("))))
+        .filter(|n| {
+            let paragraph = format!("— Sprint {n} (");
+            !built
+                .lines()
+                .chain(built_archive.lines())
+                .any(|l| l.contains(&paragraph))
+        })
         .collect();
     missing.sort_unstable();
     missing.dedup();
@@ -1555,9 +1568,14 @@ mod tests {
             "## Built\n- **d** — Sprint 183 (a). x\n- **d** — Sprint 1840 (b). y\n\n## Deferred\n- Sprint 184 (c)\n";
         let archive = "# a\n### Sprint 182 (d, closed)\n### Sprint 183 (d, closed)\n### Sprint 184 (d, closed)\n";
         assert_eq!(
-            unbuilt(blackboard, archive),
+            unbuilt(blackboard, archive, ""),
             [184],
             "Deferred's line and Sprint 1840 do not stand for 184"
+        );
+        // Sprint 269: a paragraph rolled to the Built archive still stands for its sprint (plant 2 reads ## Built alone)
+        assert_eq!(
+            unbuilt(blackboard, archive, "# Built: archive\n\n- **d** — Sprint 184 (c). z\n"),
+            Vec::<u32>::new()
         );
     }
 

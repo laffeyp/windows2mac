@@ -6,12 +6,65 @@
 //! entries stay: comprehension affirmations, which a new session looks for (`sdd-kit-3/AGENTS.md` 27), user-only
 //! questions and their answers, partial closes and sweeps. Reviewer-2's Medium 5 of its review of 178-181 ruled the
 //! roll; the move is a program's so that 100 KB of text is not retyped through the Edit tool.
+//!
+//! `blackboard_roll --decisions ARCHIVE [ROOT]` and `--built THROUGH ARCHIVE [ROOT]` (Sprint 269, the Decision "Closed
+//! work rolled out of the record"): the Decisions whose entry holds "*(Closed" or "*(Superseded", and the `## Built`
+//! paragraphs whose first sprint named is at or below THROUGH, moved verbatim to ARCHIVE in the record's order, one
+//! line left where the first of them stood.
 
 use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const SURFACED: &str = "## Surfaced for review";
+/// What a roll moves: from which section, under which pointer line, into an archive of which order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Kind {
+    Surfaced,
+    Decisions,
+    Built,
+}
+
+impl Kind {
+    fn section(self) -> &'static str {
+        match self {
+            Kind::Surfaced => "## Surfaced for review",
+            Kind::Decisions => "## Decisions",
+            Kind::Built => "## Built",
+        }
+    }
+
+    /// The pointer line's opening, by which a later roll finds and replaces it.
+    fn pointer(self) -> &'static str {
+        match self {
+            Kind::Surfaced => "- **Older reviews** — ",
+            Kind::Decisions => "- **Closed Decisions** — ",
+            Kind::Built => "- **Older Built paragraphs** — ",
+        }
+    }
+
+    /// A new archive's opening text.
+    fn heading(self) -> &'static str {
+        match self {
+            Kind::Surfaced => {
+                "# Surfaced for review: archive\n\nReviews rolled out of `BLACKBOARD.md` `## Surfaced for review`, \
+                 verbatim, newest first (Sprint 232).\n\n"
+            }
+            Kind::Decisions => {
+                "# Decisions: archive\n\nDecisions closed or superseded, rolled out of `BLACKBOARD.md` `## Decisions` \
+                 verbatim, in the record's order (Sprint 269).\n\n"
+            }
+            Kind::Built => {
+                "# Built: archive\n\nParagraphs of `BLACKBOARD.md` `## Built` whose plan steps have closed, rolled out \
+                 verbatim, in the record's order (Sprint 269).\n\n"
+            }
+        }
+    }
+
+    /// The reviews go newest first; the Decisions and the Built paragraphs keep the record's order, oldest first.
+    fn newest_first(self) -> bool {
+        self == Kind::Surfaced
+    }
+}
 
 /// The section's entries: each from its "- **" line to the next one's, blank lines with the entry before them; the
 /// text before the first entry is the preamble. Joined again, they are the section's text.
@@ -36,96 +89,195 @@ fn is_review(entry: &str) -> bool {
         .is_some_and(|(_, text)| text.starts_with("reviewer-") || text.starts_with("The user's pasted code review"))
 }
 
-/// A pointer to the archive: the line `roll` leaves in the section.
-const POINTER: &str = "- **Older reviews** — ";
-
-/// The archive with `moved` (newest first) put before its older entries, or a new archive holding them.
-fn archived(old: Option<&str>, moved: &[String]) -> String {
-    let old = old.unwrap_or(
-        "# Surfaced for review: archive\n\nReviews rolled out of `BLACKBOARD.md` `## Surfaced for review`, verbatim, \
-         newest first (Sprint 232).\n\n",
-    );
-    let (head, older) = old.split_at(old.find("- **").unwrap_or(old.len()));
-    format!("{head}{}{older}", moved.concat())
+/// A Decision marked closed or superseded in one of its annotations.
+fn is_closed(entry: &str) -> bool {
+    entry.contains("*(Closed") || entry.contains("*(Superseded")
 }
 
-/// The pointer line, from the archive as it stands (Sprint 243): its reviews counted and their oldest and newest
-/// dates, so a second roll replaces the line rather than adding one beside it.
-fn pointer(archive_name: &str, archive: &str) -> String {
-    let dates: Vec<&str> = archive
-        .lines()
-        .filter_map(|l| l.strip_prefix("- **"))
-        .filter_map(|l| l.get(..10))
-        .collect();
-    let oldest = dates.iter().min().copied().unwrap_or("");
-    let newest = dates.iter().max().copied().unwrap_or("");
-    format!(
-        "{POINTER}{} reviews, {oldest} to {newest}, moved verbatim to `{archive_name}`, newest first \
-         (reviewer-2's Medium 5 of its review of 178-181: the last three reviews stay here).\n\n",
-        dates.len()
-    )
+/// The first sprint a Built paragraph names, "Sprint N" or "Sprints N-M".
+fn first_sprint(entry: &str) -> Option<u32> {
+    let at = entry
+        .find("Sprint ")
+        .map(|i| i + 7)
+        .or_else(|| entry.find("Sprints ").map(|i| i + 8))?;
+    let digits: String = entry[at..].chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
 }
 
-/// The record with the old reviews out and one pointer in their place, and the archive with them in: (record,
-/// archive, reviews moved).
+/// The archive with `moved` in it: before its older entries when newest first, else after its entries.
+fn archived(kind: Kind, old: Option<&str>, moved: &[String]) -> String {
+    let old = old.unwrap_or(kind.heading());
+    if kind.newest_first() {
+        let (head, older) = old.split_at(old.find("- **").unwrap_or(old.len()));
+        format!("{head}{}{older}", moved.concat())
+    } else {
+        let mut text = old.to_string();
+        if !text.ends_with("\n\n") && text.contains("- **") && !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str(&moved.concat());
+        text
+    }
+}
+
+/// The pointer line, from the archive as it stands (Sprint 243): its entries counted and their span, dates for reviews
+/// and Decisions and sprints for Built paragraphs, so a second roll replaces the line rather than adding one beside it.
+fn pointer(kind: Kind, archive_name: &str, archive: &str) -> String {
+    let (_, all) = entries(&archive[archive.find("- **").unwrap_or(archive.len())..]);
+    let span = |values: Vec<String>| {
+        let oldest = values.iter().min().cloned().unwrap_or_default();
+        let newest = values.iter().max().cloned().unwrap_or_default();
+        (oldest, newest)
+    };
+    match kind {
+        Kind::Surfaced => {
+            let (oldest, newest) = span(all.iter().filter_map(|e| e.get(4..14)).map(str::to_string).collect());
+            format!(
+                "{}{} reviews, {oldest} to {newest}, moved verbatim to `{archive_name}`, newest first \
+                 (reviewer-2's Medium 5 of its review of 178-181: the last three reviews stay here).\n\n",
+                kind.pointer(),
+                all.len()
+            )
+        }
+        Kind::Decisions => {
+            let (oldest, newest) = span(all.iter().filter_map(|e| e.get(4..14)).map(str::to_string).collect());
+            format!(
+                "{}{} Decisions marked closed or superseded, {oldest} to {newest}, moved verbatim to `{archive_name}` \
+                 (Sprint 269, the Decision \"Closed work rolled out of the record\").\n",
+                kind.pointer(),
+                all.len()
+            )
+        }
+        Kind::Built => {
+            let sprints: Vec<u32> = all.iter().filter_map(|e| first_sprint(e)).collect();
+            format!(
+                "{}{} paragraphs, Sprints {:03} to {:03}, whose plan steps have closed, moved verbatim to \
+                 `{archive_name}` (Sprint 269, the Decision \"Closed work rolled out of the record\").\n",
+                kind.pointer(),
+                all.len(),
+                sprints.iter().min().copied().unwrap_or(0),
+                sprints.iter().max().copied().unwrap_or(0)
+            )
+        }
+    }
+}
+
+/// The record with the entries `chosen` picks out of `kind`'s section and one pointer in their place, and the archive
+/// with them in: (record, archive, entries moved).
 fn roll(
     blackboard: &str,
-    keep: usize,
+    kind: Kind,
+    chosen: &dyn Fn(&[String]) -> Vec<usize>,
     archive_name: &str,
     archive_old: Option<&str>,
 ) -> Result<(String, String, usize), String> {
+    let section = kind.section();
     let start = blackboard
-        .find(&format!("{SURFACED}\n"))
-        .ok_or(format!("no \"{SURFACED}\""))?
-        + SURFACED.len()
+        .find(&format!("{section}\n"))
+        .ok_or(format!("no \"{section}\""))?
+        + section.len()
         + 1;
     let end = blackboard[start..]
         .find("\n## ")
         .map_or(blackboard.len(), |i| start + i + 1);
     let (preamble, all) = entries(&blackboard[start..end]);
-    let reviews: Vec<usize> = (0..all.len()).filter(|i| is_review(&all[*i])).collect();
-    let moved: Vec<usize> = reviews[..reviews.len().saturating_sub(keep)].to_vec();
+    let moved = chosen(&all);
     if moved.is_empty() {
         return Ok((blackboard.to_string(), archive_old.unwrap_or_default().to_string(), 0));
     }
-    let newest_first: Vec<String> = moved.iter().rev().map(|i| all[*i].clone()).collect();
-    let archive = archived(archive_old, &newest_first);
-    let mut section = preamble;
-    for (i, e) in all.iter().enumerate() {
-        if !moved.contains(&i) && !e.starts_with(POINTER) {
-            section.push_str(e);
+    let in_order: Vec<String> = moved.iter().map(|i| all[*i].clone()).collect();
+    let in_order: Vec<String> = if kind.newest_first() {
+        in_order.into_iter().rev().collect()
+    } else {
+        in_order
+    };
+    let archive = archived(kind, archive_old, &in_order);
+    let line = pointer(kind, archive_name, &archive);
+    let mut text_section = preamble;
+    if kind == Kind::Surfaced {
+        // the reviews' pointer stands last in the section (Sprint 232)
+        for (i, e) in all.iter().enumerate() {
+            if !moved.contains(&i) && !e.starts_with(kind.pointer()) {
+                text_section.push_str(e);
+            }
+        }
+        if !text_section.ends_with("\n\n") {
+            text_section.push('\n');
+        }
+        text_section.push_str(&line);
+    } else {
+        // the pointer stands where the old one, or else the first entry moved, stood
+        let at = all
+            .iter()
+            .position(|e| e.starts_with(kind.pointer()))
+            .unwrap_or(moved[0]);
+        for (i, e) in all.iter().enumerate() {
+            if i == at {
+                text_section.push_str(&line);
+            }
+            if !moved.contains(&i) && !e.starts_with(kind.pointer()) {
+                text_section.push_str(e);
+            }
+        }
+        // a blank line belongs to the entry before it, so moving the section's last entry took the section's closing
+        // blank line with it; the section ends as it did
+        if blackboard[start..end].ends_with("\n\n") && !text_section.ends_with("\n\n") {
+            text_section.push('\n');
         }
     }
-    if !section.ends_with("\n\n") {
-        section.push('\n');
-    }
-    section.push_str(&pointer(archive_name, &archive));
-    let text = format!("{}{section}{}", &blackboard[..start], &blackboard[end..]);
+    let text = format!("{}{text_section}{}", &blackboard[..start], &blackboard[end..]);
     Ok((text, archive, moved.len()))
 }
 
+const USAGE: &str = "usage: blackboard_roll --surfaced KEEP ARCHIVE [ROOT] | --decisions ARCHIVE [ROOT] | --built \
+                     THROUGH ARCHIVE [ROOT]";
+
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let [flag, keep, archive, rest @ ..] = args.as_slice() else {
-        return Err("usage: blackboard_roll --surfaced KEEP ARCHIVE [ROOT]".into());
+    let (kind, number, archive, rest): (Kind, Option<u32>, &String, &[String]) = match args.as_slice() {
+        [flag, keep, archive, rest @ ..] if flag == "--surfaced" => (
+            Kind::Surfaced,
+            Some(keep.parse().map_err(|e| format!("KEEP {keep}: {e}"))?),
+            archive,
+            rest,
+        ),
+        [flag, through, archive, rest @ ..] if flag == "--built" => (
+            Kind::Built,
+            Some(through.parse().map_err(|e| format!("THROUGH {through}: {e}"))?),
+            archive,
+            rest,
+        ),
+        [flag, archive, rest @ ..] if flag == "--decisions" => (Kind::Decisions, None, archive, rest),
+        _ => return Err(USAGE.into()),
     };
-    if flag != "--surfaced" {
-        return Err("usage: blackboard_roll --surfaced KEEP ARCHIVE [ROOT]".into());
-    }
-    let keep: usize = keep.parse().map_err(|e| format!("KEEP {keep}: {e}"))?;
     let root = PathBuf::from(rest.first().map_or(".", String::as_str));
     let path = root.join("BLACKBOARD.md");
     let blackboard = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let into = root.join(archive);
     let old = fs::read_to_string(&into).ok();
-    let (text, archived, moved) = roll(&blackboard, keep, archive, old.as_deref())?;
+    let n = number.unwrap_or(0);
+    let chosen = |all: &[String]| -> Vec<usize> {
+        match kind {
+            Kind::Surfaced => {
+                let reviews: Vec<usize> = (0..all.len()).filter(|i| is_review(&all[*i])).collect();
+                reviews[..reviews.len().saturating_sub(n as usize)].to_vec()
+            }
+            Kind::Decisions => (0..all.len()).filter(|i| is_closed(&all[*i])).collect(),
+            Kind::Built => (0..all.len())
+                .filter(|i| {
+                    !all[*i].starts_with(Kind::Built.pointer()) && first_sprint(&all[*i]).is_some_and(|s| s <= n)
+                })
+                .collect(),
+        }
+    };
+    let (text, archived, moved) = roll(&blackboard, kind, &chosen, archive, old.as_deref())?;
     if moved == 0 {
-        println!("no review older than the newest {keep}");
+        println!("nothing to move from {}", kind.section());
         return Ok(());
     }
     fs::write(&into, archived).map_err(|e| format!("{archive}: {e}"))?;
     fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
-    println!("{moved} reviews moved to {archive}");
+    println!("{moved} entries of {} moved to {archive}", kind.section());
     Ok(())
 }
 
@@ -150,11 +302,18 @@ mod tests {
                           - **2026-10-29 agent** — reviewer-3's review c\n- **2026-10-30 agent** — reviewer-3's review d\n\n\
                           ## Decisions\n- d\n";
 
+    fn reviews_but(keep: usize) -> impl Fn(&[String]) -> Vec<usize> {
+        move |all: &[String]| {
+            let reviews: Vec<usize> = (0..all.len()).filter(|i| is_review(&all[*i])).collect();
+            reviews[..reviews.len().saturating_sub(keep)].to_vec()
+        }
+    }
+
     /// The two oldest of four reviews leave, newest first; everything else stays in its order; the kept and moved
     /// entries hold every byte of the section but the new line.
     #[test]
     fn the_oldest_reviews_leave_and_nothing_else_moves() {
-        let (text, archive, moved) = roll(RECORD, 2, "docs/a.md", None).unwrap();
+        let (text, archive, moved) = roll(RECORD, Kind::Surfaced, &reviews_but(2), "docs/a.md", None).unwrap();
         assert_eq!(moved, 2);
         let entries: Vec<&str> = archive.split("\n- **").skip(1).collect();
         assert!(entries[0].contains("pasted code review b") && entries[1].contains("review a\n  - *Medium 1:* y\n\n"));
@@ -177,7 +336,7 @@ mod tests {
 
     #[test]
     fn nothing_moves_when_no_review_is_older_than_the_kept() {
-        let (text, _, moved) = roll(RECORD, 4, "docs/a.md", None).unwrap();
+        let (text, _, moved) = roll(RECORD, Kind::Surfaced, &reviews_but(4), "docs/a.md", None).unwrap();
         assert_eq!(moved, 0);
         assert_eq!(text, RECORD);
     }
@@ -186,14 +345,18 @@ mod tests {
     /// line beside the first): one pointer stays, its count and dates the archive's, the first roll's and the second's.
     #[test]
     fn a_second_roll_leaves_one_pointer_counting_the_whole_archive() {
-        let (once, archive, _) = roll(RECORD, 2, "docs/a.md", None).unwrap();
+        let (once, archive, _) = roll(RECORD, Kind::Surfaced, &reviews_but(2), "docs/a.md", None).unwrap();
         let again = once.replace(
             "- **2026-10-30 agent** — reviewer-3's review d\n",
             "- **2026-10-30 agent** — reviewer-3's review d\n- **2026-10-31 agent** — reviewer-3's review e\n",
         );
-        let (twice, archive, moved) = roll(&again, 2, "docs/a.md", Some(&archive)).unwrap();
+        let (twice, archive, moved) =
+            roll(&again, Kind::Surfaced, &reviews_but(2), "docs/a.md", Some(&archive)).unwrap();
         assert_eq!(moved, 1, "review c leaves");
-        let pointers: Vec<&str> = twice.lines().filter(|l| l.starts_with(POINTER)).collect();
+        let pointers: Vec<&str> = twice
+            .lines()
+            .filter(|l| l.starts_with(Kind::Surfaced.pointer()))
+            .collect();
         assert_eq!(pointers.len(), 1, "{pointers:?}");
         assert!(
             pointers[0].starts_with("- **Older reviews** — 3 reviews, 2026-10-27 to 2026-10-29, moved verbatim"),
@@ -206,18 +369,97 @@ mod tests {
         );
     }
 
-    /// The record's pointer is the one its archive gives: one line, the archive's count and span (Sprint 243).
+    /// The record's pointers are the ones their archives give: one line each, the archive's count and span (Sprints 243,
+    /// 269).
     #[test]
-    fn the_records_pointer_is_its_archives() {
+    fn the_records_pointers_are_their_archives() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let name = "docs/surfaced-archive-2026-10-30.md";
-        let archive = fs::read_to_string(root.join(name)).unwrap();
         let record = fs::read_to_string(root.join("BLACKBOARD.md")).unwrap();
-        let lines: Vec<&str> = record.lines().filter(|l| l.starts_with(POINTER)).collect();
-        assert_eq!(
-            lines,
-            [pointer(name, &archive).trim_end()],
-            "BLACKBOARD.md's pointer to {name}"
+        for (kind, name) in [
+            (Kind::Surfaced, "docs/surfaced-archive-2026-10-30.md"),
+            (Kind::Decisions, "docs/decisions-archive-2026-10-30.md"),
+            (Kind::Built, "docs/built-archive-2026-10-30.md"),
+        ] {
+            let Ok(archive) = fs::read_to_string(root.join(name)) else {
+                assert!(
+                    !record.contains(kind.pointer()),
+                    "a pointer to {name}, which does not exist"
+                );
+                continue;
+            };
+            let lines: Vec<&str> = record.lines().filter(|l| l.starts_with(kind.pointer())).collect();
+            assert_eq!(
+                lines,
+                [pointer(kind, name, &archive).trim_end()],
+                "BLACKBOARD.md's pointer to {name}"
+            );
+        }
+    }
+
+    const DECIDED: &str = "# B\n\n## Decisions\n\n- **2026-10-03 user** — scope\n\
+                           - **2026-10-20 agent-resolved** — A. Decision: a. Revisit if: x. *(Closed 2026-10-30, Sprint 243: done.)*\n\
+                           - **2026-10-21 agent-resolved** — B. Decision: b. Revisit if: y.\n\
+                           - **2026-10-22 agent-resolved** — C. Decision: c. Revisit if: z. *(Superseded 2026-10-30 by D.)*\n\n\
+                           ## Built\n\n- **2026-10-05** — Sprint 000 (zero) a.\n- **2026-10-06** — Sprint 241 (b) b.\n\
+                           - **2026-10-07** — Sprint 242 (c) c.\n- **2026-10-08** — Sprint 243 (d) d.\n\n## Sprint tail\n";
+
+    fn through(n: u32) -> impl Fn(&[String]) -> Vec<usize> {
+        move |all: &[String]| {
+            (0..all.len())
+                .filter(|i| {
+                    !all[*i].starts_with(Kind::Built.pointer()) && first_sprint(&all[*i]).is_some_and(|s| s <= n)
+                })
+                .collect()
+        }
+    }
+
+    fn closed(all: &[String]) -> Vec<usize> {
+        (0..all.len()).filter(|i| is_closed(&all[*i])).collect()
+    }
+
+    /// The closed and superseded Decisions leave in the record's order, the pointer where the first stood; the rest,
+    /// the user's scope first, stay byte for byte (Sprint 269).
+    #[test]
+    fn the_closed_decisions_leave_and_the_rest_stay() {
+        let (text, archive, moved) = roll(DECIDED, Kind::Decisions, &closed, "docs/d.md", None).unwrap();
+        assert_eq!(moved, 2);
+        assert!(
+            archive.find("— A.").unwrap() < archive.find("— C.").unwrap(),
+            "the record's order"
         );
+        let section = &text[text.find("## Decisions").unwrap()..text.find("## Built").unwrap()];
+        assert_eq!(
+            section,
+            "## Decisions\n\n- **2026-10-03 user** — scope\n- **Closed Decisions** — 2 Decisions marked closed or \
+             superseded, 2026-10-20 to 2026-10-22, moved verbatim to `docs/d.md` (Sprint 269, the Decision \"Closed \
+             work rolled out of the record\").\n- **2026-10-21 agent-resolved** — B. Decision: b. Revisit if: y.\n\n"
+        );
+        assert!(
+            text.ends_with(&DECIDED[DECIDED.find("## Built").unwrap()..]),
+            "the next sections untouched"
+        );
+    }
+
+    /// The Built paragraphs through Sprint 242 leave, 243 stays; a second roll adds to the archive's end and keeps
+    /// one pointer (Sprint 269; plant 1 moves 243 by an off-by-one bound).
+    #[test]
+    fn the_built_paragraphs_through_the_bound_leave_and_a_second_roll_keeps_one_pointer() {
+        let (text, archive, moved) = roll(DECIDED, Kind::Built, &through(241), "docs/b.md", None).unwrap();
+        assert_eq!(moved, 2);
+        let (again, archive, moved) = roll(&text, Kind::Built, &through(242), "docs/b.md", Some(&archive)).unwrap();
+        assert_eq!(moved, 1);
+        let built = &again[again.find("## Built").unwrap()..again.find("## Sprint tail").unwrap()];
+        assert_eq!(
+            built,
+            "## Built\n\n- **Older Built paragraphs** — 3 paragraphs, Sprints 000 to 242, whose plan steps have \
+             closed, moved verbatim to `docs/b.md` (Sprint 269, the Decision \"Closed work rolled out of the \
+             record\").\n- **2026-10-08** — Sprint 243 (d) d.\n\n"
+        );
+        let order: Vec<usize> = ["Sprint 000", "Sprint 241", "Sprint 242"]
+            .iter()
+            .map(|s| archive.find(s).unwrap())
+            .collect();
+        assert!(order.windows(2).all(|w| w[0] < w[1]), "the record's order");
+        assert!(!archive.contains("Sprint 243"), "Sprint 243's paragraph stays");
     }
 }
