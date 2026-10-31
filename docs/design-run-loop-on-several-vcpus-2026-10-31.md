@@ -172,10 +172,16 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    checked by the guard in debug builds; one vCPU still. Judge: every run as held; a plant taking `served` without
    the word, which the guard's check names. *(Split by rule 6 at Sprint 302: 2a, Sprint 302, the 22 Served fields
    gathered into one value, `Guest.served`, held to this design's table by a test; 2b, `served` a lock whose guard
-   checks the word, the run loop's serving paths taking it, with this card's judge and plant.)*
+   checks the word, the run loop's serving paths taking it, with this card's judge and plant.)* *(2b folded into card
+   4 at Sprint 302's close, BLACKBOARD Decision "Architecture: when `served` becomes a lock": on one vCPU `&mut Guest`
+   is exclusive, and a lock taken per touch would lock twice on one thread; the lock is taken once per served exit
+   when the threads share `Guest`, its guard passed down.)*
 3. **Break-before-make** for a block split, its count on the batch run's record. Judge: a split's three writes in
-   order, by a test that records them; the batch run as held.
-4. **The threads and the second vCPU.** A thread per vCPU, the stop, the kick, the merged outcome, FEAT_LSE2's
+   order, by a test that records them; the batch run as held. *(Sprint 303: first reads `ID_AA64MMFR2_EL1.BBM`; at
+   FEAT_BBM level 2 a change of block size alone needs no break, the runtime's broadcast invalidation following.)*
+4. **The threads and the second vCPU.** `served` a lock taken once per served exit (card 2b, folded here), its guard
+   checking the word in debug builds and passed down as `&mut Served`, with card 2's plant; Deferred (Sprint 298)'s
+   revisit clause checked at the card's start. A thread per vCPU, the stop, the kick, the merged outcome, FEAT_LSE2's
    refusal, the diagnostics refused by name, a child process held to one vCPU, the stop of every other vCPU for a model
    step of a locked form, and a stop flag the take's spin reads, so a thread waiting for a word a cancelled vCPU's guest
    held ends at the stop (reviewer-3's Low 1 at 294). Judge: `qpc` and `sleeper` on two vCPUs ending as on one; the race
