@@ -41,9 +41,11 @@ plan=0
 [ "${1:-}" = "--all" ] && all=1
 [ "${1:-}" = "--plan" ] && plan=1
 
-# the change: every path that differs from origin/main's merge base, and every new file (.claude/ is the
-# session's, never committed)
-base=$(git merge-base HEAD origin/main)
+# the change: every path that differs from the sprint's base, and every new file (.claude/ is the session's, never
+# committed). The base is the previous sprint's close, scripts/gates-base.sh (Sprint 273; reviewer-3's High 1 at 272,
+# KIT_DIARY #111: the merge base with origin/main was the pushed work commit itself, and the passes of 267 to 272
+# selected from the uncommitted bookkeeping alone)
+base=$(sh scripts/gates-base.sh)
 changed=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | grep -v '^\.claude/' | sort -u)
 # GATES_CHANGED, newline-separated paths, stands in for the change: the selection's plants set it (Sprint 171)
 [ -n "${GATES_CHANGED:-}" ] && changed=$GATES_CHANGED
@@ -52,8 +54,8 @@ touched() { printf '%s\n' "$changed" | grep -E "$1" | grep -Ev "${2:-^$}" | grep
 said() { echo "gates: $*"; }
 # a change to the gates themselves runs every stage, so no stage it changed is skipped (Sprint 198; reviewer-2's Low 2
 # of its review of 193-196)
-touched '^scripts/(gates|gated-tree)\.sh$' && all=1
-[ $all = 1 ] && said "--all: every gate" || said "the change since $(git rev-parse --short "$base"): $(printf '%s\n' "$changed" | grep -c .) paths"
+touched '^scripts/(gates|gated-tree|gates-base)\.sh$' && all=1
+[ $all = 1 ] && said "--all: every gate" || said "the change since $(git rev-parse --short "$base") ($(git log -1 --format=%s "$base" | cut -c1-60)): $(printf '%s\n' "$changed" | grep -c .) paths"
 
 # the selection, decided before any gate runs, so `--plan` prints it and stops (Sprint 171)
 crates=$(printf '%s\n' "$changed" | sed -n 's|^crates/\([^/]*\)/.*|\1|p' | sort -u)
@@ -296,6 +298,8 @@ echo "gates: all passed"
 mkdir -p store/gates
 # the eighth column, the stages this run ran (Sprint 198; reviewer-2's Medium 2 of its review of 193-196), which
 # `signal_report --check` holds a closed entry's multi-vCPU sentence to
-printf 'exit 0 in %s s\t%s\t%s\tsprint %s\t%s\t%s\t%s\trust=%s python=%s samples=%s\n' "$(( $(date +%s) - gates_start ))" \
+# the ninth column, the base the change was taken from (Sprint 273), which `signal_report --check` holds to the
+# previous sprint's close
+printf 'exit 0 in %s s\t%s\t%s\tsprint %s\t%s\t%s\t%s\trust=%s python=%s samples=%s\tbase=%s\n' "$(( $(date +%s) - gates_start ))" \
   "$([ $all = 1 ] && echo all || echo default)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$gates_sprint" "$gates_head" \
-  "$gates_diff" "$gates_trees" "$rust" "$python" "$samples" >> store/gates/passes.tsv
+  "$gates_diff" "$gates_trees" "$rust" "$python" "$samples" "$base" >> store/gates/passes.tsv

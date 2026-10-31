@@ -718,6 +718,14 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
                             {
                                 wrong.push(w);
                             }
+                            // from Sprint 273 the run selected its gates from the sprint's change: its base is the
+                            // previous sprint's close
+                            if n >= FIRST_BASED_SPRINT
+                                && let Some(w) =
+                                    base_problem(n, kept(&run).unwrap(), close_commit(root, n - 1).as_deref())
+                            {
+                                wrong.push(w);
+                            }
                             // from Sprint 192 its close commit changes bookkeeping only, and its claim of the
                             // multi-vCPU stage is the stage's record
                             if n >= FIRST_CLOSE_BOUND_SPRINT {
@@ -889,6 +897,34 @@ fn close_commit(root: &Path, n: u32) -> Option<String> {
         .filter_map(|l| l.split_once('\t'))
         .find(|(_, s)| is_close(s, n))
         .map(|(h, _)| h.to_string())
+}
+
+/// The first sprint whose gates run must name the base it selected from, the previous sprint's close (Sprint 273;
+/// reviewer-3's High 1 at 272, KIT_DIARY #111: the passes of 267 to 272 selected from the uncommitted bookkeeping, the
+/// merge base with origin/main being the pushed work commit).
+const FIRST_BASED_SPRINT: u32 = 273;
+
+/// Why sprint `n`'s gates run, its row of `store/gates/passes.tsv`, does not name `previous_close` as its base (the
+/// ninth column, `base=<commit>`), or None when it does.
+fn base_problem(n: u32, pass: &str, previous_close: Option<&str>) -> Option<String> {
+    let Some(close) = previous_close else {
+        return Some(format!(
+            "sprint {n:03}: sprint {} has no close commit to base its gates on",
+            n - 1
+        ));
+    };
+    match pass.split('\t').nth(8).and_then(|c| c.strip_prefix("base=")) {
+        Some(base) if base == close => None,
+        Some(base) => Some(format!(
+            "sprint {n:03}: its gates run selected from the change since {}, not since sprint {}'s close {}",
+            &base[..base.len().min(9)],
+            n - 1,
+            &close[..close.len().min(9)]
+        )),
+        None => Some(format!(
+            "sprint {n:03}: its gates run names no base (column 9), so what it selected from is not on the record"
+        )),
+    }
 }
 
 /// The first sprint whose close commit is held to bookkeeping paths and whose multi-vCPU claim to the stage's record
@@ -1558,6 +1594,92 @@ mod tests {
         assert!(named[0].contains("9a"), "{named:?}");
         // a one-line substitution passes unowned
         assert!(quoted_edits(212, "\"sed -i '' 's/a/b/' f.rs\"").is_empty());
+    }
+
+    /// Sprint 273: a gates run's base is the previous sprint's close; another base, or none, is named (plant 2 makes
+    /// every base pass).
+    #[test]
+    fn a_gates_run_is_held_to_the_previous_close_as_its_base() {
+        let row = |base: &str| {
+            format!("exit 0 in 9 s\tdefault\tt\tsprint 273\th\td\troot=r\trust=all python=0 samples=0{base}")
+        };
+        let close = "eaf8723b8d121dfdb9ee717d91c3d068871bc937";
+        assert_eq!(base_problem(273, &row(&format!("\tbase={close}")), Some(close)), None);
+        let other = base_problem(
+            273,
+            &row("\tbase=05ae6da859e3422572ad7977e85067d8183f3c5c"),
+            Some(close),
+        )
+        .unwrap();
+        assert!(
+            other.contains("since 05ae6da85, not since sprint 272's close eaf8723b8"),
+            "{other}"
+        );
+        assert!(
+            base_problem(273, &row(""), Some(close))
+                .unwrap()
+                .contains("names no base")
+        );
+        assert!(
+            base_problem(273, &row(&format!("\tbase={close}")), None)
+                .unwrap()
+                .contains("no close commit")
+        );
+    }
+
+    /// Sprint 273: `scripts/gates-base.sh` in a scratch repository finds the newest close, a partial close among them,
+    /// and not a later work commit, which a push before the gates leaves at origin/main (plant 1 takes the merge base).
+    #[test]
+    fn the_gates_base_is_the_newest_close_whatever_was_pushed() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let script = root.join("scripts/gates-base.sh");
+        let dir = std::env::temp_dir().join(format!("w2m-gates-base-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&dir)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        git(&["init", "-q", "-b", "main"]);
+        git(&["config", "user.email", "t@example.com"]);
+        git(&["config", "user.name", "t"]);
+        let commit = |subject: &str| {
+            git(&["commit", "-q", "--allow-empty", "-m", subject]);
+            git(&["rev-parse", "HEAD"])
+        };
+        let base = || {
+            let out = std::process::Command::new("sh")
+                .arg(&script)
+                .current_dir(&dir)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        commit("Sprint 271 closed: its Signal Report");
+        let partial = commit("Sprint 272 closed-partial: its Signal Report");
+        commit("Sprint 273 card: the gates");
+        let work = commit("Sprint 273: the gates' base");
+        // origin/main at the work commit, as a push before the gates leaves it
+        git(&["update-ref", "refs/remotes/origin/main", &work]);
+        assert_eq!(base(), partial, "the newest close, not the pushed work commit");
+        let close = commit("Sprint 273 closed: its Signal Report");
+        commit("Sprint 274 card: two vCPUs");
+        assert_eq!(base(), close);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// Sprint 232: a sprint from 183 whose entry is in the tail archive needs its paragraph in ## Built; one before 183,
