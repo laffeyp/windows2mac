@@ -91,6 +91,10 @@ fn the_frozen_hosts_stream_conforms_to_windows_as_its_record_says() {
 #[test]
 fn the_rust_hosts_stream_conforms_to_windows_as_far_as_it_runs() {
     let root = root();
+    // a stream of other sources is not judged (Sprint 288)
+    if !w2m_vm::built_from::fresh(&root, &root.join("build/batch_run")) {
+        return;
+    }
     let Ok(ours) = fs::read_to_string(root.join("build/batch_run/first-stop.calls.tsv")) else {
         let what = "no build/batch_run/first-stop.calls.tsv (scripts/gates.sh writes it)";
         if std::env::var("W2M_REQUIRE_CASE_RUNS").as_deref() == Ok("1") {

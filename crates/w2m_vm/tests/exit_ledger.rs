@@ -178,6 +178,10 @@ fn each_process_parts_from_the_frozen_host_where_held() {
     let Some(processes) = fixture(&root) else {
         return;
     };
+    // the Rust ledger of other sources is not judged (Sprint 288)
+    if !w2m_vm::built_from::fresh(&root, &root.join("build/exit_ledger")) {
+        return;
+    }
     if !root.join("build/exit_ledger/rust.tsv").is_file() {
         return;
     }

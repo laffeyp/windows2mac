@@ -57,6 +57,56 @@ pub fn tree_of(root: &Path, inputs: &[&str]) -> Result<String, String> {
     tree
 }
 
+/// What a run reads from the work tree beyond its build (Sprint 288; reviewer-3's Low 1 at 287): the guest runtime's C,
+/// which `guest_runtime` compiles when a run starts.
+pub const RUN_INPUTS: [&str; 1] = ["tools"];
+
+/// The file in a directory of a run's outputs naming the sources they stand for.
+pub const STAMP: &str = "inputs.tree";
+
+/// The sources a run's outputs stand for, one line: the build's tree (`BUILT_FROM`) and `RUN_INPUTS`' tree as the run
+/// found them.
+pub fn run_stamp(root: &Path) -> Result<String, String> {
+    Ok(format!("{BUILT_FROM} {}", tree_of(root, &RUN_INPUTS)?))
+}
+
+/// Writes `stamp` as `STAMP` in `dir`.
+pub fn stamp(dir: &Path, stamp: &str) -> Result<(), String> {
+    std::fs::write(dir.join(STAMP), format!("{stamp}\n")).map_err(|e| format!("{}: {e}", dir.join(STAMP).display()))
+}
+
+/// None when `dir`'s outputs were made from the work tree's sources: its stamp is the work tree's `INPUTS` and
+/// `RUN_INPUTS` trees; otherwise why not, so a test reading them judges no outputs of other sources.
+pub fn stale(root: &Path, dir: &Path) -> Option<String> {
+    let now = match (crates_tree(root), tree_of(root, &RUN_INPUTS)) {
+        (Ok(built), Ok(run)) => format!("{built} {run}"),
+        (Err(e), _) | (_, Err(e)) => return Some(e),
+    };
+    match std::fs::read_to_string(dir.join(STAMP)) {
+        Err(e) => Some(format!("{}: no stamp ({e})", dir.join(STAMP).display())),
+        Ok(made) if made.trim() == now => None,
+        Ok(made) => Some(format!(
+            "{} was made from the sources {} and the work tree's are {now} (the build's tree, then {RUN_INPUTS:?}'s)",
+            dir.display(),
+            made.trim()
+        )),
+    }
+}
+
+/// For a test reading the outputs in `dir`: true when they were made from the work tree's sources; false otherwise,
+/// after a panic naming why when `W2M_REQUIRE_CASE_RUNS=1` (the gates set it) or the reason on stderr, as a test
+/// treats a missing file.
+pub fn fresh(root: &Path, dir: &Path) -> bool {
+    let Some(why) = stale(root, dir) else {
+        return true;
+    };
+    if std::env::var("W2M_REQUIRE_CASE_RUNS").as_deref() == Ok("1") {
+        panic!("{why}, and W2M_REQUIRE_CASE_RUNS=1 requires outputs of the work tree's sources");
+    }
+    eprintln!("{why}: not judged here");
+    false
+}
+
 /// Ok when the work tree's `crates/` is the one this binary was built from; otherwise the refusal, naming both.
 pub fn check(root: &Path, program: &str) -> Result<(), String> {
     let now = crates_tree(root)?;
@@ -71,8 +121,55 @@ pub fn check(root: &Path, program: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::INPUTS;
+    use super::{INPUTS, RUN_INPUTS, crates_tree, stale, stamp, tree_of};
     use std::path::Path;
+    use std::process::Command;
+
+    /// A directory stamped with a repository's trees is fresh, and stale once a file under `tools/` changes or the stamp
+    /// is gone, the reason naming the directory (Sprint 288: Sprint 286's record, made before a C change, was judged).
+    /// The repository holds a file under each of `INPUTS`, which `crates_tree` stages by name.
+    #[test]
+    fn a_stamp_goes_stale_when_tools_changes() {
+        let repo = std::env::temp_dir().join(format!("w2m-stale-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&repo);
+        for file in [
+            "crates/a.rs",
+            "Cargo.toml",
+            "Cargo.lock",
+            "rust-toolchain.toml",
+            ".cargo/config.toml",
+            "specs/a",
+        ]
+        .into_iter()
+        .chain(["tools/a.c", "build/out/x.tsv"])
+        {
+            std::fs::create_dir_all(repo.join(file).parent().unwrap()).unwrap();
+            std::fs::write(repo.join(file), "1\n").unwrap();
+        }
+        assert!(
+            Command::new("git")
+                .arg("init")
+                .arg("-q")
+                .arg(&repo)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let out = repo.join("build/out");
+        let made = format!(
+            "{} {}",
+            crates_tree(&repo).unwrap(),
+            tree_of(&repo, &RUN_INPUTS).unwrap()
+        );
+        stamp(&out, &made).unwrap();
+        assert_eq!(stale(&repo, &out), None);
+        std::fs::write(repo.join("tools/a.c"), "2\n").unwrap();
+        let why = stale(&repo, &out).expect("a changed tools/ left the stamp fresh");
+        assert!(why.contains("build/out") && why.contains(&made), "{why}");
+        std::fs::remove_file(out.join(super::STAMP)).unwrap();
+        assert!(stale(&repo, &out).unwrap().contains("no stamp"));
+        let _ = std::fs::remove_dir_all(&repo);
+    }
 
     /// The quoted strings between `INPUTS` and the `];` that closes its list.
     fn listed(text: &str) -> Vec<String> {

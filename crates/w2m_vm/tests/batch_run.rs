@@ -46,8 +46,12 @@ fn root() -> PathBuf {
         .unwrap()
 }
 
-/// A file `gates.sh` writes under build/batch_run/; None when it has not run here (and the gates do not require it).
+/// A file `gates.sh` writes under build/batch_run/; None when it has not run here, or ran on other sources (Sprint
+/// 288), and the gates do not require it.
 fn written(root: &Path, name: &str) -> Option<String> {
+    if !w2m_vm::built_from::fresh(root, &root.join("build/batch_run")) {
+        return None;
+    }
     match fs::read_to_string(root.join("build/batch_run").join(name)) {
         Ok(text) => Some(text),
         Err(_) => {

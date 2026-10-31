@@ -302,6 +302,22 @@ mod run {
             let n = |s: &String| s.parse::<u64>().map_err(|e| format!("--child {s}: {e}"));
             return child(n(page_fd)? as i32, n(memory_fd)? as i32, n(slot)? as usize);
         }
+        // each directory this run writes, stamped with the sources its outputs stand for, so a test refuses outputs of
+        // other sources (Sprint 288; reviewer-3's Low 1 at 287); one stamp a run, its `git` call about 40 ms
+        let written: Vec<&str> = args
+            .windows(2)
+            .filter(|w| w[0] == "--output" || w[0] == "--stop")
+            .map(|w| w[1].as_str())
+            .chain(ledger.as_deref())
+            .chain(judge.as_deref())
+            .collect();
+        if !written.is_empty() {
+            let made = w2m_vm::built_from::run_stamp(&root())?;
+            for file in written {
+                let dir = root().join(file);
+                w2m_vm::built_from::stamp(dir.parent().ok_or(format!("{file}: no directory"))?, &made)?;
+            }
+        }
         if let [flag, directory, program, out_flag, output, stop_flag, stop_file] = args.as_slice()
             && flag == "--game"
             && out_flag == "--output"

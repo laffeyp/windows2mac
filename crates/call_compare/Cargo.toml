@@ -10,3 +10,7 @@ publish.workspace = true
 serde_json.workspace = true
 # the vocabulary's types: the verdict, and the Producer's two events
 events = { path = "../events" }
+
+[dev-dependencies]
+# the stamp a test checks before judging the gates' batch run (Sprint 288)
+w2m_vm = { path = "../w2m_vm" }

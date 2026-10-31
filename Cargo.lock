@@ -18,6 +18,7 @@ version = "0.1.0"
 dependencies = [
  "events",
  "serde_json",
+ "w2m_vm",
 ]
 
 [[package]]

@@ -68,6 +68,10 @@ fn the_stored_judgement_holds() {
 #[test]
 fn the_gates_judgement_holds() {
     let dir = root().join("build/batch_run");
+    // outputs of other sources are not judged (Sprint 288)
+    if !w2m_vm::built_from::fresh(&root(), &dir) {
+        return;
+    }
     let (Ok(text), Ok(stop)) = (
         fs::read_to_string(dir.join("whole-blocks.tsv")),
         fs::read_to_string(dir.join("first-stop.tsv")),

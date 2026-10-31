@@ -405,6 +405,10 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
         eprintln!("{what}: the batch run's record is not held here");
         return;
     };
+    // a record of other sources is not judged (Sprint 288)
+    if !w2m_vm::built_from::fresh(&root, &root.join("build/batch_run")) {
+        return;
+    }
     // the run's stop file and the frozen host's fixture, both written by the gates; their absence fails under them
     let (Ok(stop_file), Ok(fixture)) = (
         fs::read_to_string(root.join("build/batch_run/first-stop.tsv")),
