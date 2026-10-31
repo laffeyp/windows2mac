@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 282
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -89,3 +89,18 @@ is read Acquire.
 - [x] One concept: one module's access moved.
 
 ## result
+
+- **The access** (7800ac78e): `exit_count`, `swap_vectors` and `read_runtime_word` take the view; `code_at` and
+  `give_back` read through it; the run loop's own reads and writes, the transport page's request and answer, a
+  created thread's entry and vectors, the schedule word and the stop's figures go through `Guest::memory_view` or
+  `guest::memory_view(&guest.memory)`, the latter where another field of the guest is borrowed mutably beside it (the
+  exit ledger's answer). `cases.rs`'s three `exit_count` calls follow the signature.
+- **What stays a slice:** `run.rs` 3, the two the card named: the slice `vm_compiled` hands to
+  `HostCompiler::installed_in_vm`, and the exit ledger's process area, read at each exit and at the stop. Views built
+  from a slice in `run.rs`, 3: the two in `vm_compiled`, one in its tests.
+- **The count's Acquire:** `x86_address_at` loads the reconstruction table's count by `atomic_u64` with Acquire; the
+  design's row and the step 6 Decision say the precondition is met.
+- **The count:** 68 slice calls in `crates/w2m_vm/src/`, from 91; `run.rs` 3, `cases.rs` 12.
+- **The gates:** `scripts/gates.sh` exit 0 in 678 s, kept in `store/gates/passes.tsv` as sprint 282 at 7800ac78e with root=713de0c87 and "rust=crates python=0 samples=0", rdeps(w2m_vm), 156 tests, base=ec881fe35, Sprint 281's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`, `w2m-vm` rebuilt: `swap_vectors` saving the vectors 16 bytes past the slot. The card's judge, `sleeper_creates_and_ends_its_thread_as_the_python_host`, passed under it, for a cause not measured here, so the plant ran on the live game as the gates run it: the stop file read "hvc 1 1155" and "hvc 8 38961" where the held one reads 1147 and 38881, lines `the_batch_run_and_the_guests_stop_where_held` compares.
+- **Plant 2,** restored by `cp` and checked by `cmp`: the reconstruction count read 8 bytes past its offset; `model_steps_runs_through_the_model_as_the_python_host` failed, "left: ExitProcess { code: 3221225477 } right: ExitProcess { code: 0 }".
