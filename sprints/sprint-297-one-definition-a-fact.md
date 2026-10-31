@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 297
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -92,4 +92,21 @@ Every fact a `pub const` states under `crates/` has one definition, or a named r
 
 ## result
 
-- **The gates:** GATES-LINE
+- **A judge that passed too much, found before the commit:** the widened test's first form counted a value as derived
+  when it held `::NAME` anywhere, so `layout::HEAP_VA` would have passed as deriving `HEAP`; it now matches the whole
+  identifier, held by `a_derived_value_names_the_whole_identifier`. The pre-commit run in progress was stopped for it.
+- **A breach of the run rule:** the pre-commit run after that fix was started with `&`, not `run_in_background`, which
+  the working rules forbid, its end unreported; no process of it was left when looked for, its log ending after the
+  doc tests; the run was started again in the background.
+- **The change** (a0ced5d3d): the merges, the one homes and the derived values as the scope lists them;
+  `pe_loader` and `virtual_memory` depending on `guest_runtime`; `access_violation_is_one_status`; the widened test,
+  with its lists `HELD` (3) and `DIFFERENT` (12), and its failure on an allowed name no longer defined twice.
+- **Expected values:** the widened test passing with every two-file name merged, derived, held or allowed; 183 tests
+  in the pre-commit run, the batch-run step first.
+- **The gates:** `scripts/gates.sh` exit 0 in 1450 s, kept in `store/gates/passes.tsv` as sprint 297 at a0ced5d3d with root=a0806e648 and "rust=all python=0 samples=0", all Rust tests (an input outside one crate changed), 326 tests, base=6bc9d38e2, Sprint 296's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: `pub const PAGE: u64 = 0x1000;` written back into
+  `virtual_memory`; the widened test failed, "defined in two files, neither derived from the other nor held nor
+  allowed: PAGE in …/guest_runtime/src/layout.rs, …/virtual_memory/src/lib.rs".
+- **Plant 2,** restored by `cp` and checked by `cmp`: `pe_loader`'s `ACCESS_VIOLATION` set to 0xC000_0006;
+  `access_violation_is_one_status` failed, "pe_loader's and cpu_cases' ACCESS_VIOLATION left: 3221225478 right:
+  3221225477".
