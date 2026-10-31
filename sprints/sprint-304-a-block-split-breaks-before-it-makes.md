@@ -84,3 +84,25 @@ No valid block becomes a table without first being invalid with every vCPU's TLB
 
 ## result
 
+- **A departure from the card's form, found before the work:** the card's two steps leave the block invalid between
+  the first answer and the retry; on two vCPUs another touching any page of that 2 MB block takes a translation fault,
+  which the runtime's fault path delivers as an access violation. The form built makes the split with every other
+  vCPU stopped (the design's precondition 8, which card 4 builds for locked model steps; on one vCPU it holds), writes
+  the table whole before its descriptor, and resumes the requesting vCPU through a flush stub in the monitor area,
+  `dsb ishst; tlbi vmalle1is; dsb ish; isb; hvc #15`, before it touches memory: every vCPU's TLB loses the block
+  entry, and no page is ever unmapped. The C runtime is unchanged, against the card's files; the design's
+  precondition 4 says so.
+- **The change** (WORK-COMMIT): `a64_encoder::DSB_ISHST`; `w2m_vm::FLUSH_STUB` (0x2010, in the free area past the
+  exception entry, beside `RETURN_STUB`) and `FLUSH_STUB_END`; `monitor_code::HVC_TLB_FLUSHED` (15) and `flush_stub`,
+  written by `write`; `Served.splits`, counted in `page_descriptor`, its row in the design's table (23 Served) and
+  `the_served_part_is_the_designs`' count; in `run`, a vCPU whose `splits` is ahead of `out.flushes` resumed at the
+  stub, its PC kept, and given it back at `hvc #15`, `Outcome.flushes` counting; the stub's range, its end the PC
+  after its `hvc`, kept out of the two places the loop sets and reads x23, which in the runtime's C is the C's own.
+- **Expected values:** the sleeper run, 3 blocks split and 3 flushes, `hvc #15` 3 times among its exits, its stop and
+  its comparisons with the Python host as before. The batch run's count, which the card asked for, is not recorded:
+  `w2m-vm` reports no counter of `Outcome`'s kind, `served_outside_word` among them being held by `run_loop.rs`
+  alone; the sleeper test holds this one.
+- **The gates:** GATES-LINE
+- **Plant 1,** restored by `cp` and checked by `cmp`: the redirect switched off (`if false && …`); the sleeper test
+  failed, "a split without its flush: the vCPU ran on with every TLB's block entry", left 0, right 3.
+

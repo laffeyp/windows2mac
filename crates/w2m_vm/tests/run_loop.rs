@@ -692,6 +692,13 @@ fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
     println!("exits: {:?}", out.exits);
     println!("threads: {:x?}", guest.served.threads);
     println!("stdout: {:?}", String::from_utf8_lossy(&guest.served.stdout));
+    println!("blocks split: {}, flushes: {}", guest.served.splits, out.flushes);
+
+    // each block a request split was followed by the flush stub before the vCPU ran on (Sprint 304)
+    assert_eq!(
+        out.flushes, guest.served.splits,
+        "a split without its flush: the vCPU ran on with every TLB's block entry"
+    );
 
     // the created thread, at THREAD_CREATE's return, as the Python host's
     let want = &python["created"][0];

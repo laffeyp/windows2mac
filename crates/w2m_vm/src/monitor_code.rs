@@ -94,6 +94,8 @@ pub const VMC_SAVE: u64 = 0x200;
 /// hvc numbers (vm_backend 1127-1128).
 pub const HVC_CODE_WRITE: u32 = 13;
 pub const HVC_FAULT_GIVE_BACK: u32 = 14;
+/// the flush stub's exit, after it invalidated every vCPU's TLB (`crate::FLUSH_STUB`; Sprint 304)
+pub const HVC_TLB_FLUSHED: u32 = 15;
 /// A level-3 permission fault on a write from the current EL (vm_backend 1131-1132).
 pub const CODE_WRITE_ESR_MASK: u64 = (0x3F << 26) | (1 << 6) | 0x3F;
 pub const CODE_WRITE_ESR: u64 = (0x25 << 26) | (1 << 6) | 0x0F;
@@ -915,11 +917,25 @@ pub fn write(mem: &mut [u8], symbols: &BTreeMap<String, u64>, options: Options) 
     let dispatch_va = MONITOR_VA + DISPATCHER;
     let (e, exception_call_va) = exception_entry(symbols, dispatch_va, timed);
     write_words(mem, EXCEPTION_ENTRY, &e);
+    write_words(mem, crate::FLUSH_STUB, &flush_stub());
     MonitorCode {
         dispatch_va,
         miss_va,
         exception_call_va,
     }
+}
+
+/// The flush a vCPU is resumed through after its request split a block (Sprint 304): the stores before it, every
+/// vCPU's stage-1 TLB invalidated, then the exit that hands it back to the host, which resumes it where it stopped.
+/// The sequence is `runtime.h`'s `w2m_tlb_flush` (Arm ARM D8.13); the split's other vCPUs are stopped while it is made.
+fn flush_stub() -> [u32; 5] {
+    [
+        a64::DSB_ISHST,
+        a64::TLBI_VMALLE1IS,
+        a64::DSB_ISH,
+        a64::ISB,
+        crate::hvc(HVC_TLB_FLUSHED as u16),
+    ]
 }
 
 /// Puts `(target, code)` in a target's pair: its first slot, or its second (vm_backend's two-way table).

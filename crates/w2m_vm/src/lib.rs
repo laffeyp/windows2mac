@@ -69,6 +69,11 @@ pub const DISPATCHER: u64 = 0x01800;
 /// The skeleton's return stub: `hvc #1` in the free area just past the exception entry (vm_backend 130), a Rust
 /// test aid the Python host did not have.
 pub const RETURN_STUB: u64 = 0x02000;
+/// The TLB flush a vCPU is resumed through after its request split a block (Sprint 304): `dsb ishst; tlbi vmalle1is;
+/// dsb ish; isb; hvc #15`, in the same free area, so every vCPU's stale block entry goes before the requester touches
+/// memory again; at `hvc #15` the host puts it back where it stopped.
+pub const FLUSH_STUB: u64 = 0x02010;
+pub const FLUSH_STUB_END: u64 = FLUSH_STUB + 4 * 5;
 /// The native helper operands (vm_backend 126): 32 bytes the skeleton's calls write their results to.
 pub const NATIVE_OPERANDS: u64 = 0x300;
 /// AttrIndx 0 (MAIR byte 0 = 0xFF, Normal write-back), inner shareable, the access flag (vm_backend 352).

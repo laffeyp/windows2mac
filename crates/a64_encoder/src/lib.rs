@@ -977,6 +977,8 @@ pub const CASA_WZR_W18_X16: u32 = 0x88FF_7E12;
 /// stlr wzr, [x16]: the runtime lock released, with release order.
 pub const STLR_WZR_X16: u32 = 0x889F_FE1F;
 pub const DSB_ISH: u32 = 0xD503_3B9F;
+/// DSB ISHST: stores ordered before what follows, in the Inner Shareable domain (CRm 0b1010; Sprint 304).
+pub const DSB_ISHST: u32 = 0xD503_3A9F;
 pub const ISB: u32 = 0xD503_3FDF;
 /// The cache type register: the smallest data and instruction cache lines, `4 << DminLine` (bits 16-19) and
 /// `4 << IminLine` (bits 0-3) bytes (Sprint 263, the installer's range sync, as `block_compiler.c` 166-176 reads it).

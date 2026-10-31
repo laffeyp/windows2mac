@@ -23,8 +23,8 @@ use crate::guest::{Guest, HVC_SCHEDULE, RT_IN_VM, STATE_SCHEDULE, VMC_COUNT_NAME
 use crate::host_request::{HOST_THREAD, THREAD_END, THREAD_EXIT_CODE, THREAD_EXIT_STUB};
 use crate::monitor::set_system_registers;
 use crate::monitor_code::{
-    EMPTY_TARGET, HVC_CODE_WRITE, HVC_FAULT_GIVE_BACK, LOCK_ENTRIES, LOCK_ENTRY, LOCK_EXITS, LOCK_TAKINGS,
-    LOCK_TAKINGS_COUNT, LOCK_TIMING, REG_BUDGET, VMC_LOG_EXECUTED, dispatch_slot,
+    EMPTY_TARGET, HVC_CODE_WRITE, HVC_FAULT_GIVE_BACK, HVC_TLB_FLUSHED, LOCK_ENTRIES, LOCK_ENTRY, LOCK_EXITS,
+    LOCK_TAKINGS, LOCK_TAKINGS_COUNT, LOCK_TIMING, REG_BUDGET, VMC_LOG_EXECUTED, dispatch_slot,
 };
 use crate::threads::{STILL_ACTIVE, Switch, Thread, add_thread, slice_until};
 
@@ -326,6 +326,9 @@ pub struct Outcome {
     /// neither by the host nor by the vCPU itself, the word read after the take (Sprint 286 for the miss, 294 for the
     /// rest): 0 when each runs under the word, beside the guest's own services, which hold it
     pub served_outside_word: u64,
+    /// the times the vCPU was resumed through `FLUSH_STUB` after a request split a block, each ending at `hvc #15`
+    /// (Sprint 304): equal to `guest.served.splits` at the stop, every split followed by its flush
+    pub flushes: u64,
     /// the instructions retired at each in-VM compile and install, in its log's order (Sprint 266), from the words
     /// `Timing::instructions_at_compile` writes; all 0 without it
     pub instructions_at: InstructionsAt,
@@ -662,6 +665,7 @@ fn run(
         vm_compile_starts: Vec::new(),
         instructions_at: InstructionsAt::default(),
         served_outside_word: 0,
+        flushes: 0,
     };
     if let Err(why) = add_thread(guest, first) {
         out.stop = Stop::Exit(format!("the first thread's entry: {why}")); // a guest run before
@@ -700,9 +704,18 @@ fn run(
     let mut marked = None::<Instant>;
     let mut kind = String::new(); // the last exit's kind, whose service `marked` times
     let mut judge_ns = 0u64; // the whole-block judge's part of that service
+    // the PC a vCPU resumed through the flush stub goes back to at `hvc #15` (Sprint 304)
+    let mut flush_return: Option<u64> = None;
+    let flush_stub = MONITOR_VA + crate::FLUSH_STUB..=MONITOR_VA + crate::FLUSH_STUB_END; // its end: the PC after its hvc
     let stop = loop {
+        // a request split a block: the vCPU resumes through the flush stub, which invalidates every vCPU's TLB before
+        // it touches memory again (Sprint 304; the design's precondition 4)
+        if flush_return.is_none() && guest.served.splits > out.flushes {
+            flush_return = Some(vcpu.reg(Reg::Pc)?);
+            vcpu.set_reg(Reg::Pc, *flush_stub.start())?;
+        }
         // `_before_run` (5129-5141): one vCPU, no other process: the slice's end (`_slice_until`), the VM may switch
-        // threads itself; x23 the budget left, outside the runtime's C
+        // threads itself; x23 the budget left, outside the runtime's C and the flush stub
         let pc = vcpu.reg(Reg::Pc)?;
         {
             let slice_until = slice_until(guest);
@@ -719,7 +732,7 @@ fn run(
             guest
                 .memory_view()
                 .write_u64(RUN_TABLE + u64::from(RT_IN_VM), u64::from(!others_due));
-            if !runtime.contains(&pc) {
+            if !runtime.contains(&pc) && !flush_stub.contains(&pc) {
                 vcpu.set_reg(Reg::X(REG_BUDGET as u8), limit.wrapping_sub(count))?;
             }
         }
@@ -789,7 +802,7 @@ fn run(
         );
         let mem = crate::guest::memory_view(&guest.memory);
         let pc = vcpu.reg(Reg::Pc)?;
-        if !runtime.contains(&pc) {
+        if !runtime.contains(&pc) && !flush_stub.contains(&pc) {
             // the count, from x23, with a fault's give-back (5199-5208); the VM's own blocks' tails this loop does not
             // note yet (2570), the host's compiles' it does
             let give_back = match exit.hvc_immediate().map(u32::from) {
@@ -838,6 +851,15 @@ fn run(
         // a guest fault left its block (vm_backend 5294-5296; Sprint 215): the unrun instructions were given back with
         // the count above (`GiveBack::Fault`); on at the hvc's return, to the runtime's exception path
         if u32::from(number) == HVC_FAULT_GIVE_BACK {
+            continue;
+        }
+        // the flush stub ran: every vCPU's TLB invalidated after a split; back where the vCPU stopped (Sprint 304)
+        if u32::from(number) == HVC_TLB_FLUSHED {
+            let Some(back) = flush_return.take() else {
+                break Stop::Exit(format!("hvc #15 at pc 0x{pc:x} with no split to flush"));
+            };
+            out.flushes += 1;
+            vcpu.set_reg(Reg::Pc, back)?;
             continue;
         }
         if number == HVC_CODE_WRITE as u16

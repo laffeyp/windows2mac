@@ -724,6 +724,9 @@ pub struct Served {
     /// the service HOST_UNIMPLEMENTED named and the call's return address, read from the saved RSP (`self.served.unimplemented`,
     /// vm_backend 3880-3882), which the record's SERVICE_UNIMPLEMENTED names whatever image made the call (Sprint 219)
     pub unimplemented: Option<(String, u64)>,
+    /// the valid blocks `page_descriptor` has made tables (Sprint 304): the run loop resumes the vCPU through
+    /// `FLUSH_STUB` while this is ahead of its flushes
+    pub splits: u64,
 }
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
@@ -955,6 +958,7 @@ impl Guest {
                 random: start.instruction_clock.map(|_| crate::mt19937::Random::new(0x5EED)),
                 files: None,
                 unimplemented: None,
+                splits: 0,
             },
         }
         .with_trace(start)
@@ -1085,10 +1089,12 @@ impl Guest {
                     mem.write_u64(new + 8 * i, (base + i * (size >> 9)) | attributes | low);
                 }
                 // the table's descriptors before the entry that points at them, for a walker on another vCPU (Sprint
-                // 281); the block-to-table change itself needs break-before-make while another vCPU runs (the design's
-                // table, a precondition of the second vCPU)
+                // 281). A change of block size needs break-before-make, the vCPU reporting BBM 0 (Sprint 303): it is
+                // made with every other vCPU stopped, and counted, so the run loop resumes this vCPU through the flush
+                // stub, which invalidates every vCPU's TLB before any runs again (Sprint 304; the design's precondition 4)
                 desc = (IPA_BASE + new) | 0x3;
                 mem.atomic_u64(at).store(desc, std::sync::atomic::Ordering::Release);
+                self.served.splits += 1;
             }
             off = (desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE;
         }

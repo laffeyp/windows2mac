@@ -38,7 +38,7 @@ fn the_served_part_is_the_designs() {
         only_served.is_empty() && only_table.is_empty(),
         "in Served and not a Served row of the design: {only_served:?}; a Served row and not in Served: {only_table:?}"
     );
-    assert_eq!(table.len(), 22, "the design's table counts 22 Served");
+    assert_eq!(table.len(), 23, "the design's table counts 23 Served");
     let guest = fields(&source, "Guest");
     let both: Vec<&String> = guest.intersection(&table).collect();
     assert!(both.is_empty(), "Served fields still on Guest: {both:?}");

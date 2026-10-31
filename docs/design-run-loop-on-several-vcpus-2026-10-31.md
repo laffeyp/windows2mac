@@ -121,8 +121,9 @@ a second vCPU.
 | `block_judge` | Diagnostic | `run.rs`, at every exit |
 | `batch_stop` | Diagnostic | `run.rs`, at an answered request |
 | `unimplemented` | Served | `host_request.rs` and `run.rs`, at a stop; the first stop's |
+| `splits` | Served | `guest.rs` `page_descriptor`, a valid block made a table (Sprint 304) |
 
-19 Load, 22 Served, 1 View, 3 Diagnostic, counted from the table. `memory` stays one mapping; `Guest` becomes three
+19 Load, 23 Served (`splits` from Sprint 304), 1 View, 3 Diagnostic, counted from the table. `memory` stays one mapping; `Guest` becomes three
 values the run loop's threads hold: the load part, shared by reference; `served`, a host mutex over the 22; and the
 mapping, from which each thread takes its view.
 
@@ -158,7 +159,13 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    instead would cost 1 GiB of tables (`VIRTUAL_SIZE` 0x80_0000_0000, 512 GiB, in 2 MB blocks of one 4 KB table
    each), so the split stays at run time; its card counts how often a valid block is split in the batch run.
    *(Sprint 303: a vCPU reads `ID_AA64MMFR2_EL1` = 0x1001001102001011, BBM 0, so the guest is promised no FEAT_BBM
-   and a change of block size needs the break; the two steps are card 304's.)*
+   and a change of block size needs the break; the two steps are card 304's.)* *(Sprint 304, the form built: not
+   the two steps above, whose invalid block would fault another vCPU touching any page of it, an access violation in
+   the runtime's fault path; the split is made with every other vCPU stopped, as a locked model step is (precondition
+   8; on one vCPU it holds already), the table written whole before its descriptor, and the requesting vCPU resumed
+   through `FLUSH_STUB` (`dsb ishst; tlbi vmalle1is; dsb ish; isb; hvc #15`), which invalidates every vCPU's TLB
+   before any vCPU touches memory again; at `hvc #15` the host puts it back where it stopped. No window leaves a page
+   unmapped, and the C runtime is unchanged. The sleeper run splits 3 blocks and flushes 3 times.)*
 5. Every dispatch writer stores a pair whole: met (Sprint 284).
 6. The host's miss service under the word: met (Sprint 286).
 7. The lock order: the word outermost (the guest-memory design's choice 6); `served` inside it, here.
