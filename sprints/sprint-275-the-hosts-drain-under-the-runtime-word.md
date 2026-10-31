@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 275
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -92,3 +92,21 @@ words the word serializes and when that changes.
 - [x] One concept: the drain's lock.
 
 ## result
+
+- **The finding by lookup:** the 23 counts, the compile-time slots and the installer's three shared words are written
+  only between `take_runtime` and `release_runtime` in `call_path`, so census row D6's races do not happen while the
+  runtime word is held across a compile; the host's drain was the one access outside it.
+- **The take** (c6602b6b2): `monitor_code::host_take_runtime_word(mem, own)`, a compare-and-swap of the guest's word
+  from 0 to `HOST_OWNER` (`u32::MAX`), spinning while another vCPU holds it and returning at once when the holder is
+  `own`, the vCPU whose exit the host serves, which holds the word across a host request; `host_release_runtime_word`
+  stores 0. Each makes its atomic for one access, so no reference into guest memory outlives the call.
+- **The drain:** `run::vm_compiled` takes the word before it reads `VMC_LOG_COUNT` and releases it after the reset.
+- **The tests:** the take waits while another owner holds the word and goes on when it is freed, does not wait for
+  its own vCPU's hold, and takes a free word; the drain waits likewise. The `w2m_vm` library tests (76), the litmus
+  tests and the run-loop tests pass.
+- **Census row D6** (13674dd49) and Deferred (Sprint 247) annotated.
+- **The gates:** `scripts/gates.sh` exit 0 in 685 s, kept in `store/gates/passes.tsv` as sprint 275 at 13674dd49 with root=f761c1d05 and "rust=crates python=0 samples=0", rdeps(signal_report) and rdeps(w2m_vm), 185 tests, base=6c9a419e1, Sprint 274's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: the take made a plain store; the test failed, "assertion
+  failed: waits_for_the_word(&mut held, |mem| { assert!(host_take_runtime_word(mem, 2)); })".
+- **Plant 2,** restored by `cp` and checked by `cmp`: the drain without the take; the test failed, "assertion
+  failed: waits_for_the_word(&mut held, |mem|".
