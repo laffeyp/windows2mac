@@ -41,7 +41,7 @@ The Rust host today makes one vCPU in every run: `crates/w2m_vm/src/bin/w2m-vm.r
 | D3 | the first taking of the runtime word waits 6.8 to 7.5 µs (Sprint 164) | Deferred 2026-10-28, cause not measured | the first taking's wait measured with the page touched first, on two vCPUs |
 | D4 | crosswake with its kick planted away ended where it pins a hang, once (Sprint 184) | Deferred 2026-10-28 | the Rust host's planted no-kick test, counted runs |
 | D5 | the narrow kick rule has no blocking guard and no Rust test (Sprint 222) | Deferred 2026-10-29 | a Rust test pinning the spinner to vCPU 0 and the child's start to vCPU 1 |
-| D6 | the in-VM compiler's counters and the installer's shared words are plain adds and stores (Sprint 247, annotated at 248 and 261) | Deferred 2026-10-30 | per-vCPU slots the host sums, or atomic adds, with the frame bound in `batch_record.rs` kept or changed |
+| D6 | the in-VM compiler's counters and the installer's shared words are plain adds and stores (Sprint 247, annotated at 248 and 261) | Deferred 2026-10-30; *(Sprint 275)* every one is written inside the VM under the runtime word, which `call_path` takes before the compiler or the installer and releases after the probe (`crates/w2m_vm/src/monitor_code.rs` 356-381), so two vCPUs do not race on them while that holds; the host's drain of the compile log, which did not hold it, now does (`run::vm_compiled`, `monitor_code::host_take_runtime_word`) | per-vCPU slots the host sums, or atomic adds, when design change 3 takes the compile out from under the runtime word |
 
 ## What the counts say
 
