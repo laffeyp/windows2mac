@@ -4,7 +4,7 @@
 //! `2 * DISPATCH_BITS + 1`. A target inserted where `dispatch_slot` puts it then misses, and the judge names it.
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
-mod common;
+use crate::common;
 
 use a64_encoder as a64;
 use common::*;

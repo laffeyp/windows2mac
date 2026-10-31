@@ -5,6 +5,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+# one test binary, tests/all.rs (Sprint 300)
+autotests = false
 
 [dependencies]
 a64_encoder = { path = "../a64_encoder" }
@@ -25,3 +27,7 @@ num-bigint = "0.4"
 num-integer = "0.1"
 num-rational = "0.4.2"
 num-traits = "0.2"
+
+[[test]]
+name = "all"
+path = "tests/all.rs"

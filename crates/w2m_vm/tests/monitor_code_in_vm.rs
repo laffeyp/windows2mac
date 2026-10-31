@@ -4,7 +4,7 @@
 //! the Python host's did (`vm_backend.py` 4217-4258, 4343-4400, 5297-5299).
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
-mod common;
+use crate::common;
 
 use common::*;
 use guest_runtime::layout::{MONITOR_DATA, MONITOR_VA, SAVE_AREA};

@@ -207,7 +207,7 @@ fi
 # its figure (a build failure, hv_vm_create refused), which stops the gates at any load.
 if [ $rust != none ]; then
   load=$(sysctl -n vm.loadavg | awk '{print $2}')
-  if cargo nextest run --cargo-quiet -p hypervisor --test exit_time --run-ignored only --no-capture \
+  if cargo nextest run --cargo-quiet -p hypervisor --test all -E "test(/^exit_time::/)" --run-ignored only --no-capture \
     > build/gates-timing-last.txt 2>&1; then outcome=passed; else outcome=over-bound; fi
   ns=$(sed -n 's/^exit_time: [0-9]* exits, \([0-9]*\) ns each.*/\1/p' build/gates-timing-last.txt | head -1)
   [ -n "$ns" ] || outcome=no-figure

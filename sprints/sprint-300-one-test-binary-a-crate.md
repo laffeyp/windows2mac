@@ -78,3 +78,21 @@ Each of the two crates links one test binary; every test runs as before; the tim
 
 ## result
 
+- **A departure from the card's form:** the card moved each file into `tests/all/` by `git mv`; the files stay where
+  they were instead, each a module of `tests/all.rs`, the manifests setting `autotests = false` and naming one
+  `[[test]]`. In a crate root `mod batch_run;` reads `tests/batch_run.rs`, so no path changes, and the comments,
+  scripts and records that cite `tests/<name>.rs` (`scripts/gates.sh` 130-170 among them) stay right. The file
+  `virtual_memory.rs` is the module `virtual_memory_arena` by `#[path]`, its own name being the `virtual_memory`
+  crate's, which its `use virtual_memory::…` means. `common` is declared once in the root, its two users reading
+  `use crate::common;`. The gates' timing step (`scripts/gates.sh` 210) runs `--test all -E "test(/^exit_time::/)"`
+  for the removed `--test exit_time`.
+- **The change** (WORK-COMMIT): the two roots, each with `every_file_is_a_module`; the two manifests; the two
+  `common` lines; the gates' line.
+- **Expected values:** `nextest list` with every ignored test: 79 in `w2m_vm::all` and 8 in `hypervisor::all`, equal to
+  the `#[test]` functions in the two crates' test files, the roots' one each included; no warning in the build; the
+  binaries 31 test files' worth down to 2; the gates' wall time against Sprint 298's 1,106 s, all Rust tests both,
+  GATES-WALL.
+- **The gates:** GATES-LINE
+- **Plant 1,** restored by `cp` and checked by `cmp`: `mod ledger;` commented out in `w2m_vm`'s root;
+  `every_file_is_a_module` failed, "files under tests/ no module declares: [\"ledger.rs\"]".
+
