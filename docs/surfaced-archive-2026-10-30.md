@@ -2,6 +2,11 @@
 
 Reviews rolled out of `BLACKBOARD.md` `## Surfaced for review`, verbatim, newest first (Sprint 232).
 
+- **2026-10-30 agent** — reviewer-3's review of Sprint 251's revised design (dfcf29cd8, its gates running), on the user's request verbatim. Read: tail entry 251, the design's diff in dfcf29cd8 against its review at 251 and `layout.rs` 10-82 and 167-226. No High or Medium; its review at 251's two Mediums and two Lows resolved.
+  - *Low 1, the write handler needs a page-to-starts index, a block's every page:* holds. Disposition: Deferred (Sprint 251), card 3's file format and card 4's plant into a block's second page.
+  - *Low 2, the region's backing within the IPA size, and a guest's fixed-base request inside it:* holds. Disposition: Deferred (Sprint 251), card 3's layout test and card 4's arena lookup with a unit test.
+  - *Low 3, the 7.6 MiB branch-reach margin held by nothing:* holds. Disposition: Deferred (Sprint 251), card 3's layout test computes the distance to every exit target.
+  - *On track:* order: 251's gates and close; card 1, the whole-block judge; the walk, the cache file, the probe.
 - **2026-10-30 agent** — reviewer-3's project review at Sprint 251 (the translation cache's design, 43ea83c64), on the user's request verbatim. The kit read whole earlier this session (clean, last changed 2026-10-07); tail entries 249 and 250, the Decision "The translation cache's shape", the design whole, `layout.rs` 10, 36-38, 82, 160-226 and `run.rs` 392. No High; two Mediums.
   - *Medium 1, choice B names no address, and every place inside the monitor area moves a `W2M_*` address or the process area (KIT_DIARY #103):* holds, and more: a `B`/`BL` exit reaches ±128 MiB, so the region must also lie near the dispatcher. Resolved: B names `[MONITOR_VA − 0x780_0000, MONITOR_VA)`, 120 MiB, outside both areas and within reach of `exit_va` and the slice stub, mapped only when a cache loads; card 3's gate a layout test; a walk past 120 MiB a third revisit ground.
   - *Medium 2, choice E names a bitmap and no detector (cached pages are never compiled at run time, so never made read-only):* holds. Resolved: at load the cached pages are made read-only by the compiler's own descriptor bit, a write faulting to `hvc 13`, whose handler marks the page and empties its cached slots; card 4 plants a guest write to a cached page.
