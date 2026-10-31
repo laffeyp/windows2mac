@@ -733,7 +733,7 @@ mod run {
             state_va: PROCESS_VA + STATE_OFF,
             runtime: translator::lower::RuntimeCalls::from_symbols(|s| guest.symbols.get(s).copied()),
         };
-        let tree = w2m_vm::built_from::crates_tree(root)?;
+        let tree = w2m_vm::built_from::tree_of(root, &w2m_vm::cache_file::KEY_INPUTS)?;
         let key = w2m_vm::cache_file::key(&data, image.base, &tree, &exits);
         Ok((image, data, exits, key))
     }

@@ -66,7 +66,25 @@ pub struct CacheFile {
 /// The walked starts `make` did not make, by why: the maker's report, not part of the file.
 pub type Refused = BTreeMap<String, u32>;
 
-/// The key: the image, its base, the translator's tree, and the addresses the words embed.
+/// What the cached words are made from (Sprint 265), whose tree id the key hashes: the maker's crates, `guest_runtime`,
+/// `pe_image`, `translator` and `image_walk`, with every crate they reach by a `path =` dependency (`a64_encoder`,
+/// `x86_decoder`); this file; `specs/`, which `x86_decoder`'s build script reads; the lockfile and the toolchain. The rest
+/// of `w2m_vm` changes no cached word: the addresses it places that the words embed are hashed apart, as `Exits`.
+/// `tests/cache_file.rs` holds the crates against their manifests.
+pub const KEY_INPUTS: [&str; 10] = [
+    "crates/guest_runtime",
+    "crates/pe_image",
+    "crates/translator",
+    "crates/image_walk",
+    "crates/a64_encoder",
+    "crates/x86_decoder",
+    "crates/w2m_vm/src/cache_file.rs",
+    "specs",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+];
+
+/// The key: the image, its base, the tree of `KEY_INPUTS`, and the addresses the words embed.
 pub fn key(image: &[u8], base: u64, translator_tree: &str, exits: &Exits) -> String {
     let text = format!(
         "image {}\nbase {base:x}\ntranslator {translator_tree}\nexit {:x}\nslice {:x}\nstate {:x}\nruntime {:?}\n",

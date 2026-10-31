@@ -29,6 +29,37 @@ fn exits() -> Exits {
     }
 }
 
+/// Sprint 265: the key hashes every crate the cached words are made from: the maker's four and each crate their
+/// manifests reach by `path =`, and the maker's own file.
+#[test]
+fn the_key_covers_every_crate_the_cache_is_made_from() {
+    let root = root();
+    let mut reached: Vec<String> = ["guest_runtime", "pe_image", "translator", "image_walk"]
+        .map(String::from)
+        .to_vec();
+    let mut i = 0;
+    while i < reached.len() {
+        let manifest = fs::read_to_string(root.join("crates").join(&reached[i]).join("Cargo.toml")).unwrap();
+        for line in manifest.lines() {
+            if let Some((_, rest)) = line.split_once("path = \"../")
+                && let Some((name, _)) = rest.split_once('"')
+                && !reached.iter().any(|r| r == name)
+            {
+                reached.push(name.to_string());
+            }
+        }
+        i += 1;
+    }
+    for name in &reached {
+        let path = format!("crates/{name}");
+        assert!(
+            cache_file::KEY_INPUTS.contains(&path.as_str()),
+            "{path}, which the cache is made from, is not among the key's inputs"
+        );
+    }
+    assert!(cache_file::KEY_INPUTS.contains(&"crates/w2m_vm/src/cache_file.rs"));
+}
+
 #[test]
 fn every_fixture_cache_covers_its_reads_indexes_its_pages_and_reads_back() {
     let mut blocks = 0;

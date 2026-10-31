@@ -25,6 +25,12 @@ pub const INPUTS: [&str; 6] = [
 
 /// The work tree's tree id of `INPUTS`, taken as `build.rs` takes it.
 pub fn crates_tree(root: &Path) -> Result<String, String> {
+    tree_of(root, &INPUTS)
+}
+
+/// The work tree's tree id of `inputs`, paths from the root, through a temporary index (Sprint 265: the translation
+/// cache's key takes it of its own inputs, `cache_file::KEY_INPUTS`).
+pub fn tree_of(root: &Path, inputs: &[&str]) -> Result<String, String> {
     let index = std::env::temp_dir().join(format!("w2m-built-from-{}", std::process::id()));
     let _ = std::fs::remove_file(&index);
     let git = |args: &[&str]| -> Result<String, String> {
@@ -45,7 +51,7 @@ pub fn crates_tree(root: &Path) -> Result<String, String> {
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
     let mut add = vec!["add", "-A", "--"];
-    add.extend(INPUTS);
+    add.extend(inputs);
     let tree = git(&add).and_then(|_| git(&["write-tree"]));
     let _ = std::fs::remove_file(&index);
     tree
