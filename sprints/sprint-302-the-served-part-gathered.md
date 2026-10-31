@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 302
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -78,7 +78,7 @@ The 22 fields the design calls Served live in one value, `Guest.served`, ready f
 
 ## result
 
-- **The change** (WORK-COMMIT): `pub struct Served` in `guest.rs`, the design's 22 Served fields with their
+- **The change** (f7b76064f): `pub struct Served` in `guest.rs`, the design's 22 Served fields with their
   documentation, `images` and `dll_paths` split from the Load fields their comments shared (`init_order`,
   `image_entry`, `dependency_order`); `Guest` the 23 others and `served`, 24 fields where the card counted 23; the
   constructor building `served`; every use through `.served`, in 9 source and test files; `tests/guest_parts.rs`,
@@ -91,7 +91,7 @@ The 22 fields the design calls Served live in one value, `Guest.served`, ready f
   ran none of them, zsh not splitting an unquoted list; a `while read` loop did.
 - **Expected values:** the build with no warning; no `guest.`, `g.` or `self.` before a Served name left outside
   `served`, by a search after the change; `the_served_part_is_the_designs` and `every_file_is_a_module` passing.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 613 s, kept in `store/gates/passes.tsv` as sprint 302 at f7b76064f with root=a86100da6 and "rust=crates python=0 samples=0", rdeps(signal_report) and rdeps(w2m_vm), 219 tests, base=0ab09750a, Sprint 301's close, the first run's stop at `design_check` before it; multi-vCPU: not run (Python gates not run)
 - **Plant 1,** restored by `cp` and checked by `cmp`: the card's plant, `random` moved back to `Guest`, cannot compile
   with its uses, so the test could not run; the plant marked `random`'s row in the design's table Load, which changes
   what the judge reads. Its first form failed on the count, the message listing the 21 names without naming the one
