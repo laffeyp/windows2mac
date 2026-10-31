@@ -3,10 +3,10 @@
   "blocks": 998222,
   "code_bytes": 112565508,
   "code_region": 125829120,
-  "data_bytes": 37611068,
-  "data_region": 67108864,
-  "file_bytes": 211190784,
-  "key": "24c34b0c4009669580e4869aeb9108835f4eed55da631dacc2c6e4640091c1f9",
+  "file_bytes": 228971368,
+  "file_region": 268435456,
+  "fixups": 2448701,
+  "key": "881650196cd429b7018e7992c25001f80df478d032edb37a26db2fb6387a01fa",
   "refused": {
     "the first instruction does not lift": 6339
   },
@@ -17,6 +17,6 @@
     "after a block at the 64-instruction cap": 101,
     "inside a cached block, at no block's end": 250
   },
-  "seconds": 16.8,
+  "seconds": 17.9,
   "uncovered_reads": 0
 }
