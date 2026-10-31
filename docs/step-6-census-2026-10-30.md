@@ -36,7 +36,7 @@ The Rust host today makes one vCPU in every run: `crates/w2m_vm/src/bin/w2m-vm.r
 
 | # | Item | Where it stands | What shows it met |
 |---|---|---|---|
-| D1 | a memory XCHG not atomic (the sweep of 2026-10-29: "step 6's first card") | `crates/translator/src/rules.rs` 629-644: a load and two plain stores; x86 locks an XCHG with memory implicitly; the locked forms are atomic (`rules.rs` 81-82) | XCHG with memory lowered as an atomic swap, judged on the class runs and by a litmus test of two vCPUs exchanging one word |
+| D1 | a memory XCHG not atomic (the sweep of 2026-10-29: "step 6's first card") | `crates/translator/src/rules.rs` 629-644: a load and two plain stores; x86 locks an XCHG with memory implicitly; the locked forms are atomic because the lowering makes a `_LOCK` iclass's load and store an exclusive pair (`crates/translator/src/lower.rs` 1289-1450; `rules.rs` 80-81 route them), and XCHG's iclass has no `_LOCK` | XCHG with memory lowered as an atomic swap, judged on the class runs and by a litmus test of two vCPUs exchanging one word |
 | D2 | a parked vCPU learns of a ready thread only at the next host serve (Sprint 118) | Deferred 2026-10-18 | the second vCPU busy when a thread is readied, by an SGI or the channel kick the entry names |
 | D3 | the first taking of the runtime word waits 6.8 to 7.5 µs (Sprint 164) | Deferred 2026-10-28, cause not measured | the first taking's wait measured with the page touched first, on two vCPUs |
 | D4 | crosswake with its kick planted away ended where it pins a hang, once (Sprint 184) | Deferred 2026-10-28 | the Rust host's planted no-kick test, counted runs |
