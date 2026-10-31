@@ -34,9 +34,9 @@ which holds nothing; the miss stub releases it before `hvc #1` (Sprint 286).
 |---|---|---|---|
 | `hvc #1`, a dispatch miss | no | the code cursor, the reconstruction and dispatch tables, `bridges` | the host takes the word (Sprint 286), then `served` |
 | `hvc #4`, a slice's end | no | `threads` (`set_budget`, `wake_expired`, `schedule`), `link` | the host takes the word, then `served`; released before any turn wait |
-| `hvc #8`, a host request | yes | `served`'s every part, by request | `served`, under the guest's hold |
+| `hvc #8`, a host request | yes | `served`'s every part, by request | `served`, under the guest's hold; no service waits but a child's KERNEL 33 (below) |
 | `hvc #9`, an import with no service | the bridge's | `thunks` (read), `unimplemented` | the stop's record (below) |
-| `hvc #10`, `#11`, a model step | no | the vCPU's own areas, guest memory | the view; no word |
+| `hvc #10`, `#11`, a model step | no | the vCPU's own areas, guest memory | the view and no word; a form x86 locks, every other vCPU stopped (precondition 8) |
 | `hvc #12`, a schedule hand-over | no, released before it | `threads`, `link` | as `hvc #4` |
 | `hvc #13`, a write to translated code | not established | the host compiler's tables, `code_page` | the host takes the word (`host_take_runtime_word` returns at once if this vCPU holds it), then `served` |
 | `hvc #14`, a fault given back | no | the vCPU's count | none |
@@ -45,6 +45,27 @@ which holds nothing; the miss stub releases it before `hvc #1` (Sprint 286).
 A wait never holds the word or `served`: a process's turn (`hand_over`, `turns.rs`) and a parked vCPU's wait (the
 `sched` condition, census D2) release both first and take them again after, as the host design's "no thread waits ...
 for a lock held by another thread's service" asks.
+
+**The host requests that can wait** (Sprint 295, reviewer-3's Low 2 at 294). A request's service runs while the guest
+holds the word, and the host cannot let it go: the guest's C may be in the middle of its own state. Read from the
+code: a pipe read on an empty pipe answers at once, its second word 1 or 2, "would block", and the guest waits in its
+own code (`kernel.rs` 270-272); the file bridge's one loop names a drive at its creation (`file_bridge.rs` 161), no
+wait. One service waits: a child process's KERNEL 33 request, which the supervisor serves in its turn
+(`host_request.rs` `child_request`, `turns.rs` 264, `hand_back(Message::Request, …)`), the child's word held by its
+guest throughout. So **a child process keeps one vCPU** until KERNEL 33 waits with no guest lock held, the host
+design's change 2 ("no guest lock across `hvc #8`"); the supervisor's process may run on two, its own turn waits
+letting the word go (`turn`, Sprint 294).
+
+**A model step of a locked form** (Sprint 295, reviewer-3's Medium 1 at 294). x86 makes a `LOCK`-prefixed form and a
+memory XCHG atomic at any alignment; the VM runs an aligned one as an exclusive pair, and the model steps a misaligned
+one as a load and a store (`hvc #11`; Deferred, Sprint 272). The word would not exclude the aligned pair, which takes
+none. So the step of such a form runs with every other vCPU stopped: the stepping thread calls `hv_vcpus_exit` on the
+others and waits until each has left `hv_vcpu_run` and said so before the step's load, since `hv_vcpus_exit` only
+asks; each resumes after the step's store. An exclusive pair interrupted by the stop must fail its store on resume:
+guest memory is Inner Shareable (`PAGE_ATTRIBUTES`, `lib.rs` 75), so its exclusive accesses are checked against a
+global monitor, and an exclusive store fails "if the check fails on any monitor" (Arm, "ARMv8-A Synchronization
+primitives"); that a plain store from another core clears the mark is the race test's to show, a `clrex` on re-entry
+after a stop the fallback.
 
 ## The guest's parts
 
@@ -123,7 +144,7 @@ vCPU's own, merged when every thread has ended; `out.bridged`, `blocks` and `tra
 
 ## The second vCPU's preconditions
 
-The step 6 sequence Decision's seven, each with where it sits:
+The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each with where it sits:
 
 1. The reconstruction count read Acquire: met (Sprint 282).
 2. **FEAT_LSE2**: the run refuses a second vCPU unless `hw.optional.arm.FEAT_LSE2` reads 1, the dispatch pair's single
@@ -139,6 +160,8 @@ The step 6 sequence Decision's seven, each with where it sits:
 5. Every dispatch writer stores a pair whole: met (Sprint 284).
 6. The host's miss service under the word: met (Sprint 286).
 7. The lock order: the word outermost (the guest-memory design's choice 6); `served` inside it, here.
+8. **A model step of a form x86 locks**, run with every other vCPU stopped (above, "A model step of a locked form"),
+   the stop complete before the step's load; the batch run counts such steps.
 
 ## The cards
 
@@ -151,9 +174,13 @@ The step 6 sequence Decision's seven, each with where it sits:
 3. **Break-before-make** for a block split, its count on the batch run's record. Judge: a split's three writes in
    order, by a test that records them; the batch run as held.
 4. **The threads and the second vCPU.** A thread per vCPU, the stop, the kick, the merged outcome, FEAT_LSE2's
-   refusal, the diagnostics refused by name. Judge: `qpc` and `sleeper` on two vCPUs ending as on one; the race test
-   of the guest-memory design's choice 6, a vCPU holding the word across a host request while the other misses, a step
-   bound failing a hang, with its plant, `served` held across the take.
+   refusal, the diagnostics refused by name, a child process held to one vCPU, the stop of every other vCPU for a model
+   step of a locked form, and a stop flag the take's spin reads, so a thread waiting for a word a cancelled vCPU's guest
+   held ends at the stop (reviewer-3's Low 1 at 294). Judge: `qpc` and `sleeper` on two vCPUs ending as on one; the race
+   test of the guest-memory design's choice 6, a vCPU holding the word across a host request while the other misses, a
+   step bound failing a hang, with its plant, `served` held across the take; a misaligned XCHG raced against an aligned
+   one through the run loop, the sum of the exchanged values conserved, with its plant, a step without the stop; a stop
+   while a guest holds the word, the run ending within its bound.
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 
@@ -197,3 +224,8 @@ after G4.
   instead, before any block is valid.
 - G4's guests do not end on two vCPUs in its card's count of runs with `served` uncontended: the cause is measured
   before any lock is split.
+- The batch run makes more than one model step of a locked form a second: stopping every vCPU for each costs more
+  than a lock of its own, and the misaligned locked forms get one, taken by the model step and by the VM's exclusive
+  pair for the same address range.
+- A host request other than KERNEL 33 is found to wait: it joins "The host requests that can wait", and its process
+  keeps one vCPU until it does not.
