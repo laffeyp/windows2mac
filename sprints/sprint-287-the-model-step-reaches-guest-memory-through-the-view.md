@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 287
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -89,4 +89,22 @@ as held.
 
 ## result
 
-- **The gates:** GATES-LINE
+- **The access** (714c6f2db): `GuestModelMemory` takes `&Guest` and reads and writes through `Guest::memory_view`;
+  `model_step` reads the lazy flags, MXCSR, DF, FCW, the YMM high halves and the x87 state through the view before the
+  step and writes them, and at a fault the save area, through it after; the slice helpers `read_u64` and `write_u64`
+  give way to the view's and one `array` helper.
+- **The count:** 40 slice calls in `crates/w2m_vm/src/`, from 44; `model_step.rs` 0.
+- **A count wider than its words:** `slice_calls.rs` matches `as_slice()` and `as_mut_slice()` by text, and its comment
+  and census D7 called every match a slice of guest memory. Looked up at this card: 9 of the 40 slice a `Vec`, an
+  array or a constant (`bin/w2m-vm.rs` 299, 305, 327, `bin/class_judge.rs` 191, `bin/ledger_parting.rs` 18,
+  `kernel.rs` 296, `modules.rs` 303, `batch_stop.rs` 80, `cache_file.rs` 424); 31 reach guest memory, each on a
+  receiver named `memory`. Five files on the census's list hold no guest slice. The match stays wide, since a guest
+  slice under another name would pass a narrower one; the comment and the census row name the 9.
+- **Expected values:** the model-steps run and the case runner's classes as held, in the pre-commit run (157 tests,
+  the batch-run step first, `W2M_REQUIRE_CASE_RUNS=1`).
+- **The gates:** `scripts/gates.sh` exit 0 in 755 s, kept in `store/gates/passes.tsv` as sprint 287 at 714c6f2db with root=f77778f72 and "rust=crates python=0 samples=0", rdeps(w2m_vm), 157 tests, base=c98898a17, Sprint 286's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: `GuestModelMemory::read` one byte past its address;
+  `model_steps_runs_through_the_model_as_the_python_host` failed at `run_loop.rs` 661, "the output differs from the
+  Python host's", left "6df648a15c8ca4a2", right "48743d4d4fd79694"; the case runner's test failed, "208 class rows
+  differ from store/case_runner/expected-by-class.tsv", ADDSD, ADDSS and COMISD first.
+- **Plant 2,** restored by `cp` and checked by `cmp`: the YMM high halves written back one byte past their offset; the case runner's test failed at `case_runner.rs` 290, "run 38117654018: 400 difference classes", "run 38118493713: 833 difference classes".
