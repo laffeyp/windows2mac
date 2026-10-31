@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 268
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -93,3 +93,24 @@ was handed placed; the Decision closed.
 - [x] One concept: step 5's close.
 
 ## result
+
+- **The close** (a627f78e6): `docs/step-5-close-2026-10-30.md` holds the gate item by item, each with its records and
+  sprint: the batch run conforming, "compiled in UnityPlayer.dll" 149,308 to none and "compiled" 274,837 to 125,515
+  (257), the host's install 3.0% faster (262), card 5's compile time 678 to 694 ms (263), the most compiles in a frame
+  of instructions 19,201 against 54,996 (266).
+- **The figures read back** from their records by `grep` on each `events-` file: 257's 274,837 and 149,308 against
+  125,515 and none; 262's rates 3.065, 3.078 and 3.117 billion instructions a second uncached, 3.174, 3.182 and 3.185
+  cached; 263's compile times and 266's counts as read at those sprints.
+- **Installs weighed** (reviewer-3's Low 1 at 266): an install 0.63 to 0.70 µs by subtraction on Sprint 263's three
+  adjacent timed pairs, against 4.67 to 4.72 µs a compile, the cached run's compiles taken at the uncached mean; the
+  cached frame's work, both peaks in one frame, 111 to 114 ms against 257 to 259 without the cache, 56% less.
+- **The window's length** (Low 2): the design says a fixed 53,500,000 instructions spans 20.2 ms at 2.646 billion
+  instructions a second and so holds at least a real frame's compiles; the review's "shorter" was "longer".
+- **The census rows:** 2 and 11 untouched by step 5, re-visited at steps 7 and 8; 13 judged against the C compiler,
+  not Windows (252, 254); 15c at step 7. Deferred (Sprint 242) annotated for each; the Decision "Sequence for step 5"
+  closed, its 249 note "mono-2.0-bdwgc.dll after it" withdrawn with its ground.
+- **The check:** `census.rs` holds the document's paths as the census's.
+- **The gates:** `scripts/gates.sh` exit 0 in 287 s on a627f78e6, copied from `store/gates/passes.tsv`; the timing stage 750 ns an exit at load 8.95.
+- **Plant 1,** restored by `cp` and checked by `cmp`: `store/runs/w2m-vm-game-1793403313000000000` misspelled
+  `…1793403331…`; the test failed, "docs/step-5-close-2026-10-30.md names 1 path(s) never in the tree:
+  [\"store/runs/w2m-vm-game-1793403331000000000\"]".
