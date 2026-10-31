@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 283
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -87,3 +87,22 @@ entries, and `vm_compiled` holds no slice.
 - [x] One concept: one module's access moved, with the writer half of the count's ordering.
 
 ## result
+
+- **The access** (b3162737f): `compile.rs`'s helpers take the view; `code_at`, `open_trace`, `place` and the rest
+  reach guest memory through `guest::memory_view(&guest.memory)`; `page_set_add`, `page_set_remove` and
+  `installed_in_vm` take the view; a new `change_descriptor` changes a descriptor's access bits by one atomic load and
+  a Release store, at its four sites (`use_cache`, `protect_code`, `code_written`, `stop_cache`).
+- **The count's Release:** `place` stores the reconstruction count Release after its entries, the writer's half of
+  282's Acquire; the design's row says so.
+- **`vm_compiled`** and `vm_compiled_waiting` take the view; `run.rs`' slice helpers, left with no caller, removed.
+- **The count:** 55 slice calls in `crates/w2m_vm/src/`, from 68; `compile.rs` 0, `run.rs` 2 (the exit ledger's).
+  Views built from a slice in `run.rs` 2, both in its tests, not the card's 1: the drain's test and the lookup's.
+- **The gates:** `scripts/gates.sh` exit 0 in 693 s, kept in `store/gates/passes.tsv` as sprint 283 at b3162737f with root=2eca8bd16 and "rust=crates python=0 samples=0", rdeps(w2m_vm), 156 tests, base=dbd0356d1, Sprint 282's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: `place` writing a block's words at the cursor plus 4;
+  `qpc_runs_past_its_first_decline_compiling_as_the_python_host` failed, "the translations in compile order (start,
+  end, discovery)", three blocks where eight are held.
+- **Plant 2,** restored by `cp` and checked by `cmp`: `stop_cache` writing the install stop word 8 bytes past
+  `VMC_INSTALL_STOP`; `qpc_runs_with_its_blocks_installed_inside_the_vm` failed earlier than the card said, "the
+  installer stopped otherwise: Exception { syndrome: 1509949454 … } left: Some(14) right: Some(85)": the word 8
+  bytes on is `VMC_INSTALLER`, 0x308, the installer's address (`monitor_code.rs` 46-47), which the plant set to 1,
+  so the install broke before the write rule's assertion was reached.
