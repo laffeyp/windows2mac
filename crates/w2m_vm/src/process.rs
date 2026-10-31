@@ -153,6 +153,12 @@ pub struct Areas<'a> {
 /// a slice at load, while no vCPU runs, and `ProcessView` at a run's LoadLibrary, while another may.
 pub trait ProcessBytes {
     fn put(&mut self, off: u64, bytes: &[u8]);
+
+    /// A word that makes earlier writes reachable, a loader list's link or `PEB.Ldr` (Sprint 291): a plain write
+    /// where no vCPU runs, a Release store where one may.
+    fn publish(&mut self, off: u64, v: u64) {
+        self.put(off, &v.to_le_bytes());
+    }
 }
 
 impl ProcessBytes for [u8] {
@@ -181,6 +187,17 @@ impl ProcessBytes for ProcessView<'_> {
             bytes.len()
         );
         self.0.write(guest_runtime::layout::MONITOR_SIZE + off, bytes);
+    }
+
+    /// A Release store of the aligned word: the guest, under EnTSO, sees every earlier write once it reads the word.
+    fn publish(&mut self, off: u64, v: u64) {
+        assert!(
+            off + 8 <= PROCESS_SIZE,
+            "a word at 0x{off:x}, past the process area's 0x{PROCESS_SIZE:x}"
+        );
+        self.0
+            .atomic_u64(guest_runtime::layout::MONITOR_SIZE + off)
+            .store(v, std::sync::atomic::Ordering::Release);
     }
 }
 
@@ -635,21 +652,28 @@ pub fn write_loader_data<M: ProcessBytes + ?Sized>(
             strings += (raw.len() as u64 + 2 + 7) & !7;
         }
     }
+    d(process, base, 0x58);
+    d(process, base + 4, 1);
+    // each list's links written so every state between two writes is a whole list, for a thread on another vCPU
+    // walking PEB->Ldr while a LoadLibrary is served (Sprint 291; reviewer-3's Low 1 at 290): a node's link written
+    // only after the node it names has its own, the Flinks from the tail back and the Blinks from the first entry on,
+    // the head's last in each; a link rewritten with the value it holds changes nothing a walker sees
     let mut link = |head: u64, link: u64, order: &[Entry]| {
         let nodes: Vec<u64> = std::iter::once(va0 + head)
             .chain(order.iter().map(|o| at[&o.0] + link))
             .collect();
-        for (i, node) in nodes.iter().enumerate() {
-            let off = base + (node - va0);
-            q(process, off, nodes[(i + 1) % nodes.len()]);
-            q(process, off + 8, nodes[(i + nodes.len() - 1) % nodes.len()]);
+        let n = nodes.len();
+        let off = |i: usize| base + (nodes[i] - va0);
+        for i in (0..n).rev() {
+            process.publish(off(i), nodes[(i + 1) % n]);
+        }
+        for i in (1..n).chain([0]) {
+            process.publish(off(i) + 8, nodes[(i + n - 1) % n]);
         }
     };
     link(0x10, 0x00, &entries);
     link(0x20, 0x10, &entries);
     link(0x30, 0x20, &init);
-    d(process, base, 0x58);
-    d(process, base + 4, 1);
-    q(process, PEB_OFF + 0x18, va0);
+    process.publish(PEB_OFF + 0x18, va0);
     Ok(())
 }
