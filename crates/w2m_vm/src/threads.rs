@@ -136,6 +136,7 @@ fn arena_alloc(guest: &mut Guest, address: u64, size: u64, kind: u32) -> Result<
         layout: &guest.layout,
     };
     guest
+        .served
         .arena
         .alloc(&mut view, address, size, kind, PAGE_READWRITE)
         .map_err(|e| e.0)
@@ -149,7 +150,13 @@ pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
     if n == RUN_THREADS {
         return Err(format!("more than {RUN_THREADS} threads in one process"));
     }
-    if guest.threads.keys().next_back().is_some_and(|&last| thread.tid <= last) {
+    if guest
+        .served
+        .threads
+        .keys()
+        .next_back()
+        .is_some_and(|&last| thread.tid <= last)
+    {
         return Err(format!(
             "thread id {} below an earlier thread's: the run table's order is the ids'",
             thread.tid
@@ -168,7 +175,7 @@ pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
         write_u64(mem, MONITOR_DATA + CURRENT_ENTRY, MONITOR_VA + at);
         write_u64(mem, at + E_VCPU, 1);
     }
-    guest.threads.insert(thread.tid, Thread { index: n, ..thread });
+    guest.served.threads.insert(thread.tid, Thread { index: n, ..thread });
     Ok(n)
 }
 
@@ -188,7 +195,7 @@ pub fn current_tid(guest: &Guest) -> u64 {
 /// entry runs (load order, then the DLLs loaded after the start), its TLS callbacks and then its DllMain; the program's
 /// TLS callbacks last.
 pub fn thread_callbacks(guest: &Guest) -> Vec<(u64, u64)> {
-    let images = &guest.images;
+    let images = &guest.served.images;
     let mut dlls: Vec<usize> = guest.init_order.clone();
     dlls.extend((1..images.len()).filter(|i| !guest.init_order.contains(i)));
     let mut out = Vec::new();
@@ -215,15 +222,15 @@ pub fn thread_callbacks(guest: &Guest) -> Vec<(u64, u64)> {
 /// block, copied from the templates as the loader lays them out for the first thread; an array even when no module has
 /// static TLS.
 pub fn thread_static_tls(guest: &mut Guest) -> Result<u64, String> {
-    if guest.images.is_empty() {
+    if guest.served.images.is_empty() {
         return Ok(0);
     }
     let mut blocks: Vec<Option<Vec<u8>>> = Vec::new();
     let modules: Vec<usize> = std::iter::once(0)
-        .chain((1..guest.images.len()).filter(|&i| guest.images[i].pe.tls.is_some()))
+        .chain((1..guest.served.images.len()).filter(|&i| guest.served.images[i].pe.tls.is_some()))
         .collect();
     for k in modules {
-        let image = &guest.images[k];
+        let image = &guest.served.images[k];
         let Some(tls) = &image.pe.tls else {
             blocks.push(None); // the program's slot, when it has no TLS
             continue;
@@ -267,7 +274,7 @@ pub fn ended(guest: &Guest, index: u64) -> bool {
 pub fn late_static_tls(guest: &mut Guest, pe: &pe_image::PeImage, base: u64) -> Result<(), ModuleError> {
     use ModuleError::{Failed, NotServed};
     let Some(tls) = &pe.tls else { return Ok(()) };
-    let index = 1 + guest.images[1..].iter().filter(|i| i.pe.tls.is_some()).count() as u64;
+    let index = 1 + guest.served.images[1..].iter().filter(|i| i.pe.tls.is_some()).count() as u64;
     if index >= TLS_SLOTS as u64 {
         return Err(NotServed(format!(
             "static TLS index {index}: each thread's array holds {TLS_SLOTS}"
@@ -286,6 +293,7 @@ pub fn late_static_tls(guest: &mut Guest, pe: &pe_image::PeImage, base: u64) -> 
     let mut block = read_guest(guest, start, end - start).map_err(Failed)?;
     block.resize(block.len() + tls.zero_fill as usize, 0);
     let tebs: Vec<u64> = guest
+        .served
         .threads
         .values()
         .filter(|t| !ended(guest, t.index))
@@ -366,6 +374,7 @@ pub fn exit_stub(guest: &mut Guest) -> Result<u64, String> {
 pub fn end_thread(guest: &mut Guest, code: u32) -> Result<(), String> {
     let current = current_tid(guest);
     let t = guest
+        .served
         .threads
         .get_mut(&current)
         .ok_or_else(|| format!("thread {current} ends, and the host holds no such thread"))?;
@@ -376,6 +385,7 @@ pub fn end_thread(guest: &mut Guest, code: u32) -> Result<(), String> {
 /// `_thread_request`'s THREAD_EXIT_CODE (3206-3211): thread `tid`'s exit code, STILL_ACTIVE while it runs.
 pub fn exit_code(guest: &Guest, tid: u32) -> Result<u32, String> {
     guest
+        .served
         .threads
         .get(&u64::from(tid))
         .map(|t| t.exit_code)
@@ -391,6 +401,7 @@ pub fn exit_code(guest: &Guest, tid: u32) -> Result<u32, String> {
 pub fn suspend(guest: &mut Guest, tid: u32, resume: bool) -> Result<u64, String> {
     let sub = if resume { 5 } else { 4 };
     let index = guest
+        .served
         .threads
         .get(&u64::from(tid))
         .map(|t| t.index)
@@ -433,6 +444,7 @@ const SELECTORS: [(usize, u16); 6] = [(56, 0x33), (58, 0x2B), (60, 0x2B), (62, 0
 pub fn thread_context(guest: &mut Guest, tid: u32, buffer: u64) -> Result<u64, String> {
     use crate::cases::{DF_BYTE, FLAG_BIT, FLAG_REG};
     let t = guest
+        .served
         .threads
         .get(&u64::from(tid))
         .ok_or_else(|| format!("a thread request (6) for thread id {tid}, which w2m did not create"))?;
@@ -469,7 +481,7 @@ pub fn thread_context(guest: &mut Guest, tid: u32, buffer: u64) -> Result<u64, S
     if defined('A') && (af_a ^ af_b ^ af_r) & 0x10 != 0 {
         eflags |= 1 << 4;
     }
-    let ntdll = guest.process.ntdll;
+    let ntdll = guest.served.process.ntdll;
     let rip = if read_u64(mem, at + E_STATUS) == BLOCKED && ntdll != 0 {
         ntdll + 0x800
     } else {
@@ -579,6 +591,7 @@ pub fn wake_expired(guest: &mut Guest) {
     let now = counter_now(guest);
     let mem = crate::guest::memory_view(&guest.memory);
     let expired: Vec<u64> = guest
+        .served
         .threads
         .values()
         .filter(|t| {
@@ -598,6 +611,7 @@ pub fn turn_state(guest: &Guest) -> crate::turns::State {
     let mem = crate::guest::memory_view(&guest.memory);
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
     let deadline = guest
+        .served
         .threads
         .values()
         .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0)
@@ -607,12 +621,13 @@ pub fn turn_state(guest: &Guest) -> crate::turns::State {
     crate::turns::State {
         clock: counter_now(guest),
         ready: guest
+            .served
             .threads
             .values()
             .any(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0),
         timed: deadline != u64::MAX,
         deadline,
-        blocked: guest.threads.values().any(|t| word(t, E_STATUS) == BLOCKED),
+        blocked: guest.served.threads.values().any(|t| word(t, E_STATUS) == BLOCKED),
     }
 }
 
@@ -626,6 +641,7 @@ pub fn warp_to_deadline(guest: &mut Guest) -> bool {
     }
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
     let first = guest
+        .served
         .threads
         .values()
         .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
@@ -652,11 +668,13 @@ pub fn resume_idle(guest: &mut Guest, x: &mut [u64; 31], cur_tid: u64, bits: u32
     let mem = crate::guest::memory_view(&guest.memory);
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
     if !guest
+        .served
         .threads
         .values()
         .any(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0)
     {
         let timed = guest
+            .served
             .threads
             .values()
             .find(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
@@ -670,6 +688,7 @@ pub fn resume_idle(guest: &mut Guest, x: &mut [u64; 31], cur_tid: u64, bits: u32
         }
     }
     let cur = guest
+        .served
         .threads
         .get(&cur_tid)
         .ok_or_else(|| format!("thread {cur_tid} went idle, and the host holds no such thread"))?
@@ -693,6 +712,7 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
     );
     let current = current_tid(guest);
     let cur = guest
+        .served
         .threads
         .get(&current)
         .ok_or_else(|| format!("thread {current} hands over, and the host holds no such thread"))?
@@ -702,6 +722,7 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
     if bits & SCHEDULE_END != 0 {
         set_status(guest, cur.index, ENDED);
         let blocked: Vec<u64> = guest
+            .served
             .threads
             .values()
             .filter(|t| word(guest, t, E_STATUS) == BLOCKED)
@@ -718,7 +739,7 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
             deadline,
         );
     }
-    if guest.threads.values().all(|t| word(guest, t, E_STATUS) == ENDED) {
+    if guest.served.threads.values().all(|t| word(guest, t, E_STATUS) == ENDED) {
         return Ok(Switch::Ended(cur.exit_code)); // the last thread ended: the process ends with it
     }
     switch(guest, x, &cur, bits)
@@ -758,14 +779,14 @@ fn timed_waiter(guest: &mut Guest, timed: &[Thread], pause: std::time::Duration)
 fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Result<Switch, String> {
     let mem = crate::guest::memory_view(&guest.memory);
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
-    let order: Vec<&Thread> = guest.threads.values().collect();
+    let order: Vec<&Thread> = guest.served.threads.values().collect();
     let i = order.iter().position(|t| t.tid == cur.tid).unwrap();
     let rotation = order[i + 1..].iter().chain(order[..=i].iter());
     let next = rotation
         .clone()
         .find(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0)
         .map(|t| (*t).clone());
-    if next.is_none() && guest.link.is_some() {
+    if next.is_none() && guest.served.link.is_some() {
         return Ok(Switch::Idle);
     }
     let next = match next {
@@ -865,12 +886,12 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
 /// The frozen host checks the last-page bound inside its loop, so a probe that reaches it commits pages and returns 0
 /// with StackLimit unmoved; here the bound is checked first and nothing changes (the user's rule of 2026-10-29).
 pub fn stack_grow(guest: &mut Guest, tid: u64, address: u64, probe: bool) -> Result<u64, String> {
-    let Some(thread) = guest.threads.get(&tid) else {
+    let Some(thread) = guest.served.threads.get(&tid) else {
         return Ok(0);
     };
     let (dealloc, _, top) = thread.stack;
     let teb = thread.teb;
-    if !guest.arena.reservations.contains_key(&dealloc) {
+    if !guest.served.arena.reservations.contains_key(&dealloc) {
         return Ok(0);
     }
     let mut limit = u64::from_le_bytes(read_guest(guest, teb + 0x10, 8)?.try_into().unwrap());
@@ -888,7 +909,7 @@ pub fn stack_grow(guest: &mut Guest, tid: u64, address: u64, probe: bool) -> Res
             mem: crate::guest::memory_view(&guest.memory),
             layout: &guest.layout,
         };
-        guest.arena.commit(
+        guest.served.arena.commit(
             &mut view as &mut dyn GuestPages,
             dealloc,
             new,
@@ -900,7 +921,7 @@ pub fn stack_grow(guest: &mut Guest, tid: u64, address: u64, probe: bool) -> Res
             mem: crate::guest::memory_view(&guest.memory),
             layout: &guest.layout,
         };
-        guest.arena.commit(
+        guest.served.arena.commit(
             &mut view as &mut dyn GuestPages,
             dealloc,
             new - guard,
@@ -910,7 +931,7 @@ pub fn stack_grow(guest: &mut Guest, tid: u64, address: u64, probe: bool) -> Res
         limit = new;
     }
     write_guest(guest, teb + 0x10, &limit.to_le_bytes())?;
-    if let Some(t) = guest.threads.get_mut(&tid) {
+    if let Some(t) = guest.served.threads.get_mut(&tid) {
         t.stack = (dealloc, limit, top);
     }
     Ok(1)
@@ -925,8 +946,12 @@ pub fn create_thread(
     flags: u32,
     stack_size: u64,
 ) -> Result<u64, String> {
-    let tid = guest.threads.keys().next_back().copied().unwrap_or(0) + 4;
-    let program = guest.images.first().map(|i| (i.pe.stack_reserve, i.pe.stack_commit));
+    let tid = guest.served.threads.keys().next_back().copied().unwrap_or(0) + 4;
+    let program = guest
+        .served
+        .images
+        .first()
+        .map(|i| (i.pe.stack_reserve, i.pe.stack_commit));
     // STACK_SIZE_PARAM_IS_A_RESERVATION: the size asked for, smaller than the image's or not; otherwise the image's
     // SizeOfStackReserve
     let reserve = if flags & STACK_SIZE_PARAM_IS_A_RESERVATION != 0 && stack_size != 0 {
@@ -961,7 +986,7 @@ pub fn create_thread(
             mem: crate::guest::memory_view(&guest.memory),
             layout: &guest.layout,
         };
-        guest.arena.commit(
+        guest.served.arena.commit(
             &mut view as &mut dyn GuestPages,
             dealloc,
             limit - STACK_GUARD_PAGES * PAGE,
@@ -973,7 +998,7 @@ pub fn create_thread(
     let teb = alloc(guest, 0, 0x4000, MEM_COMMIT | MEM_RESERVE, "a thread's TEB")?; // TEB, then TlsExpansionSlots
     let static_tls = thread_static_tls(guest)?;
     let peb = PROCESS_VA + PEB_OFF;
-    let process_id = guest.process.process_id;
+    let process_id = guest.served.process.process_id;
     for (off, value) in [
         (0x08, top),
         (0x10, limit),
@@ -1041,7 +1066,7 @@ pub fn create_thread(
     put(mem, vslot, &[0u8; 256]);
     write_u64(mem, vslot + 256, fpcr_for(0x1F80));
     write_u64(mem, vslot + 264, 0);
-    guest.arena.stacks.push((dealloc, limit, top));
+    guest.served.arena.stacks.push((dealloc, limit, top));
     set_budget(guest); // two threads: time slices from now on
     Ok(tid)
 }
@@ -1050,7 +1075,7 @@ pub fn create_thread(
 /// time slice.
 pub fn set_budget(guest: &mut Guest) {
     // a process of a machine shares the vCPU's time with the others too (Sprint 197)
-    let shared = guest.threads.len() > 1 || guest.link.is_some();
+    let shared = guest.served.threads.len() > 1 || guest.served.link.is_some();
     let mem = crate::guest::memory_view(&guest.memory);
     let (executed, max_steps) = (read_u64(mem, MONITOR_DATA), read_u64(mem, MONITOR_DATA + RUN_END));
     let limit = if shared {
@@ -1067,18 +1092,24 @@ pub fn set_budget(guest: &mut Guest) {
 pub fn slice_until(guest: &Guest) -> u64 {
     // another process ready or waiting with a deadline needs the host at each slice's end (`_other_process_due`,
     // 2750-2754; Sprint 197)
-    if guest.link.as_ref().is_some_and(|l| l.others_due(counter_now(guest))) {
+    if guest
+        .served
+        .link
+        .as_ref()
+        .is_some_and(|l| l.others_due(counter_now(guest)))
+    {
         return 0;
     }
     let mem = crate::guest::memory_view(&guest.memory);
     let current = current_tid(guest);
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
-    if let Some(cur) = guest.threads.get(&current)
+    if let Some(cur) = guest.served.threads.get(&current)
         && word(cur, E_SUSPEND) != 0
     {
         return 0;
     }
     let others: Vec<&Thread> = guest
+        .served
         .threads
         .values()
         .filter(|t| t.tid != current && word(t, E_SUSPEND) == 0)
@@ -1155,12 +1186,12 @@ mod tests {
         use super::{ENDED, READY, STILL_ACTIVE, ended, set_status};
 
         let (mut g, tid) = guest_with_a_thread();
-        let index = g.threads[&tid].index;
+        let index = g.served.threads[&tid].index;
         assert!(!ended(&g, index));
-        g.threads.get_mut(&tid).unwrap().exit_code = 7;
+        g.served.threads.get_mut(&tid).unwrap().exit_code = 7;
         assert!(!ended(&g, index), "THREAD_END's code set, the thread still running");
         set_status(&mut g, index, ENDED);
-        g.threads.get_mut(&tid).unwrap().exit_code = STILL_ACTIVE;
+        g.served.threads.get_mut(&tid).unwrap().exit_code = STILL_ACTIVE;
         assert!(
             ended(&g, index),
             "ExitThread(259): ended, its code reading STILL_ACTIVE"
@@ -1180,7 +1211,7 @@ mod tests {
         use std::time::Duration;
 
         let (mut g, _) = guest_with_a_thread();
-        let mut ts: Vec<super::Thread> = g.threads.values().cloned().collect();
+        let mut ts: Vec<super::Thread> = g.served.threads.values().cloned().collect();
         ts.sort_by_key(|t| t.tid);
         let (a, b) = (ts[ts.len() - 2].clone(), ts[ts.len() - 1].clone());
         let set = |g: &mut crate::guest::Guest, da: u64, db: u64| {
@@ -1247,11 +1278,11 @@ mod tests {
         let stop = unimplemented(&mut g, 2, 7);
         let service = format!("{} argument form 0x7", names[1]);
         assert!(matches!(&stop, HostError::NotServed(m) if *m == service), "{stop:?}");
-        assert_eq!(g.unimplemented, Some((service, 0x1_4000_1234)));
+        assert_eq!(g.served.unimplemented, Some((service, 0x1_4000_1234)));
         g.memory.as_mut_slice()[slot..slot + 8].copy_from_slice(&0x10u64.to_le_bytes());
-        g.unimplemented = None;
+        g.served.unimplemented = None;
         assert!(matches!(unimplemented(&mut g, 2, 7), HostError::Failed(_)));
-        assert_eq!(g.unimplemented, None);
+        assert_eq!(g.served.unimplemented, None);
         let (a, b) = (super::counter_now(&g), super::counter_now(&g));
         assert!(a > 0 && b >= a, "the host's monotonic count: {a}, then {b}");
     }
@@ -1265,7 +1296,7 @@ mod tests {
         use crate::modules::ModuleError;
 
         let (mut g, _) = guest_with_a_thread();
-        let mut pe = g.images[0].pe.clone();
+        let mut pe = g.served.images[0].pe.clone();
         pe.tls = Some(pe_image::Tls {
             start: pe.image_base,
             end: pe.image_base,
@@ -1273,7 +1304,7 @@ mod tests {
             zero_fill: 0,
         });
         for n in 0..pe_loader::TLS_SLOTS - 1 {
-            g.images.push(pe_loader::Image {
+            g.served.images.push(pe_loader::Image {
                 name: format!("late{n}.dll"),
                 pe: pe.clone(),
                 base: 0,
@@ -1306,7 +1337,7 @@ mod tests {
         assert_eq!(suspend(&mut g, t, true), Ok(1));
         assert_eq!(suspend(&mut g, t, true), Ok(0), "a thread not suspended");
         // the thread's saved state: RAX, RSP, RIP, CF set, every flag defined, lazy PF and AF, DF
-        let at = entry(g.threads[&tid].index);
+        let at = entry(g.served.threads[&tid].index);
         let mem = g.memory_view();
         write_u64(mem, at + E_X, 0x1111);
         write_u64(mem, at + E_X + 8 * 4, 0x7_0000_1000);
@@ -1355,8 +1386,8 @@ mod tests {
         use virtual_memory::{MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE};
 
         let (mut g, tid) = guest_with_a_thread();
-        let (dealloc, limit, _) = g.threads[&tid].stack;
-        let teb = g.threads[&tid].teb;
+        let (dealloc, limit, _) = g.served.threads[&tid].stack;
+        let teb = g.served.threads[&tid].teb;
         let stack_limit = |g: &Guest| {
             let at = g.layout.offset(teb + 0x10).unwrap() as usize;
             u64::from_le_bytes(g.memory.as_slice()[at..at + 8].try_into().unwrap())
@@ -1366,7 +1397,7 @@ mod tests {
                 mem: crate::guest::memory_view(&g.memory),
                 layout: &g.layout,
             };
-            let info = g.arena.query(&view, va).unwrap();
+            let info = g.served.arena.query(&view, va).unwrap();
             (info.state, info.protect)
         };
         let guarded = (MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD);
@@ -1376,7 +1407,7 @@ mod tests {
         assert_eq!(stack_grow(&mut g, tid, limit - PAGE + 8, false), Ok(1));
         let one = limit - PAGE;
         assert_eq!(stack_limit(&g), one, "default.grow moved_1");
-        assert_eq!(g.threads[&tid].stack.1, one);
+        assert_eq!(g.served.threads[&tid].stack.1, one);
         assert_eq!(query(&mut g, one), (MEM_COMMIT, PAGE_READWRITE), "default.grown.limit");
         for k in 1..=3 {
             assert_eq!(query(&mut g, one - k * PAGE), guarded, "default.grown.limit-{k}p");

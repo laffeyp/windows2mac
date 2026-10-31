@@ -589,20 +589,20 @@ fn hand_over(guest: &mut Guest, message: crate::turns::Message) -> Result<(), St
     use crate::turns::{Back, Link};
     let mut state = crate::threads::turn_state(guest);
     state.clock = crate::threads::counter_now(guest);
-    let (wake, machine, processes) = match guest.link.take() {
+    let (wake, machine, processes) = match guest.served.link.take() {
         Some(Link::Supervisor(mut s)) => {
-            let mut objects = std::mem::take(&mut guest.kernel);
+            let mut objects = std::mem::take(&mut guest.served.kernel);
             let back = s.hand_over(&mut objects, state);
             let processes = 1 + s.children.len();
-            guest.kernel = objects;
-            guest.link = Some(Link::Supervisor(s));
+            guest.served.kernel = objects;
+            guest.served.link = Some(Link::Supervisor(s));
             match back? {
                 Back::Run { wake, machine } | Back::Timed { wake, machine } => (wake, machine, processes),
             }
         }
         Some(Link::Child(c)) => {
             let (wake, machine) = c.yield_turn(message, state);
-            guest.link = Some(Link::Child(c));
+            guest.served.link = Some(Link::Child(c));
             (wake, machine, 2)
         }
         None => (false, 0, 1),
@@ -637,7 +637,7 @@ fn run(
         tid: guest.start.tid,
         index: 0,
         teb: PROCESS_VA + TEB_OFF,
-        stack: guest.process.stack,
+        stack: guest.served.process.stack,
         exit_code: STILL_ACTIVE,
         parent: 0,
         start: loaded.entry,
@@ -669,7 +669,7 @@ fn run(
     }
     {
         // `_set_budget`: one thread, the run's limit; a child shares the vCPU from its first instruction (Sprint 197)
-        let shared = guest.link.is_some();
+        let shared = guest.served.link.is_some();
         let mem = guest.memory_view();
         mem.write_u64(
             md + 8,
@@ -712,6 +712,7 @@ fn run(
             mem.write_u64(md + RUN_END, max_steps);
             // the VM switches threads itself unless another process is due (Sprint 197)
             let others_due = guest
+                .served
                 .link
                 .as_ref()
                 .is_some_and(|l| l.others_due(crate::threads::counter_now(guest)));
@@ -863,7 +864,7 @@ fn run(
                 break Stop::HostRequest { op, pc, why };
             }
             // the requests the Rust host serves (`_host_request`, 5244-5256): on at the hvc's return, or the end
-            let threads = guest.threads.len();
+            let threads = guest.served.threads.len();
             let (sub, a0, current) = (
                 mem.read_u64(MONITOR_SIZE + TRANSPORT_OFF + 8),
                 mem.read_u64(MONITOR_SIZE + TRANSPORT_OFF + 16),
@@ -883,8 +884,8 @@ fn run(
                     current,
                 });
             }
-            if guest.threads.len() > threads {
-                let t = guest.threads.values().next_back().unwrap();
+            if guest.served.threads.len() > threads {
+                let t = guest.served.threads.values().next_back().unwrap();
                 let (at, mem) = (crate::threads::entry(t.index), guest.memory_view());
                 let vslot = mem.read_u64(at + crate::threads::E_VSLOT);
                 out.created.push(Created {
@@ -1011,7 +1012,7 @@ fn run(
                 }
             }
         }
-        if number == 4 && guest.link.is_some() {
+        if number == 4 && guest.served.link.is_some() {
             // a slice's end in a process of a machine (`serve_exit`, 5280-5293; Sprint 197): at the run's limit a
             // stop; else the next slice's budget and expired waits woken, then the turn to another process that is
             // ready, or the next thread of this one, the stopped block's count given back as the thread goes on at its
@@ -1035,10 +1036,11 @@ fn run(
                 crate::threads::set_budget(guest);
                 crate::threads::wake_expired(guest);
                 let others = guest
+                    .served
                     .link
                     .as_ref()
                     .is_some_and(|l| l.others_ready(crate::threads::counter_now(guest)));
-                if !others && guest.threads.len() < 2 {
+                if !others && guest.served.threads.len() < 2 {
                     break 'slice Ok(None);
                 }
                 x[17] = match x86_address_at(guest.memory_view(), pc - 4) {
@@ -1083,12 +1085,13 @@ fn run(
             }
         }
         // `hvc #9` (vm_backend 5255-5263): a call to an import no service answers; X17 holds its thunk, which names
-        // it, and the guest's RSP (X4) the call's return address; both kept for the record, as `self.unimplemented`
+        // it, and the guest's RSP (X4) the call's return address; both kept for the record, as `self.served.unimplemented`
         // (Sprint 221: 34 family runs stopped on a bare "Hvc 9", which named nothing)
         if number == 9 {
             let thunk = vcpu.reg(Reg::X(17))?;
             let rsp = vcpu.reg(Reg::X(4))?;
             let name = guest
+                .served
                 .thunks
                 .get(&thunk)
                 .cloned()
@@ -1096,7 +1099,7 @@ fn run(
             let Some(at) = guest.layout.offset(rsp) else {
                 break Stop::Exit(format!("import {name}: the guest's RSP 0x{rsp:x} is not mapped"));
             };
-            guest.unimplemented = Some((name.clone(), guest.memory_view().read_u64(at)));
+            guest.served.unimplemented = Some((name.clone(), guest.memory_view().read_u64(at)));
             break Stop::Import { name, pc };
         }
         if number != 1 {
@@ -1113,7 +1116,7 @@ fn run(
         // word, and the miss stub released it before `hvc 1`; released on every path before the loop goes on or stops
         let took = take_word(guest, &mut out.served_outside_word);
         let served: Result<u64, Stop> = 'serve: {
-            let va = match guest.bridges.get(&target) {
+            let va = match guest.served.bridges.get(&target) {
                 Some(&va) => {
                     *out.bridged.entry(target).or_default() += 1;
                     va

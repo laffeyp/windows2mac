@@ -627,15 +627,55 @@ pub struct Traced {
     pub strings: String,
 }
 
-/// A program's guest memory, laid out and written up to its first instruction.
+/// A program's guest memory, laid out and written up to its first instruction. Its fields are the Load part, written
+/// while the guest is built and read after; the mapping, `memory`; the diagnostics; and `served`, the part a served exit
+/// writes (`docs/design-run-loop-on-several-vcpus-2026-10-31.md`, "The guest's parts"; Sprint 302).
 pub struct Guest {
     pub memory: hypervisor::GuestMemory,
     pub layout: Layout,
     pub ttbr: u64,
     pub code: MonitorCode,
-    pub process: ProcessArea,
     pub switch_va: u64,
     pub switch_slice_va: u64,
+    pub slice_va: u64,
+    pub entry_va: u64,
+    /// the services and the runtime's symbols, for a bridge made after construction (`make_thunk`, 2920-2924)
+    pub services: Vec<Service>,
+    pub symbols: BTreeMap<String, u64>,
+    /// the program's image as `Modules` holds it (vm_backend 2958-2959): (base, SizeOfImage)
+    pub image_range: Option<(u64, u64)>,
+    /// the runtime word's takings timed in the monitor code and bridges (`Start::time_runtime_word`, Sprint 164)
+    pub time_runtime_word: bool,
+    /// the order the DLLs' entries run in (`self.ld.init_order`; Sprint 156)
+    pub init_order: Vec<usize>,
+    /// what PEB.Ldr is written again from after a late load (`_write_loader_data`; Sprint 205): the program's entry and
+    /// every DLL dependencies first (`ld.dependency_order`, which a late load leaves)
+    pub image_entry: u64,
+    pub dependency_order: Vec<usize>,
+    /// the images whose calls call_trace.c records (`Start::call_trace`; Sprint 191)
+    pub call_trace: Vec<String>,
+    /// the host directory that is C:\w2m\app (`Start::app_root`; Sprint 196)
+    pub app_root: Option<std::path::PathBuf>,
+    /// the block whose first compile opens the trace (`_trace_from`, vm_backend 2483-2487), 0 for from the start
+    pub trace_from: u64,
+    /// how the process started: a child's start copies its environment, group and clock (`spawner`; Sprint 197)
+    pub start: Start,
+    /// the run stops at the 60 s limit (guests and their children, Sprint 197); a child inherits it (Sprint 204)
+    pub limited: bool,
+    /// one row per host exit, for the comparison with the frozen host's (`w2m-vm --exit-ledger`; Sprint 206)
+    pub exit_ledger: Option<crate::exit_ledger::Ledger>,
+    /// each in-VM compile judged against the Rust translator's (`w2m-vm --judge-blocks`; Sprint 252)
+    pub block_judge: Option<crate::block_judge::BlockJudge>,
+    /// where the batch run ends, asked after each host request answered (`w2m-vm --game --log-lines`; Sprint 219)
+    pub batch_stop: Option<crate::batch_stop::BatchStop>,
+    /// the part a served exit writes
+    pub served: Served,
+}
+
+/// The part of a guest a served exit writes after load: the design's 22 Served fields (Sprint 302), which the run
+/// loop's card 2b puts behind a lock taken only under the runtime word.
+pub struct Served {
+    pub process: ProcessArea,
     /// thunk address -> "DLL!Name": the loader's, then those the COM vtables made
     pub thunks: BTreeMap<u64, String>,
     /// the import thunks by "dll!name" in lower case (`Modules.imports`, vm_backend 2918): the loader's, then those
@@ -645,47 +685,27 @@ pub struct Guest {
     pub proc_thunks: BTreeMap<String, u64>,
     /// thunk address -> its bridge's address
     pub bridges: BTreeMap<u64, u64>,
-    pub slice_va: u64,
-    pub entry_va: u64,
-    /// the services and the runtime's symbols, for a bridge made after construction (`make_thunk`, 2920-2924)
-    pub services: Vec<Service>,
-    pub symbols: BTreeMap<String, u64>,
     /// the VirtualAlloc arena (vm_backend 2498-2505)
     pub arena: VirtualMemory,
     /// guest_stubs.rs's page, once written (vm_backend 2492)
     pub stub_page: u64,
     /// the guest's standard output, as HOST_WRITE gives it (vm_backend `self.out`, Sprint 155)
     pub stdout: Vec<u8>,
-    /// the program's image as `Modules` holds it (vm_backend 2958-2959): (base, SizeOfImage)
-    pub image_range: Option<(u64, u64)>,
     /// the program's DLLs as `Modules.dlls` holds them (2958): (base, SizeOfImage)
     pub dll_ranges: Vec<(u64, u64)>,
     /// the split tables' next free page (`_next_table`, 2425): `page_descriptor`'s, which thread creation's
     /// `_map_pages` and the host's compiles share (Sprint 156)
     pub next_table: u64,
-    /// the threads by id (`self.threads`, Sprint 156): the host's own fields; their run table entries are in memory
+    /// the threads by id (`self.served.threads`, Sprint 156): the host's own fields; their run table entries are in memory
     pub threads: BTreeMap<u64, crate::threads::Thread>,
-    /// the runtime word's takings timed in the monitor code and bridges (`Start::time_runtime_word`, Sprint 164)
-    pub time_runtime_word: bool,
-    /// the loader's images, the program first, and the DLLs whose entry runs, in order (`self.ld.images`,
-    /// `self.ld.init_order`): what a created thread's stack, static TLS and attach stub read (Sprint 156)
+    /// the loader's images, the program first (`self.ld.images`): what a created thread's stack, static TLS and attach
+    /// stub read (Sprint 156)
     pub images: Vec<pe_loader::Image>,
-    pub init_order: Vec<usize>,
-    /// what PEB.Ldr is written again from after a late load (`_write_loader_data`; Sprint 205): the program's entry,
-    /// every DLL dependencies first (`ld.dependency_order`, which a late load leaves), and a late DLL's full path by
-    /// its lowercase name (`Modules.dll_paths`)
-    pub image_entry: u64,
-    pub dependency_order: Vec<usize>,
+    /// a late DLL's full path by its lowercase name (`Modules.dll_paths`; Sprint 205)
     pub dll_paths: BTreeMap<String, String>,
     /// the DllMain stub of a DLL LoadLibrary just mapped, the module request's second answer (`_pending_init`,
     /// vm_backend 2381, 3873-3874; Sprint 205); 0: none
     pub pending_init: u64,
-    /// the images whose calls call_trace.c records (`Start::call_trace`; Sprint 191)
-    pub call_trace: Vec<String>,
-    /// the host directory that is C:\w2m\app (`Start::app_root`; Sprint 196)
-    pub app_root: Option<std::path::PathBuf>,
-    /// the block whose first compile opens the trace (`_trace_from`, vm_backend 2483-2487), 0 for from the start
-    pub trace_from: u64,
     /// GetProcAddress's thunks: untraced ones given while the trace was closed, traced ones its hook gave after
     /// (`_trace_quiet`, `_trace_dynamic`), by "DLL!Name"
     pub trace_quiet: BTreeMap<String, u64>,
@@ -696,22 +716,12 @@ pub struct Guest {
     pub kernel: crate::kernel::Objects,
     /// the process's place in the run's machine (Sprint 197): None alone and not yet a parent
     pub link: Option<crate::turns::Link>,
-    /// how the process started: a child's start copies its environment, group and clock (`spawner`; Sprint 197)
-    pub start: Start,
     /// the host's random bytes on the instruction clock, `random.Random(0x5EED)` (vm_backend 2357; Sprint 203); None:
     /// the host's CSPRNG
     pub random: Option<crate::mt19937::Random>,
-    /// the process's file system (`self.files`, vm_backend; Sprint 204); None: a run with no file-system root
+    /// the process's file system (`self.served.files`, vm_backend; Sprint 204); None: a run with no file-system root
     pub files: Option<crate::file_bridge::FileBridge>,
-    /// the run stops at the 60 s limit (guests and their children, Sprint 197); a child inherits it (Sprint 204)
-    pub limited: bool,
-    /// one row per host exit, for the comparison with the frozen host's (`w2m-vm --exit-ledger`; Sprint 206)
-    pub exit_ledger: Option<crate::exit_ledger::Ledger>,
-    /// each in-VM compile judged against the Rust translator's (`w2m-vm --judge-blocks`; Sprint 252)
-    pub block_judge: Option<crate::block_judge::BlockJudge>,
-    /// where the batch run ends, asked after each host request answered (`w2m-vm --game --log-lines`; Sprint 219)
-    pub batch_stop: Option<crate::batch_stop::BatchStop>,
-    /// the service HOST_UNIMPLEMENTED named and the call's return address, read from the saved RSP (`self.unimplemented`,
+    /// the service HOST_UNIMPLEMENTED named and the call's return address, read from the saved RSP (`self.served.unimplemented`,
     /// vm_backend 3880-3882), which the record's SERVICE_UNIMPLEMENTED names whatever image made the call (Sprint 219)
     pub unimplemented: Option<(String, u64)>,
 }
@@ -898,52 +908,54 @@ impl Guest {
             layout,
             ttbr,
             code,
-            process: process_area,
             switch_va,
             switch_slice_va,
-            thunks,
-            imports,
-            proc_thunks: BTreeMap::new(),
-            bridges,
             slice_va: 0,
             entry_va: 0,
             services: services.to_vec(),
             symbols: image.symbols.clone(),
-            arena,
-            stub_page: 0,
-            stdout: Vec::new(),
             image_range: loaded.image.as_ref().map(|p| (p.image_base, p.size_of_image as u64)),
-            dll_ranges: loaded
-                .images
-                .iter()
-                .skip(1)
-                .map(|d| (d.base, d.pe.size_of_image as u64))
-                .collect(),
-            next_table: SPLIT_TABLES,
-            threads: BTreeMap::new(),
             time_runtime_word: timed,
-            images: loaded.images.clone(),
             init_order: loaded.init_order.clone(),
             image_entry: loaded.image_entry,
             dependency_order: loaded.dependency_order.clone(),
-            dll_paths: BTreeMap::new(),
-            pending_init: 0,
             call_trace: start.call_trace.clone(),
             app_root: start.app_root.clone(),
             trace_from: 0,
-            trace_quiet: BTreeMap::new(),
-            trace_dynamic: BTreeMap::new(),
-            trace_bound: BTreeSet::new(),
-            kernel: crate::kernel::Objects::new(),
-            link: None,
             start: start.clone(),
-            random: start.instruction_clock.map(|_| crate::mt19937::Random::new(0x5EED)),
-            files: None,
             limited: false,
             exit_ledger: None,
             block_judge: None,
             batch_stop: None,
-            unimplemented: None,
+            served: Served {
+                process: process_area,
+                thunks,
+                imports,
+                proc_thunks: BTreeMap::new(),
+                bridges,
+                arena,
+                stub_page: 0,
+                stdout: Vec::new(),
+                dll_ranges: loaded
+                    .images
+                    .iter()
+                    .skip(1)
+                    .map(|d| (d.base, d.pe.size_of_image as u64))
+                    .collect(),
+                next_table: SPLIT_TABLES,
+                threads: BTreeMap::new(),
+                images: loaded.images.clone(),
+                dll_paths: BTreeMap::new(),
+                pending_init: 0,
+                trace_quiet: BTreeMap::new(),
+                trace_dynamic: BTreeMap::new(),
+                trace_bound: BTreeSet::new(),
+                kernel: crate::kernel::Objects::new(),
+                link: None,
+                random: start.instruction_clock.map(|_| crate::mt19937::Random::new(0x5EED)),
+                files: None,
+                unimplemented: None,
+            },
         }
         .with_trace(start)
     }
@@ -957,6 +969,7 @@ impl Guest {
         if let Some(from) = &start.call_trace_from {
             let (dll, export) = from.split_once('!').unwrap_or((from, ""));
             let image = self
+                .served
                 .images
                 .iter()
                 .find(|im| im.name.eq_ignore_ascii_case(dll))
@@ -1062,11 +1075,11 @@ impl Guest {
                 let size = 1u64 << shift;
                 let base = desc & 0x0000_FFFF_FFFF_F000 & !(size - 1);
                 let attributes = desc & !0x0000_FFFF_FFFF_F000 & !0x3;
-                let new = self.next_table;
+                let new = self.served.next_table;
                 if new + PAGE > SPLIT_TABLES + SPLIT_TABLES_SIZE {
                     return Err("stage-1 split table area full".into());
                 }
-                self.next_table += PAGE;
+                self.served.next_table += PAGE;
                 let low = if level == 2 { 0x3 } else { 0x1 }; // pages at level 3, blocks at level 2
                 for i in 0..512u64 {
                     mem.write_u64(new + 8 * i, (base + i * (size >> 9)) | attributes | low);
@@ -1133,7 +1146,7 @@ impl Guest {
             let disp = i32::from_le_bytes(call[2..6].try_into().unwrap());
             let slot = ret.wrapping_add_signed(i64::from(disp));
             let thunk = word(self.layout.offset(slot)?);
-            self.thunks.get(&thunk).cloned()
+            self.served.thunks.get(&thunk).cloned()
         })();
         Some((ret, name))
     }
@@ -1144,19 +1157,19 @@ impl Guest {
         // `m.imports.get(key) or m.make_thunk(name)` over the import thunks only, not every thunk of the name (Sprint
         // 209: matching the trace's own or GetProcAddress's thunks, the Rust host made 11 fewer after mono's load)
         let key = name.to_lowercase();
-        if let Some(t) = self.imports.get(&key) {
+        if let Some(t) = self.served.imports.get(&key) {
             return Ok(*t);
         }
         let t = self.make_thunk(name)?;
-        self.imports.insert(key, t);
+        self.served.imports.insert(key, t);
         Ok(t)
     }
 
     /// `make_thunk` (2920-2924): a new thunk after the others, with its bridge, whatever thunks the name has already
     /// (a traced image's own slots and GetProcAddress's hook each need one of their own; Sprint 191).
     pub fn make_thunk(&mut self, name: &str) -> Result<u64, GuestError> {
-        let thunk = THUNK_BASE + 16 * self.thunks.len() as u64;
-        self.thunks.insert(thunk, name.to_string());
+        let thunk = THUNK_BASE + 16 * self.served.thunks.len() as u64;
+        self.served.thunks.insert(thunk, name.to_string());
         let (dll, function) = name.split_once('!').unwrap_or((name, ""));
         let service = service_for(&self.services, dll, function).map(|s| (self.symbols[&s.symbol], s.sets_rax));
         let (dispatch_va, switch_va, timed) = (self.code.dispatch_va, self.switch_va, self.time_runtime_word);
@@ -1171,7 +1184,7 @@ impl Guest {
             mem: crate::guest::memory_view(&self.memory),
         };
         let va = cache.put(|a| bridge(a, service, thunk, dispatch_va, switch_va, timed, traced))?;
-        self.bridges.insert(thunk, va);
+        self.served.bridges.insert(thunk, va);
         Ok(thunk)
     }
 
@@ -1193,6 +1206,7 @@ impl Guest {
         use guest_runtime::layout::TRACE_OFF;
         for (i, name) in self.call_trace.clone().iter().enumerate() {
             let Some(image) = self
+                .served
                 .images
                 .iter()
                 .find(|im| im.name.eq_ignore_ascii_case(name))
@@ -1205,10 +1219,10 @@ impl Guest {
             let mem = self.memory_view();
             mem.write_u64(at, base);
             mem.write_u64(at + 8, end);
-            if self.trace_bound.contains(&name.to_lowercase()) {
+            if self.served.trace_bound.contains(&name.to_lowercase()) {
                 continue;
             }
-            self.trace_bound.insert(name.to_lowercase());
+            self.served.trace_bound.insert(name.to_lowercase());
             for &slot in image.pe.iat.keys() {
                 let va = base + u64::from(slot);
                 let off = self
@@ -1216,7 +1230,7 @@ impl Guest {
                     .offset(va)
                     .ok_or_else(|| GuestError::Layout(format!("{name}'s import slot 0x{va:x} is not mapped")))?;
                 let held = self.memory_view().read_u64(off);
-                let Some(key) = self.thunks.get(&held).cloned() else {
+                let Some(key) = self.served.thunks.get(&held).cloned() else {
                     continue;
                 };
                 let own = self.make_thunk(&key)?;
@@ -1235,7 +1249,7 @@ impl Guest {
         if self.call_trace.is_empty() {
             return Ok(va);
         }
-        let Some(key) = self.thunks.get(&va).cloned() else {
+        let Some(key) = self.served.thunks.get(&va).cloned() else {
             return Ok(va);
         };
         let t = MONITOR_SIZE + TRACE_OFF;
@@ -1259,19 +1273,19 @@ impl Guest {
             if !traced_caller {
                 return Ok(va);
             }
-            if let Some(hooked) = self.trace_dynamic.get(&key) {
+            if let Some(hooked) = self.served.trace_dynamic.get(&key) {
                 return Ok(*hooked);
             }
             let hooked = self.make_thunk(&key)?;
-            self.trace_dynamic.insert(key, hooked);
+            self.served.trace_dynamic.insert(key, hooked);
             self.trace_owner(hooked, 1 + TRACE_DYNAMIC);
             return Ok(hooked);
         }
-        if let Some(quiet) = self.trace_quiet.get(&key) {
+        if let Some(quiet) = self.served.trace_quiet.get(&key) {
             return Ok(*quiet);
         }
         let quiet = self.make_thunk(&key)?;
-        self.trace_quiet.insert(key, quiet);
+        self.served.trace_quiet.insert(key, quiet);
         self.trace_owner(quiet, 0xFF);
         Ok(quiet)
     }
@@ -1389,12 +1403,17 @@ impl Guest {
         let r = MONITOR_SIZE + TRACE_OFF + TRACE_RECORDS_OFF + TRACE_RECORD * k;
         let f: Vec<u64> = (0..15).map(|i| mem.read_u64(r + 8 * i)).collect();
         let thunk = THUNK_BASE + 16 * f[4];
-        let (dll, function) = self.thunks.get(&thunk).and_then(|n| n.split_once('!')).ok_or_else(|| {
-            format!(
-                "trace record {k} (seq {}) names thunk {thunk:#x}, which has no name",
-                f[1]
-            )
-        })?;
+        let (dll, function) = self
+            .served
+            .thunks
+            .get(&thunk)
+            .and_then(|n| n.split_once('!'))
+            .ok_or_else(|| {
+                format!(
+                    "trace record {k} (seq {}) names thunk {thunk:#x}, which has no name",
+                    f[1]
+                )
+            })?;
         Ok(TraceRecord {
             ready: f[0] != 0,
             seq: f[1],
@@ -1419,6 +1438,7 @@ impl Guest {
             layout: &self.layout,
         };
         let (va, err) = self
+            .served
             .arena
             .alloc(
                 &mut view,
@@ -1443,7 +1463,8 @@ impl Guest {
     pub fn init_stub(&mut self, base: u64, entry: u64) -> Result<u64, GuestError> {
         use guest_runtime::layout::{PROCESS_VA, TRACE_OFF};
         let traced = self.call_trace.iter().any(|n| {
-            self.images
+            self.served
+                .images
                 .iter()
                 .skip(1)
                 .any(|d| d.name.eq_ignore_ascii_case(n) && d.base == base)
@@ -1457,11 +1478,11 @@ impl Guest {
     /// `_guest_stubs`: the x86 stubs services call guest code and resume contexts through (guest_stubs.rs), on a page
     /// of the arena written at the first use, so a process that needs none keeps its address space.
     pub fn guest_stubs(&mut self) -> Result<u64, GuestError> {
-        if self.stub_page == 0 {
+        if self.served.stub_page == 0 {
             let thunk = self.import_thunk("KERNEL32.dll!W2mGuestReturn")?;
-            self.stub_page = self.code_page(&crate::guest_stubs::page(thunk))?;
+            self.served.stub_page = self.code_page(&crate::guest_stubs::page(thunk))?;
         }
-        Ok(self.stub_page)
+        Ok(self.served.stub_page)
     }
 
     /// `exception` (4173-4195): the last unhandled exception the guest runtime recorded, or None.

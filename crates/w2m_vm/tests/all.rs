@@ -22,6 +22,7 @@ mod dispatch_hash_planted;
 mod exit_ledger;
 mod family_runs;
 mod first_decline;
+mod guest_parts;
 mod guest_stubs;
 mod host_requests;
 mod layout_constants;

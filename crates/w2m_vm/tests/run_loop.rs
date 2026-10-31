@@ -211,12 +211,12 @@ fn qpc_runs_past_its_first_decline_compiling_as_the_python_host() {
     println!("the Python host's compiles: {:x?}", python_compiles);
     println!("bridged: {:x?}", out.bridged);
     println!("exits: {:?}", out.exits);
-    println!("stdout: {:?}", String::from_utf8_lossy(&guest.stdout));
+    println!("stdout: {:?}", String::from_utf8_lossy(&guest.served.stdout));
 
     // `tests/test_timed_waits.py` 218-223, carried: the process ends, and its counter lies between the host's monotonic
     // count before the run and after it
     assert_eq!(out.stop, Stop::ExitProcess { code: 0 });
-    let text = String::from_utf8(guest.stdout.clone()).unwrap();
+    let text = String::from_utf8(guest.served.stdout.clone()).unwrap();
     let counter = u64::from_str_radix(text.trim_end(), 16).unwrap();
     assert!(
         before <= counter && counter <= after,
@@ -272,7 +272,7 @@ fn qpc_runs_with_its_blocks_installed_from_the_cache() {
     let out = run(&mut guest, &loaded, &mut host);
     let after = monotonic_count();
     assert_eq!(out.stop, Stop::ExitProcess { code: 0 });
-    let counter = u64::from_str_radix(String::from_utf8(guest.stdout.clone()).unwrap().trim_end(), 16).unwrap();
+    let counter = u64::from_str_radix(String::from_utf8(guest.served.stdout.clone()).unwrap().trim_end(), 16).unwrap();
     assert!(
         before <= counter && counter <= after,
         "{before} <= {counter} <= {after}"
@@ -655,11 +655,11 @@ fn model_steps_runs_through_the_model_as_the_python_host() {
     let out = run(&mut guest, &loaded, &mut host);
     println!("stop: {:?}", out.stop);
     println!("exits: {:?}", out.exits);
-    println!("stdout: {:?}", String::from_utf8_lossy(&guest.stdout));
+    println!("stdout: {:?}", String::from_utf8_lossy(&guest.served.stdout));
     assert_eq!(python["stop"], "ExitProcess");
     assert_eq!(out.stop, Stop::ExitProcess { code: 0 });
     assert_eq!(
-        String::from_utf8_lossy(&guest.stdout),
+        String::from_utf8_lossy(&guest.served.stdout),
         python["stdout"].as_str().unwrap(),
         "the output differs from the Python host's"
     );
@@ -690,8 +690,8 @@ fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
     println!("blocks the C compiled: {:x?}", out.blocks.keys().collect::<Vec<_>>());
     println!("blocks the host compiled: {:x?}", host.translations);
     println!("exits: {:?}", out.exits);
-    println!("threads: {:x?}", guest.threads);
-    println!("stdout: {:?}", String::from_utf8_lossy(&guest.stdout));
+    println!("threads: {:x?}", guest.served.threads);
+    println!("stdout: {:?}", String::from_utf8_lossy(&guest.served.stdout));
 
     // the created thread, at THREAD_CREATE's return, as the Python host's
     let want = &python["created"][0];
@@ -706,7 +706,7 @@ fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
     );
     assert_eq!(
         number(&want["entry_index"]),
-        guest.threads[&created.tid].index,
+        guest.served.threads[&created.tid].index,
         "the run table entry's index"
     );
     let entry = want["entry"].as_str().unwrap();
@@ -728,7 +728,7 @@ fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
         want["vectors"].as_str().unwrap(),
         "the vector slot"
     );
-    let t = &guest.threads[&created.tid];
+    let t = &guest.served.threads[&created.tid];
     assert_eq!(t.teb, number(&want["teb"]), "the TEB");
     assert_eq!(
         [t.stack.0, t.stack.1, t.stack.2].to_vec(),
@@ -754,7 +754,7 @@ fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
     }
     for region in want["arena"].as_array().unwrap() {
         let base = number(&region["base"]);
-        let r = &guest.arena.reservations[&base];
+        let r = &guest.served.arena.reservations[&base];
         assert_eq!(
             r.size,
             number(&region["size"]),
@@ -853,7 +853,7 @@ fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
         );
         assert_eq!(python["stop"], "ExitProcess");
         assert_eq!(
-            String::from_utf8_lossy(&guest.stdout),
+            String::from_utf8_lossy(&guest.served.stdout),
             python["stdout"].as_str().unwrap(),
             "the run's output"
         );
@@ -867,7 +867,11 @@ fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
         out.stop
     );
     assert!(
-        python["stdout"].as_str().unwrap().as_bytes().starts_with(&guest.stdout),
+        python["stdout"]
+            .as_str()
+            .unwrap()
+            .as_bytes()
+            .starts_with(&guest.served.stdout),
         "the output so far is not the Python run's"
     );
     let python_starts: BTreeSet<u64> = python_compiles.iter().map(|(s, _)| *s).collect();

@@ -394,7 +394,7 @@ mod run {
         }
         start.app_root = Some(app.clone());
         let mut guest = guest_of(&root, &loaded, &start)?;
-        guest.files = Some(w2m_vm::file_bridge::FileBridge::new(&app, false, None)?);
+        guest.served.files = Some(w2m_vm::file_bridge::FileBridge::new(&app, false, None)?);
         guest.limited = true;
         let out = on_one_vcpu(
             &mut guest,
@@ -403,7 +403,7 @@ mod run {
             max_steps.unwrap_or(MAX_STEPS),
             &mut HostCompiler::default(),
         );
-        drop(guest.files.take());
+        drop(guest.served.files.take());
         // a family's rows from the file its probe writes in the program's directory, empty if it wrote none
         // (`run_in_vm`, family_run.py 2949-2952 at the tag), read before the directory goes; a file not written is
         // named on stderr, so a held run's cause is not only its missing rows (reviewer-3's Low 1 of its review at 231)
@@ -412,7 +412,7 @@ mod run {
                 eprintln!("w2m-vm: the output file {name} was not written; its rows are empty");
                 Vec::new()
             }),
-            None => guest.stdout.clone(),
+            None => guest.served.stdout.clone(),
         };
         let _ = fs::remove_dir_all(&app);
         let out = out?;
@@ -628,7 +628,7 @@ mod run {
             // a child's bridge: the parent's root, read-only setting and drive (kernel.py 460; Sprint 204)
             if let (Some(app), Some(drive)) = (&start.app_root, text("drive")) {
                 let read_only = s["read_only"].as_bool().unwrap_or(false);
-                guest.files = Some(w2m_vm::file_bridge::FileBridge::new(
+                guest.served.files = Some(w2m_vm::file_bridge::FileBridge::new(
                     app,
                     read_only,
                     Some(Path::new(&drive)),
@@ -639,7 +639,7 @@ mod run {
                 let path = std::path::PathBuf::from(format!("{base}.{pid}"));
                 guest.exit_ledger = Some(w2m_vm::exit_ledger::Ledger::create(&path)?);
             }
-            guest.link = Some(w2m_vm::turns::Link::Child(w2m_vm::turns::ChildLink::open(
+            guest.served.link = Some(w2m_vm::turns::Link::Child(w2m_vm::turns::ChildLink::open(
                 page_fd, slot, pid,
             )?));
             // the child starts at the machine's clock, as `VM.steps` catches every process up at its start (Sprint 199;
@@ -752,6 +752,7 @@ mod run {
     ) -> Result<(&'g pe_loader::Image, Vec<u8>, w2m_vm::cache_file::Exits, String), String> {
         use guest_runtime::layout::{PROCESS_VA, STATE_OFF};
         let image = guest
+            .served
             .images
             .iter()
             .find(|i| i.name == CACHED_IMAGE)
@@ -853,7 +854,7 @@ mod run {
             return make_cache_file(&root, directory, &guest, dir);
         }
         // the depot mounted read-only, as `run_frontier.py` 268 makes it (Sprint 204)
-        guest.files = Some(w2m_vm::file_bridge::FileBridge::new(directory, true, None)?);
+        guest.served.files = Some(w2m_vm::file_bridge::FileBridge::new(directory, true, None)?);
         if let Some(path) = ledger {
             guest.exit_ledger = Some(w2m_vm::exit_ledger::Ledger::create(&root.join(path))?);
         }
@@ -862,7 +863,11 @@ mod run {
         }
         // the game's log, C:\w2m\unity.log on the bridge's drive (`run_frontier.py` 288, `files.drive / "w2m" /
         // "unity.log"`); the run ends where its reference did (Sprint 219)
-        let log = guest.files.as_ref().map(|f| f.drive.join("w2m").join("unity.log"));
+        let log = guest
+            .served
+            .files
+            .as_ref()
+            .map(|f| f.drive.join("w2m").join("unity.log"));
         if let (Some((lines, file)), Some(log)) = (&end, &log) {
             let calls = w2m_vm::batch_stop::read_calls(&text(&root.join(file))?)?;
             guest.batch_stop = Some(w2m_vm::batch_stop::BatchStop::new(log.clone(), *lines, calls));
@@ -879,7 +884,7 @@ mod run {
             let beside = w2m_vm::run_outputs::companion(stop_file, ".unity.log");
             fs::write(root.join(&beside), fs::read(log).unwrap_or_default()).map_err(|e| format!("{beside}: {e}"))?;
         }
-        fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
+        fs::write(root.join(output), &guest.served.stdout).map_err(|e| format!("{output}: {e}"))?;
         let mut tsv = format!(
             "stop\t{}\nseconds\t{:.1}\n",
             stop_name(&out.stop),
@@ -975,7 +980,7 @@ mod run {
             .collect();
         // a service the runtime reported unimplemented names itself (HOST_UNIMPLEMENTED, Sprint 219), whatever image
         // called it; any other unserved request is named from the call the trace has in flight
-        let end = match guest.unimplemented.clone() {
+        let end = match guest.served.unimplemented.clone() {
             Some((service, return_address)) => w2m_vm::record::RunEnd::Unimplemented {
                 service,
                 return_address,
@@ -1026,6 +1031,7 @@ mod run {
         };
         // the compiles by where their code lies (Sprint 249); a count that misses a compile is named, not recorded
         let images: Vec<(&str, u64, u64)> = guest
+            .served
             .images
             .iter()
             .map(|i| (i.name.as_str(), i.base, u64::from(i.pe.size_of_image)))

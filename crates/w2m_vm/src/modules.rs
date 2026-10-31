@@ -74,6 +74,7 @@ pub fn canonical(name: &str) -> String {
 /// The program's DLLs (`Modules.dlls`, vm_backend 2957-2958): canonical name -> (base, SizeOfImage, the image index).
 fn dlls(guest: &Guest) -> impl Iterator<Item = (String, u64, u64, usize)> + '_ {
     guest
+        .served
         .images
         .iter()
         .enumerate()
@@ -106,7 +107,7 @@ impl From<crate::file_bridge::FileError> for ModuleError {
 /// a DLL not yet in the process, where GetModuleHandle reports only loaded ones.
 pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, ModuleError> {
     use guest_runtime::layout::{PROCESS_VA, SYSTEM_IMAGES, SYSTEM_IMAGES_OFF};
-    let p = &guest.process;
+    let p = &guest.served.process;
     let used = p.system.len() as u64;
     let next_system = (used < SYSTEM_IMAGES).then_some(PROCESS_VA + SYSTEM_IMAGES_OFF + 0x1000 * used);
     let handles = Handles {
@@ -114,13 +115,13 @@ pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, Modul
         kernel32: p.kernel32,
         kernelbase: p.kernelbase,
         ntdll: p.ntdll,
-        image: guest.images.first().map(|i| (i.name.to_lowercase(), i.base)),
+        image: guest.served.images.first().map(|i| (i.name.to_lowercase(), i.base)),
         dlls: dlls(guest).map(|(n, base, ..)| (n, base)).collect(),
         system: p.system.iter().map(|(c, (h, _))| (c.clone(), *h)).collect(),
         app: AppDirectory {
             root: guest.app_root.clone(),
-            program: guest.images.first().map_or(String::new(), |i| i.name.clone()),
-            files: guest.files.as_ref(),
+            program: guest.served.images.first().map_or(String::new(), |i| i.name.clone()),
+            files: guest.served.files.as_ref(),
         },
     };
     let handle = module_in(&handles, name, loading)?;
@@ -146,7 +147,7 @@ pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, Modul
         // through the view: LoadLibrary is served while the run runs (Sprint 290, census D7)
         let mut process = crate::process::ProcessView(crate::guest::memory_view(&guest.memory));
         crate::process::synthetic_image(&mut process, off);
-        guest.process.system.insert(c, (handle, spelling));
+        guest.served.process.system.insert(c, (handle, spelling));
     }
     Ok(handle)
 }
@@ -158,7 +159,7 @@ pub fn module(guest: &mut Guest, name: &str, loading: bool) -> Result<u64, Modul
 /// second answer gives the guest runtime. 0: no file. A DLL with TLS callbacks stops by name as the Python's does, a
 /// refusal; one with static TLS gets its index and a block in every thread (`threads::late_static_tls`, Sprint 218).
 fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
-    let Some(files) = guest.files.as_ref() else {
+    let Some(files) = guest.served.files.as_ref() else {
         return Ok(0);
     };
     let Some(host) = files.host_file(name)? else {
@@ -177,7 +178,7 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
         .file_name()
         .map_or(String::new(), |f| f.to_string_lossy().to_string());
     // the arena with no free range: its refusal (`Unimplemented`)
-    let base = guest.arena.place_image(pe.clone()).map_err(|e| NotServed(e.0))?;
+    let base = guest.served.arena.place_image(pe.clone()).map_err(|e| NotServed(e.0))?;
     let mut staging = pe_loader::Memory::default();
     pe_loader::map_image(&mut staging, &raw, &pe, base, &file).map_err(|e| Failed(format!("{file}: {e:?}")))?;
     let data = &staging.regions[0].data;
@@ -193,7 +194,7 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
         let leaf = canonical(dll);
         let found = dlls(guest).find(|(n, ..)| *n == leaf).map(|(_, b, _, i)| (b, i));
         let va = match found {
-            Some((dll_base, i)) => guest.images[i]
+            Some((dll_base, i)) => guest.served.images[i]
                 .pe
                 .exports
                 .iter()
@@ -213,7 +214,7 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
         mem: crate::guest::memory_view(&guest.memory),
         layout: &guest.layout,
     };
-    guest.arena.snapshot_image(&view, base, &pe);
+    guest.served.arena.snapshot_image(&view, base, &pe);
     // `Modules.dll_paths` (vm_backend 3944-3945): below C:\w2m\app by its components, else the host path
     let path = match host.strip_prefix(&root) {
         Ok(rel) => {
@@ -222,24 +223,24 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
         }
         Err(_) => host.display().to_string(),
     };
-    guest.dll_paths.insert(file.to_lowercase(), path);
-    guest.dll_ranges.push((base, u64::from(pe.size_of_image)));
+    guest.served.dll_paths.insert(file.to_lowercase(), path);
+    guest.served.dll_ranges.push((base, u64::from(pe.size_of_image)));
     let entry_rva = pe.entry_rva;
-    guest.images.push(pe_loader::Image { name: file, pe, base });
+    guest.served.images.push(pe_loader::Image { name: file, pe, base });
     // PEB.Ldr lists it, as EnumProcessModules reads (`_write_loader_data`, Sprint 063)
     let list = crate::process::LoaderList {
-        images: &guest.images,
+        images: &guest.served.images,
         image_entry: guest.image_entry,
         image_name: &guest.start.image_name,
         dependency_order: &guest.dependency_order,
-        paths: &guest.dll_paths,
+        paths: &guest.served.dll_paths,
     };
     let mut process = crate::process::ProcessView(crate::guest::memory_view(&guest.memory));
     // its only errors are the loader area full (process.rs 548, 569), a capacity, as the system slots are
-    crate::process::write_loader_data(&mut process, &list, &guest.process).map_err(|e| NotServed(e.0))?;
+    crate::process::write_loader_data(&mut process, &list, &guest.served.process).map_err(|e| NotServed(e.0))?;
     guest.trace_ranges().map_err(|e| Failed(format!("{e:?}")))?;
     if entry_rva != 0 {
-        guest.pending_init = guest
+        guest.served.pending_init = guest
             .init_stub(base, base + u64::from(entry_rva))
             .map_err(|e| Failed(format!("{e:?}")))?;
     }
@@ -430,8 +431,8 @@ fn module_in(h: &Handles, name: &str, loading: bool) -> Result<u64, ModuleError>
 
 /// `file_name` (134-147): the module's path, None for a handle w2m did not hand out.
 pub fn file_name(guest: &Guest, handle: u64) -> Option<String> {
-    let p = &guest.process;
-    if let Some(image) = guest.images.first()
+    let p = &guest.served.process;
+    if let Some(image) = guest.served.images.first()
         && handle == image.base
     {
         return Some(format!("{APP_DIRECTORY}{}", image.name));
@@ -446,10 +447,11 @@ pub fn file_name(guest: &Guest, handle: u64) -> Option<String> {
         // a DLL loaded after the start by its full path (`dll_paths`, modules.py 143; Sprint 205)
         return Some(
             guest
+                .served
                 .dll_paths
                 .get(&c)
                 .cloned()
-                .unwrap_or_else(|| format!("{APP_DIRECTORY}{}", guest.images[i].name)),
+                .unwrap_or_else(|| format!("{APP_DIRECTORY}{}", guest.served.images[i].name)),
         );
     }
     p.system
@@ -461,7 +463,7 @@ pub fn file_name(guest: &Guest, handle: u64) -> Option<String> {
 /// `proc` (160-190): GetProcAddress, a thunk or an export's address, 0 when the module does not export `name`.
 pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, ModuleError> {
     let export = |i: usize| {
-        let image = &guest.images[i];
+        let image = &guest.served.images[i];
         image
             .pe
             .exports
@@ -469,13 +471,14 @@ pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, ModuleErr
             .find(|(n, _)| n == name)
             .map_or(0, |(_, rva)| image.base + u64::from(*rva))
     };
-    if guest.images.first().is_some_and(|image| image.base == handle) {
+    if guest.served.images.first().is_some_and(|image| image.base == handle) {
         return Ok(export(0));
     }
     if let Some((_, _, _, i)) = dlls(guest).find(|(_, base, ..)| *base == handle) {
         return Ok(export(i));
     }
     let system = guest
+        .served
         .process
         .system
         .iter()
@@ -488,12 +491,12 @@ pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, ModuleErr
         }
         // the program's own import thunk when it imports the name (Windows answers the import's address,
         // proc.imported), otherwise GetProcAddress's own thunk per module and name (modules.py 172-177)
-        if let Some(t) = guest.imports.get(&format!("{c}!{}", name.to_lowercase())) {
+        if let Some(t) = guest.served.imports.get(&format!("{c}!{}", name.to_lowercase())) {
             return Ok(*t);
         }
         return proc_thunk(guest, format!("{spelling}!{name}"));
     }
-    let p = &guest.process;
+    let p = &guest.served.process;
     let module = if handle == p.kernel32 {
         "kernel32"
     } else if handle == p.kernelbase {
@@ -510,7 +513,10 @@ pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, ModuleErr
     }
     // modules.py 185-190: kernel32's imported names answer with the import thunk
     if module == "kernel32"
-        && let Some(t) = guest.imports.get(&format!("kernel32.dll!{}", name.to_lowercase()))
+        && let Some(t) = guest
+            .served
+            .imports
+            .get(&format!("kernel32.dll!{}", name.to_lowercase()))
     {
         return Ok(*t);
     }
@@ -525,13 +531,13 @@ pub fn proc(guest: &mut Guest, handle: u64, name: &str) -> Result<u64, ModuleErr
 /// GetProcAddress's own thunk for `key` ("DLL!Name" as asked), made once (`Modules._thunks`, modules.py 176, 189;
 /// Sprint 209: before, `import_thunk` reused any thunk of the name, the trace's own among them).
 fn proc_thunk(guest: &mut Guest, key: String) -> Result<u64, ModuleError> {
-    if let Some(t) = guest.proc_thunks.get(&key) {
+    if let Some(t) = guest.served.proc_thunks.get(&key) {
         return Ok(*t);
     }
     let t = guest
         .make_thunk(&key)
         .map_err(|e| ModuleError::Failed(format!("{e:?}")))?;
-    guest.proc_thunks.insert(key, t);
+    guest.served.proc_thunks.insert(key, t);
     Ok(t)
 }
 
@@ -669,13 +675,13 @@ mod tests {
             &symbols,
         )
         .unwrap();
-        let kernel32 = g.process.kernel32;
-        let imported = g.imports["kernel32.dll!queryperformancecounter"];
+        let kernel32 = g.served.process.kernel32;
+        let imported = g.served.imports["kernel32.dll!queryperformancecounter"];
         assert_eq!(proc(&mut g, kernel32, "QueryPerformanceCounter"), Ok(imported));
         let own = proc(&mut g, kernel32, "Sleep").unwrap();
         assert_ne!(own, 0, "kernel32 exports Sleep");
         assert!(
-            !g.imports.values().any(|&t| t == own),
+            !g.served.imports.values().any(|&t| t == own),
             "Sleep's thunk is GetProcAddress's own"
         );
         assert_eq!(proc(&mut g, kernel32, "Sleep"), Ok(own), "made once");

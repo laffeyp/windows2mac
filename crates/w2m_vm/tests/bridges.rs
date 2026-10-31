@@ -59,7 +59,7 @@ fn guest() -> (Guest, u64) {
 
 fn thunk(g: &Guest, name: &str, loaded_names: &[(u64, String)]) -> u64 {
     let (t, _) = loaded_names.iter().find(|(_, n)| n == name).unwrap();
-    g.bridges[t]
+    g.served.bridges[t]
 }
 
 fn run_to_hvc(vcpu: &Vcpu<'_>) -> Result<u16, Exit> {
@@ -152,7 +152,7 @@ fn a_bridged_call_returns_through_the_dispatcher() {
     assert_ne!(count, 0, "a count at [RCX]");
 
     // an import with no service
-    start(g.bridges[&no_such], &[]);
+    start(g.served.bridges[&no_such], &[]);
     assert_eq!(run_to_hvc(&vcpu), Ok(9), "{NO_SUCH} stops at hvc #9");
     println!("bridges: GetStdHandle answered 0x{std_output:x}, QueryPerformanceCounter {count}, {NO_SUCH} hvc #9");
 }

@@ -93,7 +93,7 @@ fn qpc_runs_to_its_first_declined_block() {
         (lo..hi).contains(&target),
         "the declined block 0x{target:x} is in qpc's .text"
     );
-    assert!(!out.blocks.contains_key(&target) && !guest.bridges.contains_key(&target));
+    assert!(!out.blocks.contains_key(&target) && !guest.served.bridges.contains_key(&target));
     assert!(c("compiled") >= 1, "the C compiled at least one block");
     assert!(
         c("no stencil") + c("cut by no stencil") + c("page needs a split") > 0,

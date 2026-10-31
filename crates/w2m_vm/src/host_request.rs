@@ -135,6 +135,7 @@ const TRANSPORT: usize = (MONITOR_SIZE + TRANSPORT_OFF) as usize;
 /// `wake_all` (vm_backend 3700-3706): every blocked thread of this process checks its wait again.
 pub fn wake_blocked(guest: &mut Guest) {
     let blocked: Vec<u64> = guest
+        .served
         .threads
         .values()
         .map(|t| t.index)
@@ -151,7 +152,7 @@ pub fn wake_blocked(guest: &mut Guest) {
 /// A child's KERNEL 33 request, served by the supervisor in its turn (Sprint 197): the result, with the second word
 /// written and a pending wake applied; None in the supervisor's own process.
 fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostError> {
-    let Some(crate::turns::Link::Child(link)) = &guest.link else {
+    let Some(crate::turns::Link::Child(link)) = &guest.served.link else {
         return Ok(None);
     };
     let (result, second, wake) = link.request(a, &guest.layout.maps).map_err(HostError::Failed)?;
@@ -227,8 +228,8 @@ fn child_start(guest: &Guest, child: &crate::kernel::Spawn) -> Result<serde_json
         "parent_image": s.image_name,
         "program_path": s.program_path.as_ref().map(|p| p.to_string_lossy().to_string()),
         // the parent's drive and read-only setting: the child's bridge shares them (kernel.py 460; Sprint 204)
-        "drive": guest.files.as_ref().map(|f| f.drive.to_string_lossy().to_string()),
-        "read_only": guest.files.as_ref().map(|f| f.read_only),
+        "drive": guest.served.files.as_ref().map(|f| f.drive.to_string_lossy().to_string()),
+        "read_only": guest.served.files.as_ref().map(|f| f.read_only),
         "limited": guest.limited,
         // the parent's exit ledger, which the child's rows sit beside (Sprint 206)
         "exit_ledger": guest.exit_ledger.as_ref().map(|l| l.path.to_string_lossy().to_string()),
@@ -298,7 +299,7 @@ pub fn containing(guest: &Guest, address: u64) -> u64 {
     {
         return base;
     }
-    let p = &guest.process;
+    let p = &guest.served.process;
     let synthetic = [p.kernel32, p.kernelbase, p.ntdll]
         .into_iter()
         .chain(p.system.values().map(|(h, _)| *h));
@@ -307,7 +308,7 @@ pub fn containing(guest: &Guest, address: u64) -> u64 {
             return h;
         }
     }
-    for &(base, size) in &guest.dll_ranges {
+    for &(base, size) in &guest.served.dll_ranges {
         if base <= address && address < base + size {
             return base;
         }
@@ -322,6 +323,7 @@ pub fn containing(guest: &Guest, address: u64) -> u64 {
 /// wrap (reviewer-3's Low 6 of its review of Sprint 210).
 pub fn map_view(guest: &mut Guest, size: u64, fd: u64, protect: u64) -> Result<(u64, u64), HostError> {
     let bytes = guest
+        .served
         .files
         .as_ref()
         .and_then(|f| f.view(fd, size))
@@ -331,6 +333,7 @@ pub fn map_view(guest: &mut Guest, size: u64, fd: u64, protect: u64) -> Result<(
         layout: &guest.layout,
     };
     let base = guest
+        .served
         .arena
         .map_view(&mut view, size, protect as u32)
         .map_err(|e| HostError::NotServed(format!("{e:?}")))?;
@@ -361,7 +364,7 @@ pub fn unimplemented(guest: &mut Guest, a0: u64, a1: u64) -> HostError {
     let Some((ret, _)) = guest.called_service() else {
         return HostError::Failed(format!("{service}: the saved RSP is not a mapped address"));
     };
-    guest.unimplemented = Some((service.clone(), ret));
+    guest.served.unimplemented = Some((service.clone(), ret));
     HostError::NotServed(service)
 }
 
@@ -389,7 +392,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 .ok_or_else(|| HostError::Failed(format!("a write from unmapped 0x{a0:x}")))?
                 as usize;
             let written = bytes(guest.memory_view(), at, a1 as usize);
-            guest.stdout.extend(written);
+            guest.served.stdout.extend(written);
             a1
         }
         HOST_RUNTIME_FAULT => {
@@ -401,7 +404,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         HOST_MODULE_AT => {
             // the second answer: a DLL just loaded leaves its DllMain stub (`_pending_init`, vm_backend 3873-3874)
             let r = containing(guest, a0);
-            let init = std::mem::take(&mut guest.pending_init);
+            let init = std::mem::take(&mut guest.served.pending_init);
             let mem = crate::guest::memory_view(&guest.memory);
             mem.write((TRANSPORT + 48) as u64, &init.to_le_bytes());
             r
@@ -455,7 +458,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 },
             };
             // a DLL just loaded: its DllMain stub (vm_backend 3873-3874; Sprint 205)
-            let init = std::mem::take(&mut guest.pending_init);
+            let init = std::mem::take(&mut guest.served.pending_init);
             let mem = crate::guest::memory_view(&guest.memory);
             mem.write((TRANSPORT + 48) as u64, &init.to_le_bytes());
             r
@@ -471,23 +474,24 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             let (result, second) = match op {
                 HOST_VIRTUAL_ALLOC => {
                     let (address, err) = guest
+                        .served
                         .arena
                         .alloc(&mut view, a0, a1, a2 as u32, a3 as u32)
                         .map_err(refused)?;
                     (address, u64::from(err))
                 }
                 HOST_VIRTUAL_FREE => {
-                    let (ok, err) = guest.arena.free(&mut view, a0, a1, a2 as u32).map_err(refused)?;
+                    let (ok, err) = guest.served.arena.free(&mut view, a0, a1, a2 as u32).map_err(refused)?;
                     (ok, u64::from(err))
                 }
                 HOST_VIRTUAL_PROTECT => {
-                    let (ok, old, err) = guest.arena.protect(&view, a0, a1, a2 as u32).map_err(refused)?;
+                    let (ok, old, err) = guest.served.arena.protect(&view, a0, a1, a2 as u32).map_err(refused)?;
                     (ok, u64::from(old) | u64::from(err) << 32)
                 }
                 _ => {
                     // HOST_VIRTUAL_QUERY: a1 is the guest's buffer; the arena's refusal (virtual_memory.py 253's
                     // Unimplemented, an address outside the arena and the images) stops by name, as the Python's does
-                    let info = guest.arena.query(&view, a0).map_err(refused)?;
+                    let info = guest.served.arena.query(&view, a0).map_err(refused)?;
                     let raw = memory_basic_information(&info);
                     let at = guest
                         .layout
@@ -510,22 +514,22 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             if let Some(result) = child_request(guest, [a0, a1, a2, a3])? {
                 result
             } else {
-                let pid = guest.process.process_id;
-                let mut objects = std::mem::take(&mut guest.kernel);
+                let pid = guest.served.process.process_id;
+                let mut objects = std::mem::take(&mut guest.served.kernel);
                 objects.add(pid);
                 let answered = objects.request(pid, [a0, a1, a2, a3], &mut KernelMemory(guest));
-                guest.kernel = objects;
+                guest.served.kernel = objects;
                 let answer = answered.map_err(HostError::Failed)?;
                 if let Some(child) = &answer.spawn {
                     // `spawner` (kernel.py 437-468): a second `w2m-vm`, run in its turn (Sprint 197)
                     let start = child_start(guest, child).map_err(HostError::Failed)?;
-                    if guest.link.is_none() {
-                        guest.link = Some(crate::turns::Link::Supervisor(
+                    if guest.served.link.is_none() {
+                        guest.served.link = Some(crate::turns::Link::Supervisor(
                             crate::turns::Supervisor::new(pid, guest.start.instruction_clock.is_some())
                                 .map_err(HostError::Failed)?,
                         ));
                     }
-                    if let Some(crate::turns::Link::Supervisor(s)) = &mut guest.link {
+                    if let Some(crate::turns::Link::Supervisor(s)) = &mut guest.served.link {
                         s.spawn(child, start).map_err(HostError::Failed)?;
                     }
                     // a parent shares the vCPU with its children from here: time slices (`_set_budget`)
@@ -533,7 +537,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 }
                 if answer.wake {
                     wake_blocked(guest);
-                    if let Some(crate::turns::Link::Supervisor(s)) = &guest.link {
+                    if let Some(crate::turns::Link::Supervisor(s)) = &guest.served.link {
                         s.wake_children();
                     }
                 }
@@ -550,13 +554,13 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
                 FILE_STAT | FILE_MKDIR | FILE_RMDIR | FILE_FSTAT | FILE_DUP | FILE_LIST
             ) =>
         {
-            let Some(mut files) = guest.files.take() else {
+            let Some(mut files) = guest.served.files.take() else {
                 return Err(HostError::Failed(
                     "a file call in a run with no file-system root".into(),
                 ));
             };
             let served = files.request(&mut KernelMemory(guest), op, [a0, a1, a2, a3]);
-            guest.files = Some(files);
+            guest.served.files = Some(files);
             let (result, second) = served?;
             let mem = crate::guest::memory_view(&guest.memory);
             mem.write((TRANSPORT + 48) as u64, &second.to_le_bytes());
@@ -566,7 +570,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         // seeded 0x5EED (`random.Random(0x5EED).randbytes`), else from the host's CSPRNG as `os.urandom` reads it
         HOST_RANDOM => {
             let n = a0 as usize;
-            let bytes = match &mut guest.random {
+            let bytes = match &mut guest.served.random {
                 Some(r) => r.randbytes(n),
                 None => {
                     let mut b = vec![0u8; n];
@@ -773,14 +777,14 @@ mod tests {
         let size = 0x3b_9a00u64;
         let bytes: Vec<u8> = (0..size).map(|i| (i as u8).wrapping_add(1)).collect();
         std::fs::write(app.join("data.unity3d"), &bytes).unwrap();
-        g.files = Some(FileBridge::new(&app, true, None).unwrap());
+        g.served.files = Some(FileBridge::new(&app, true, None).unwrap());
         let name: Vec<u8> = "data.unity3d".encode_utf16().flat_map(u16::to_le_bytes).collect();
         crate::kernel::Memory::write(&mut KernelMemory(&mut g), HEAP_VA, &name).unwrap();
-        let mut files = g.files.take().unwrap();
+        let mut files = g.served.files.take().unwrap();
         let (fd, _) = files
             .request(&mut KernelMemory(&mut g), FILE_OPEN, [HEAP_VA, 12, 0, 0])
             .unwrap();
-        g.files = Some(files);
+        g.served.files = Some(files);
         let refused = map_view(&mut g, size, fd + 1, 2).unwrap_err();
         assert_eq!(
             refused.to_string(),
@@ -798,7 +802,7 @@ mod tests {
             mem: crate::guest::memory_view(&g.memory),
             layout: &g.layout,
         };
-        let info = g.arena.query(&view, base).unwrap();
+        let info = g.served.arena.query(&view, base).unwrap();
         assert_eq!(
             (info.kind, info.protect, info.allocation_protect),
             (

@@ -78,3 +78,23 @@ The 22 fields the design calls Served live in one value, `Guest.served`, ready f
 
 ## result
 
+- **The change** (WORK-COMMIT): `pub struct Served` in `guest.rs`, the design's 22 Served fields with their
+  documentation, `images` and `dll_paths` split from the Load fields their comments shared (`init_order`,
+  `image_entry`, `dependency_order`); `Guest` the 23 others and `served`, 24 fields where the card counted 23; the
+  constructor building `served`; every use through `.served`, in 9 source and test files; `tests/guest_parts.rs`,
+  `the_served_part_is_the_designs`, declared in `tests/all.rs`. The card's 12 files were 11: `process_area.rs` and
+  `virtual_memory.rs` define their own types with those field names and changed nothing.
+- **How the uses moved, and what caught the wrong ones:** a `sed` per file rewrote `guest.`, `g.` and `self.` before
+  the 22 names; an `awk` pass, one line for one, rewrote 32 chains (4, then 28 with the condition widened) where `guest`, `g` or `self` ended a line and the
+  field began the next. The compiler named each wrong rewrite, no other type having `served`: `AppDirectory`'s
+  `self.files` (`modules.rs` 264), and every `self.` in the two tests above, all put back. The first loop over the files
+  ran none of them, zsh not splitting an unquoted list; a `while read` loop did.
+- **Expected values:** the build with no warning; no `guest.`, `g.` or `self.` before a Served name left outside
+  `served`, by a search after the change; `the_served_part_is_the_designs` and `every_file_is_a_module` passing.
+- **The gates:** GATES-LINE
+- **Plant 1,** restored by `cp` and checked by `cmp`: the card's plant, `random` moved back to `Guest`, cannot compile
+  with its uses, so the test could not run; the plant marked `random`'s row in the design's table Load, which changes
+  what the judge reads. Its first form failed on the count, the message listing the 21 names without naming the one
+  missing; the test compares the two sets first and names each side's extras, and failed, "in Served and not a Served
+  row of the design: [\"random\"]".
+

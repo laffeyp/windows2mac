@@ -110,7 +110,7 @@ impl HostCompiler {
         let mut insns: Vec<Lifted> = Vec::new();
         let mut addr = start;
         while insns.len() < MAX_BLOCK_INSNS {
-            if !insns.is_empty() && guest.thunks.contains_key(&addr) {
+            if !insns.is_empty() && guest.served.thunks.contains_key(&addr) {
                 break;
             }
             let ins = match lift_at(guest, addr) {
@@ -191,6 +191,7 @@ impl HostCompiler {
     /// stops it (`code_written`). Err when no loaded image is at the file's base.
     pub fn use_cache(&mut self, guest: &mut Guest, file: CacheFile) -> Result<(), String> {
         let image = guest
+            .served
             .images
             .iter()
             .find(|i| i.base == file.base)
@@ -263,7 +264,9 @@ impl HostCompiler {
     fn flags_live_out(&mut self, guest: &Guest, owner: u64, last: &Lifted, end: u64) -> Result<u32, String> {
         let code_pages = &mut self.code_pages;
         let mut code = |addr: u64| {
-            if guest.thunks.contains_key(&addr) || addr >= PROCESS_VA || !code_pages.contains_key(&(addr & !(PAGE - 1)))
+            if guest.served.thunks.contains_key(&addr)
+                || addr >= PROCESS_VA
+                || !code_pages.contains_key(&(addr & !(PAGE - 1)))
             {
                 return None;
             }
