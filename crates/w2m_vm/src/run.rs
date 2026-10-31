@@ -86,9 +86,14 @@ pub enum GiveBack {
 
 /// An exit outside the runtime (5198-5208): the budget left in x23, with the exit's give-back, then the count (limit -
 /// left) written to the monitor data.
-pub fn exit_count(vcpu: &Vcpu<'_>, mem: &mut [u8], tails: &Tails, give_back: GiveBack) -> Result<(), HvError> {
+pub fn exit_count(
+    vcpu: &Vcpu<'_>,
+    mem: ConcurrentGuestMemory<'_>,
+    tails: &Tails,
+    give_back: GiveBack,
+) -> Result<(), HvError> {
     let md = MONITOR_DATA;
-    let limit = read_u64(mem, md + 8);
+    let limit = mem.read_u64(md + 8);
     let mut left = vcpu.reg(Reg::X(REG_BUDGET as u8))?;
     match give_back {
         GiveBack::None => {}
@@ -104,7 +109,7 @@ pub fn exit_count(vcpu: &Vcpu<'_>, mem: &mut [u8], tails: &Tails, give_back: Giv
             vcpu.set_reg(Reg::X(REG_BUDGET as u8), left)?;
         }
     }
-    write_u64(mem, md, limit.wrapping_sub(left));
+    mem.write_u64(md, limit.wrapping_sub(left));
     Ok(())
 }
 /// VM_COMPILER + this: the log's entry count (vm_backend 197).
@@ -177,13 +182,12 @@ impl Stop {
 /// memory is an error, not a slice past the end (Sprint 188; reviewer-2's Low 4 of its review of 182-184).
 pub fn x86_address_at(mem: ConcurrentGuestMemory<'_>, pc: u64) -> Result<u64, String> {
     use guest_runtime::layout::{RECON_COUNT, RECON_ENTRIES, RECON_TABLE, RUN_TABLE};
-    recon_lookup(
-        mem,
-        RECON_TABLE,
-        mem.read_u64(RUN_TABLE + RECON_COUNT),
-        RECON_ENTRIES,
-        pc,
-    )
+    // the count Acquire, then the entries below it (Sprint 282; the design's table): another vCPU appends an entry and
+    // then the count, and on the host's Arm ordering a plain count read could let an entry read pass it
+    let count = mem
+        .atomic_u64(RUN_TABLE + RECON_COUNT)
+        .load(std::sync::atomic::Ordering::Acquire);
+    recon_lookup(mem, RECON_TABLE, count, RECON_ENTRIES, pc)
 }
 
 /// `bisect_right(pc_map, (pc, M64)) - 1` over the first `n` (host, x86) entries at `table`, kept sorted as the code
@@ -219,12 +223,14 @@ fn recon_lookup(mem: ConcurrentGuestMemory<'_>, table: u64, n: u64, capacity: u6
 /// The instruction bytes at guest `rip` for the model's lifter: up to 15 bytes of mapped memory, then 16 zeros, as
 /// `lift(code + bytes(16), ...)` pads them (Sprint 181).
 fn code_at(guest: &Guest, rip: u64) -> Vec<u8> {
+    let mem = guest.memory_view();
     let mut code: Vec<u8> = (0..15u64)
         .map_while(|i| {
-            guest
-                .layout
-                .offset(rip + i)
-                .map(|o| guest.memory.as_slice()[o as usize])
+            guest.layout.offset(rip + i).map(|o| {
+                let mut b = [0u8];
+                mem.read(o, &mut b);
+                b[0]
+            })
         })
         .collect();
     code.extend([0u8; 16]);
@@ -253,12 +259,12 @@ pub struct RuntimeWordTimes {
 }
 
 /// The timing area as the guest left it.
-pub fn read_runtime_word(mem: &[u8]) -> RuntimeWordTimes {
-    let counted = read_u64(mem, LOCK_TIMING + LOCK_TAKINGS_COUNT);
+pub fn read_runtime_word(mem: ConcurrentGuestMemory<'_>) -> RuntimeWordTimes {
+    let counted = mem.read_u64(LOCK_TIMING + LOCK_TAKINGS_COUNT);
     let takings = (0..counted.min(LOCK_TAKINGS))
         .map(|i| {
             let e = LOCK_TIMING + LOCK_ENTRIES + LOCK_ENTRY * i;
-            let w = |k: u64| read_u64(mem, e + 8 * k);
+            let w = |k: u64| mem.read_u64(e + 8 * k);
             Taking {
                 wait_start: w(0),
                 taken: w(1),
@@ -366,19 +372,19 @@ pub struct Created {
 
 /// vm_monitor.c `vswap` (440-482): Q0-Q15, FPCR and FPSR to the outgoing thread's slot at memory offset `save`, then
 /// from the incoming thread's slot at `load`. A slot is 16 registers of 16 bytes, then FPCR and FPSR of 8 each.
-fn swap_vectors(vcpu: &Vcpu<'_>, mem: &mut [u8], save: u64, load: u64) -> Result<(), HvError> {
+fn swap_vectors(vcpu: &Vcpu<'_>, mem: ConcurrentGuestMemory<'_>, save: u64, load: u64) -> Result<(), HvError> {
     for n in 0..16u8 {
-        let at = (save + 16 * u64::from(n)) as usize;
-        mem[at..at + 16].copy_from_slice(&vcpu.simd(n)?.to_le_bytes());
+        mem.write(save + 16 * u64::from(n), &vcpu.simd(n)?.to_le_bytes());
     }
-    write_u64(mem, save + 256, vcpu.reg(Reg::Fpcr)?);
-    write_u64(mem, save + 264, vcpu.reg(Reg::Fpsr)?);
+    mem.write_u64(save + 256, vcpu.reg(Reg::Fpcr)?);
+    mem.write_u64(save + 264, vcpu.reg(Reg::Fpsr)?);
     for n in 0..16u8 {
-        let at = (load + 16 * u64::from(n)) as usize;
-        vcpu.set_simd(n, u128::from_le_bytes(mem[at..at + 16].try_into().unwrap()))?;
+        let mut register = [0u8; 16];
+        mem.read(load + 16 * u64::from(n), &mut register);
+        vcpu.set_simd(n, u128::from_le_bytes(register))?;
     }
-    vcpu.set_reg(Reg::Fpcr, read_u64(mem, load + 256))?;
-    vcpu.set_reg(Reg::Fpsr, read_u64(mem, load + 264))
+    vcpu.set_reg(Reg::Fpcr, mem.read_u64(load + 256))?;
+    vcpu.set_reg(Reg::Fpsr, mem.read_u64(load + 264))
 }
 
 fn read_u64(mem: &[u8], off: u64) -> u64 {
@@ -539,20 +545,19 @@ pub fn run_to_first_decline(
 /// block's entry, whose SUBS counts the block again, so the block's instructions come off the count. `after_stop` is
 /// the word after the stop's `hvc #4`, the B to the block's body; the SUBS x23, x23, #n is two words before the body.
 fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
-    let mem = guest.memory.as_mut_slice();
-    let word_at = |mem: &[u8], off: u64| u32::from_le_bytes(mem[off as usize..off as usize + 4].try_into().unwrap());
+    let mem = guest.memory_view();
     let off = after_stop - MONITOR_VA;
-    let imm26 = i64::from(word_at(mem, off) & 0x3FF_FFFF);
+    let imm26 = i64::from(mem.read_u32(off) & 0x3FF_FFFF);
     let body = (off as i64 + 4 * if imm26 >> 25 != 0 { imm26 - (1 << 26) } else { imm26 }) as u64;
-    let subs = word_at(mem, body - 8);
+    let subs = mem.read_u32(body - 8);
     let reg = REG_BUDGET;
     if subs & !(0xFFF << 10) != 0xF100_0000 | reg << 5 | reg {
         return Err(format!(
             "the word before the block's body at 0x{body:x} is 0x{subs:08x}, not its SUBS"
         ));
     }
-    let count = read_u64(mem, MONITOR_DATA);
-    write_u64(mem, MONITOR_DATA, count - u64::from(subs >> 10 & 0xFFF));
+    let count = mem.read_u64(MONITOR_DATA);
+    mem.write_u64(MONITOR_DATA, count - u64::from(subs >> 10 & 0xFFF));
     Ok(())
 }
 
@@ -643,9 +648,8 @@ fn run(
     {
         // `_set_budget`: one thread, the run's limit; a child shares the vCPU from its first instruction (Sprint 197)
         let shared = guest.link.is_some();
-        let mem = guest.memory.as_mut_slice();
-        write_u64(
-            mem,
+        let mem = guest.memory_view();
+        mem.write_u64(
             md + 8,
             if shared {
                 max_steps.min(guest_runtime::layout::TIME_SLICE)
@@ -653,10 +657,10 @@ fn run(
                 max_steps
             },
         );
-        write_u64(mem, VM_COMPILER + VMC_ENABLED, 1);
-        mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4].copy_from_slice(&0x1F80u32.to_le_bytes());
-        write_u64(mem, md + LOCK_OWNER, 1);
-        mem[(md + FCW_OFF) as usize..(md + FCW_OFF) as usize + 2].copy_from_slice(&0x27Fu16.to_le_bytes());
+        mem.write_u64(VM_COMPILER + VMC_ENABLED, 1);
+        mem.write_u32(md + MXCSR_OFF, 0x1F80);
+        mem.write_u64(md + LOCK_OWNER, 1);
+        mem.write(md + FCW_OFF, &0x27Fu16.to_le_bytes());
     }
     set_system_registers(vcpu, guest.ttbr)?;
     vcpu.set_reg(Reg::Fpcr, fpcr_for(0x1F80))?;
@@ -680,17 +684,18 @@ fn run(
         let pc = vcpu.reg(Reg::Pc)?;
         {
             let slice_until = slice_until(guest);
-            let mem = guest.memory.as_mut_slice();
-            let (count, limit) = (read_u64(mem, md), read_u64(mem, md + 8));
-            write_u64(mem, md + SLICE_UNTIL, slice_until);
-            write_u64(mem, md + RUN_END, max_steps);
+            let mem = guest.memory_view();
+            let (count, limit) = (mem.read_u64(md), mem.read_u64(md + 8));
+            mem.write_u64(md + SLICE_UNTIL, slice_until);
+            mem.write_u64(md + RUN_END, max_steps);
             // the VM switches threads itself unless another process is due (Sprint 197)
             let others_due = guest
                 .link
                 .as_ref()
                 .is_some_and(|l| l.others_due(crate::threads::counter_now(guest)));
-            let mem = guest.memory.as_mut_slice();
-            write_u64(mem, RUN_TABLE + u64::from(RT_IN_VM), u64::from(!others_due));
+            guest
+                .memory_view()
+                .write_u64(RUN_TABLE + u64::from(RT_IN_VM), u64::from(!others_due));
             if !runtime.contains(&pc) {
                 vcpu.set_reg(Reg::X(REG_BUDGET as u8), limit.wrapping_sub(count))?;
             }
@@ -716,18 +721,18 @@ fn run(
         // as the frozen host's fixture reads them at `serve_exit`'s entry: a bridge stores the count into the word as
         // the guest enters a service, so the word read before the resume lags it (Sprint 207)
         if let Some(l) = &mut guest.exit_ledger {
-            let mem = guest.memory.as_slice();
-            let warp = read_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP);
-            if let Err(why) = l.resume(read_u64(mem, md), warp, process_below_trace(mem)) {
+            let view = crate::guest::memory_view(&guest.memory);
+            let warp = view.read_u64(RUN_TABLE + crate::process::CLOCK_WARP);
+            // the ledger hashes the process area from a slice: a diagnostic of one-vCPU runs, where the one vCPU is
+            // stopped here (census D7; a copy through the view would copy the area at every exit)
+            if let Err(why) = l.resume(view.read_u64(md), warp, process_below_trace(guest.memory.as_slice())) {
                 break Stop::Exit(format!("the exit ledger: {why}"));
             }
         }
         if guest.time_runtime_word {
             // the exit counted where the guest's timing reads it, so a taking that spans an exit says so (Sprint 164)
-            let at = (LOCK_TIMING + LOCK_EXITS) as usize;
-            let word = &mut guest.memory.as_mut_slice()[at..at + 8];
-            let n = u64::from_le_bytes(word.try_into().unwrap()) + 1;
-            word.copy_from_slice(&n.to_le_bytes());
+            let (mem, at) = (guest.memory_view(), LOCK_TIMING + LOCK_EXITS);
+            mem.write_u64(at, mem.read_u64(at) + 1);
         }
         out.run_ns.push((returned - started).as_nanos() as u64);
         // the exit's kind, named before the service is timed, so the naming is not counted in it (reviewer's finding
@@ -751,15 +756,17 @@ fn run(
                 break Stop::Exit(format!("the block judge: {why}"));
             }
         }
-        let mem = guest.memory.as_mut_slice();
+        // `vm_compiled` hands a slice to `HostCompiler::installed_in_vm` (`compile.rs`, census D7); the one vCPU is
+        // stopped at its exit
         vm_compiled(
-            mem,
+            guest.memory.as_mut_slice(),
             &mut out.blocks,
             &mut out.translations,
             &mut out.vm_compile_starts,
             &mut out.instructions_at,
             host.as_deref_mut(),
         );
+        let mem = crate::guest::memory_view(&guest.memory);
         let pc = vcpu.reg(Reg::Pc)?;
         if !runtime.contains(&pc) {
             // the count, from x23, with a fault's give-back (5199-5208); the VM's own blocks' tails this loop does not
@@ -777,12 +784,12 @@ fn run(
             // the row: kind, x86 site (the dispatch target for hvc 1, else the hvc's), and a request's op and arguments
             let site = match exit.hvc_immediate() {
                 Some(1) => vcpu.reg(Reg::X(17))?,
-                Some(_) => x86_address_at(ConcurrentGuestMemory::new(mem), pc.wrapping_sub(4)).unwrap_or(0),
+                Some(_) => x86_address_at(mem, pc.wrapping_sub(4)).unwrap_or(0),
                 None => pc,
             };
             let request = (exit.hvc_immediate() == Some(8)).then(|| {
                 let t = MONITOR_SIZE + TRANSPORT_OFF;
-                let w = |i: u64| read_u64(mem, t + 8 * i);
+                let w = |i: u64| mem.read_u64(t + 8 * i);
                 [w(0), w(1), w(2), w(3), w(4), 0, 0]
             });
             if let Some(l) = &mut guest.exit_ledger {
@@ -793,7 +800,7 @@ fn run(
                 });
             }
         }
-        let mem = guest.memory.as_mut_slice();
+        let mem = crate::guest::memory_view(&guest.memory);
         let Some(number) = exit.hvc_immediate() else {
             if matches!(exit, Exit::VtimerActivated) {
                 vcpu.set_vtimer_mask(true)?;
@@ -824,7 +831,7 @@ fn run(
             continue; // on at the hvc's return
         }
         if number == 8 {
-            let op = read_u64(mem, MONITOR_SIZE + TRANSPORT_OFF);
+            let op = mem.read_u64(MONITOR_SIZE + TRANSPORT_OFF);
             if host.is_none() {
                 let why = "a run without the host's compiler serves no host request".into();
                 break Stop::HostRequest { op, pc, why };
@@ -832,17 +839,17 @@ fn run(
             // the requests the Rust host serves (`_host_request`, 5244-5256): on at the hvc's return, or the end
             let threads = guest.threads.len();
             let (sub, a0, current) = (
-                read_u64(mem, MONITOR_SIZE + TRANSPORT_OFF + 8),
-                read_u64(mem, MONITOR_SIZE + TRANSPORT_OFF + 16),
+                mem.read_u64(MONITOR_SIZE + TRANSPORT_OFF + 8),
+                mem.read_u64(MONITOR_SIZE + TRANSPORT_OFF + 16),
                 crate::threads::current_tid(guest),
             );
             let served = crate::host_request::serve(guest, vcpu);
             if let Some(l) = &mut guest.exit_ledger {
-                let (t, mem) = (MONITOR_SIZE + TRANSPORT_OFF, guest.memory.as_slice());
-                l.answered(read_u64(mem, t + 48), read_u64(mem, t + 56));
+                let (t, mem) = (MONITOR_SIZE + TRANSPORT_OFF, crate::guest::memory_view(&guest.memory));
+                l.answered(mem.read_u64(t + 48), mem.read_u64(t + 56));
             }
             if op == HOST_THREAD && matches!(sub, THREAD_EXIT_STUB | THREAD_END | THREAD_EXIT_CODE) && served.is_ok() {
-                let answer = read_u64(guest.memory.as_slice(), MONITOR_SIZE + TRANSPORT_OFF + 56);
+                let answer = guest.memory_view().read_u64(MONITOR_SIZE + TRANSPORT_OFF + 56);
                 out.thread_requests.push(ThreadRequest {
                     sub,
                     a0,
@@ -852,21 +859,29 @@ fn run(
             }
             if guest.threads.len() > threads {
                 let t = guest.threads.values().next_back().unwrap();
-                let (at, mem) = (crate::threads::entry(t.index), guest.memory.as_slice());
-                let vslot = read_u64(mem, at + crate::threads::E_VSLOT);
+                let (at, mem) = (crate::threads::entry(t.index), guest.memory_view());
+                let vslot = mem.read_u64(at + crate::threads::E_VSLOT);
                 out.created.push(Created {
                     tid: t.tid,
-                    entry: mem[at as usize..(at + RUN_ENTRY) as usize].to_vec(),
-                    vectors: mem[vslot as usize..vslot as usize + 272].to_vec(),
-                    count: read_u64(mem, md),
-                    limit: read_u64(mem, md + 8),
+                    entry: {
+                        let mut entry = vec![0; RUN_ENTRY as usize];
+                        mem.read(at, &mut entry);
+                        entry
+                    },
+                    vectors: {
+                        let mut vectors = vec![0; 272];
+                        mem.read(vslot, &mut vectors);
+                        vectors
+                    },
+                    count: mem.read_u64(md),
+                    limit: mem.read_u64(md + 8),
                 });
             }
             // the batch run's end, asked at each answered request, a point on the instruction clock (Sprint 219)
             if matches!(served, Ok(crate::host_request::Served::Answered))
                 && let Some(mut end) = guest.batch_stop.take()
             {
-                let asked = end.check(guest, read_u64(guest.memory.as_slice(), md));
+                let asked = end.check(guest, guest.memory_view().read_u64(md));
                 guest.batch_stop = Some(end);
                 match asked {
                     Ok(None) => {}
@@ -893,9 +908,9 @@ fn run(
             // a service handed the vCPU over, and threads.c `w2m_switch` left it to the host (5300-5303): `_schedule`,
             // then the next thread's registers at the dispatcher (5077-5094), its vectors swapped as the monitor's
             // `vswap` swaps them
-            let at = (MONITOR_SIZE + STATE_OFF) as usize + STATE_SCHEDULE as usize;
-            let bits = u32::from_le_bytes(mem[at..at + 4].try_into().unwrap());
-            mem[at..at + 4].fill(0);
+            let at = MONITOR_SIZE + STATE_OFF + u64::from(STATE_SCHEDULE);
+            let bits = mem.read_u32(at);
+            mem.write_u32(at, 0);
             let mut x = [0u64; 31];
             for (r, v) in x.iter_mut().enumerate() {
                 *v = vcpu.reg(Reg::X(r as u8))?;
@@ -925,7 +940,7 @@ fn run(
                         to: crate::threads::current_tid(guest),
                     });
                     if let Some((save, load)) = vectors {
-                        swap_vectors(vcpu, guest.memory.as_mut_slice(), save, load)?;
+                        swap_vectors(vcpu, guest.memory_view(), save, load)?;
                     }
                     for (r, v) in x.iter().enumerate() {
                         vcpu.set_reg(Reg::X(r as u8), *v)?;
@@ -939,7 +954,7 @@ fn run(
         if number == crate::cases::HVC_SLOW_SSE || number == crate::cases::HVC_SLOW_STEP {
             // `serve_exit` (5232, 5270-5271; Sprint 181): the instruction at the hvc's site, one step of the model,
             // on at the dispatcher or the runtime's exception call as the step leaves the PC
-            let rip = match x86_address_at(ConcurrentGuestMemory::new(guest.memory.as_mut_slice()), pc - 4) {
+            let rip = match x86_address_at(guest.memory_view(), pc - 4) {
                 Ok(rip) => rip,
                 Err(why) => break Stop::Exit(why),
             };
@@ -968,7 +983,7 @@ fn run(
             // stop; else the next slice's budget and expired waits woken, then the turn to another process that is
             // ready, or the next thread of this one, the stopped block's count given back as the thread goes on at its
             // entry
-            let count = read_u64(guest.memory.as_slice(), md);
+            let count = guest.memory_view().read_u64(md);
             if count >= max_steps {
                 break Stop::StepLimit {
                     count,
@@ -985,7 +1000,7 @@ fn run(
             if !others && guest.threads.len() < 2 {
                 continue;
             }
-            let at = match x86_address_at(ConcurrentGuestMemory::new(guest.memory.as_mut_slice()), pc - 4) {
+            let at = match x86_address_at(guest.memory_view(), pc - 4) {
                 Ok(at) => at,
                 Err(why) => break Stop::Exit(why),
             };
@@ -1012,7 +1027,7 @@ fn run(
                 Ok(Switch::Ended(code)) => break Stop::ExitProcess { code },
                 Ok(Switch::Go { vectors }) => {
                     if let Some((save, load)) = vectors {
-                        swap_vectors(vcpu, guest.memory.as_mut_slice(), save, load)?;
+                        swap_vectors(vcpu, guest.memory_view(), save, load)?;
                     }
                     for (r, v) in x.iter().enumerate() {
                         vcpu.set_reg(Reg::X(r as u8), *v)?;
@@ -1037,7 +1052,7 @@ fn run(
             let Some(at) = guest.layout.offset(rsp) else {
                 break Stop::Exit(format!("import {name}: the guest's RSP 0x{rsp:x} is not mapped"));
             };
-            guest.unimplemented = Some((name.clone(), read_u64(guest.memory.as_slice(), at)));
+            guest.unimplemented = Some((name.clone(), guest.memory_view().read_u64(at)));
             break Stop::Import { name, pc };
         }
         if number != 1 {
@@ -1075,14 +1090,15 @@ fn run(
                 },
             },
         };
-        dispatch_insert(ConcurrentGuestMemory::new(guest.memory.as_mut_slice()), target, va);
+        dispatch_insert(guest.memory_view(), target, va);
         vcpu.set_reg(Reg::Pc, guest.code.miss_va + 4)?; // ic ialluis; tlbi; dsb; isb; re-dispatch
     };
     // the stop's own row, then the file whole (Sprint 206)
     if let Some(l) = &mut guest.exit_ledger {
-        let mem = guest.memory.as_slice();
-        let warp = read_u64(mem, RUN_TABLE + crate::process::CLOCK_WARP);
-        let _ = l.resume(read_u64(mem, md), warp, process_below_trace(mem));
+        let view = crate::guest::memory_view(&guest.memory);
+        let warp = view.read_u64(RUN_TABLE + crate::process::CLOCK_WARP);
+        // the ledger's process area as a slice, as at each exit (census D7)
+        let _ = l.resume(view.read_u64(md), warp, process_below_trace(guest.memory.as_slice()));
         let _ = l.flush();
         // the blocks both compilers made (Sprint 207)
         let mut blocks: Vec<(u64, u64)> = out.translations.iter().map(|t| (t.start, t.end)).collect();
@@ -1091,16 +1107,16 @@ fn run(
         }
         let _ = l.blocks(&blocks);
     }
-    let mem = guest.memory.as_slice();
+    let mem = guest.memory_view();
     for (i, name) in VMC_COUNT_NAMES.iter().enumerate() {
         out.counts
-            .insert(name, read_u64(mem, VM_COMPILER + VMC_COUNTS + 8 * i as u64));
+            .insert(name, mem.read_u64(VM_COMPILER + VMC_COUNTS + 8 * i as u64));
     }
-    out.compile_ticks = crate::monitor_code::CompileTicks::read(|slot| read_u64(mem, VM_COMPILER + slot));
-    out.executed = read_u64(mem, md);
+    out.compile_ticks = crate::monitor_code::CompileTicks::read(|slot| mem.read_u64(VM_COMPILER + slot));
+    out.executed = mem.read_u64(md);
     out.stop = stop;
     if guest.time_runtime_word {
-        out.runtime_word = read_runtime_word(guest.memory.as_slice()); // Sprint 164: read once, at the stop
+        out.runtime_word = read_runtime_word(guest.memory_view()); // Sprint 164: read once, at the stop
     }
     Ok(out)
 }

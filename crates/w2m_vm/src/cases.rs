@@ -573,7 +573,7 @@ pub fn run_cases(
             if e.hvc_immediate() == Some(HVC_FAULT_GIVE_BACK as u16) {
                 // a guest fault left its block (5205-5208, 5294-5296): the faulting instruction and those after it go
                 // back to the budget and the count is written, then on to w2m_exception
-                exit_count(vcpu, guest.memory.as_mut_slice(), &tails, GiveBack::Fault)?;
+                exit_count(vcpu, guest.memory_view(), &tails, GiveBack::Fault)?;
                 *tally.host_requests.entry(HOST_GIVE_BACK).or_default() += 1;
                 continue;
             }
@@ -581,7 +581,7 @@ pub fn run_cases(
                 // the model (Sprint 173; `_slow_sse`, vm_backend 5203-5210 and 5270-5271): the exit's give-back and
                 // count, then one step; a step the slice refuses is counted below, not judged
                 let pc = vcpu.reg(Reg::Pc)?;
-                exit_count(vcpu, guest.memory.as_mut_slice(), &tails, GiveBack::Model { pc })?;
+                exit_count(vcpu, guest.memory_view(), &tails, GiveBack::Model { pc })?;
                 given_back = true;
                 match model_step(guest, vcpu, &c.code, CODE_VA)? {
                     ModelStep::Resumed | ModelStep::Raised => {
@@ -655,7 +655,7 @@ pub fn run_cases(
                 // a model step this slice refuses (SSE, MMX, x87, VEX: the next slices): counted, not judged; its
                 // exit's give-back and count as the run loop's
                 if !given_back {
-                    exit_count(vcpu, guest.memory.as_mut_slice(), &tails, GiveBack::Model { pc })?;
+                    exit_count(vcpu, guest.memory_view(), &tails, GiveBack::Model { pc })?;
                 }
                 tally.model += 1;
                 *tally.model_by_class.entry(iclass.to_string()).or_default() += 1;
