@@ -46,10 +46,32 @@ fn root() -> PathBuf {
         .unwrap()
 }
 
-/// A file `gates.sh` writes under build/batch_run/; None when it has not run here, or ran on other sources (Sprint
-/// 288), and the gates do not require it.
+/// The run outputs whose stamps stand for `name` (Sprint 288): the game's stop file for the files its run writes
+/// beside it, each guest's stop for `guests.tsv`, which `gates.sh` gathers from them.
+fn stamped_for(root: &Path, name: &str) -> Vec<PathBuf> {
+    let dir = root.join("build/batch_run");
+    if name == "guests.tsv" {
+        let mut stops: Vec<PathBuf> = fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("guest-")))
+            .filter(|p| p.extension().is_some_and(|e| e == "stop"))
+            .collect();
+        stops.sort();
+        return stops;
+    }
+    vec![dir.join("first-stop.tsv")]
+}
+
+/// A file `gates.sh` writes under build/batch_run/; None when it has not run here, or ran on other sources than the
+/// work tree's (Sprint 288), and the gates do not require it.
 fn written(root: &Path, name: &str) -> Option<String> {
-    if !w2m_vm::built_from::fresh(root, &root.join("build/batch_run")) {
+    if !stamped_for(root, name)
+        .iter()
+        .all(|f| w2m_vm::built_from::fresh(root, f))
+    {
         return None;
     }
     match fs::read_to_string(root.join("build/batch_run").join(name)) {

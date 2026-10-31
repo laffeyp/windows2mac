@@ -68,8 +68,12 @@ fn the_stored_judgement_holds() {
 #[test]
 fn the_gates_judgement_holds() {
     let dir = root().join("build/batch_run");
-    // outputs of other sources are not judged (Sprint 288)
-    if !w2m_vm::built_from::fresh(&root(), &dir) {
+    // outputs of other sources are not judged, each file by its own stamp (Sprint 288; reviewer-3's Low 1 at 288: a
+    // timed run writes the stop file and not the judgement)
+    if !["whole-blocks.tsv", "first-stop.tsv"]
+        .iter()
+        .all(|f| w2m_vm::built_from::fresh(&root(), &dir.join(f)))
+    {
         return;
     }
     let (Ok(text), Ok(stop)) = (

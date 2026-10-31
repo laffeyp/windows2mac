@@ -91,8 +91,8 @@ fn the_frozen_hosts_stream_conforms_to_windows_as_its_record_says() {
 #[test]
 fn the_rust_hosts_stream_conforms_to_windows_as_far_as_it_runs() {
     let root = root();
-    // a stream of other sources is not judged (Sprint 288)
-    if !w2m_vm::built_from::fresh(&root, &root.join("build/batch_run")) {
+    // a stream of other sources is not judged (Sprint 288): the stop file's stamp stands for its run's stream
+    if !w2m_vm::built_from::fresh(&root, &root.join("build/batch_run/first-stop.tsv")) {
         return;
     }
     let Ok(ours) = fs::read_to_string(root.join("build/batch_run/first-stop.calls.tsv")) else {

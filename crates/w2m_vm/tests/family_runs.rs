@@ -1281,10 +1281,6 @@ fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
         })
         .collect();
     let known = fs::read_to_string(root.join(KNOWN)).unwrap();
-    // runs of other sources are not judged (Sprint 288)
-    if !w2m_vm::built_from::fresh(&root, &root.join("build/family_runs")) {
-        return;
-    }
     let (mut seen, mut wrong) = (BTreeMap::new(), Vec::new());
     let (mut conformed, mut families) = (0, BTreeMap::<String, bool>::new());
     for line in known.lines().filter(|l| !l.starts_with('#')) {
@@ -1299,6 +1295,10 @@ fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
             eprintln!("{what}: the families are not judged here");
             return;
         };
+        // a run of other sources is not judged (Sprint 288): its stop's stamp stands for its printed rows
+        if !w2m_vm::built_from::fresh(&root, &base.with_extension("stop")) {
+            return;
+        }
         let stop = stop.lines().next().unwrap_or("").to_string();
         let key = (family.to_string(), run.to_string());
         // from Sprint 231 every run starts as its family starts (column 7, given to `w2m-vm` as --start). From Sprint 233

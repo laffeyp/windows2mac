@@ -180,7 +180,56 @@ mod run {
         Ok(output_file)
     }
 
+    /// The flags whose next argument names a file the run writes, stamped beside it (Sprint 288).
+    const WRITTEN: [&str; 4] = ["--output", "--stop", "--exit-ledger", "--judge-blocks"];
+
+    /// `serve`, each file it is told to write stamped with the sources the run read: the file and its stamp removed at
+    /// the start, with an exit ledger's children's `<path>.<pid>`, and the stamp written after the run beside each such
+    /// file it wrote, so a test refuses a file of other sources and a file a run did not reach (Sprint 288;
+    /// reviewer-3's Lows 1 at 287 and 288). The `--stop` file, written last, stands for the files the same run writes
+    /// beside it under its name. One stamp a run, its `git` call about 40 ms.
     pub fn main() -> Result<(), String> {
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        let written: Vec<PathBuf> = args
+            .windows(2)
+            .filter(|w| WRITTEN.contains(&w[0].as_str()))
+            .map(|w| root().join(&w[1]))
+            .collect();
+        if written.is_empty() {
+            return serve();
+        }
+        let gone = |f: &Path| match fs::remove_file(f) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Err(format!("{}: {e}", f.display())),
+            _ => Ok(()),
+        };
+        for file in &written {
+            gone(file)?;
+            w2m_vm::built_from::unstamp(file)?;
+        }
+        if let Some(i) = args.iter().position(|a| a == "--exit-ledger")
+            && let Some(ledger) = args.get(i + 1).map(|l| root().join(l))
+            && let (Some(dir), Some(name)) = (ledger.parent(), ledger.file_name())
+        {
+            let children = format!("{}.", name.to_string_lossy());
+            for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+                let n = entry.file_name().to_string_lossy().to_string();
+                if n.strip_prefix(&children)
+                    .is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()))
+                {
+                    gone(&entry.path())?;
+                }
+            }
+        }
+        let made = w2m_vm::built_from::run_stamp(&root())?;
+        let served = serve();
+        let stamped = written
+            .iter()
+            .filter(|f| f.is_file())
+            .try_for_each(|f| w2m_vm::built_from::stamp(f, &made));
+        served.and(stamped)
+    }
+
+    fn serve() -> Result<(), String> {
         let started = Instant::now();
         let mut args: Vec<String> = std::env::args().skip(1).collect();
         // the QoS class this process runs at, for a measurement's baseline (Sprint 240): what the run that follows
@@ -301,22 +350,6 @@ mod run {
         {
             let n = |s: &String| s.parse::<u64>().map_err(|e| format!("--child {s}: {e}"));
             return child(n(page_fd)? as i32, n(memory_fd)? as i32, n(slot)? as usize);
-        }
-        // each directory this run writes, stamped with the sources its outputs stand for, so a test refuses outputs of
-        // other sources (Sprint 288; reviewer-3's Low 1 at 287); one stamp a run, its `git` call about 40 ms
-        let written: Vec<&str> = args
-            .windows(2)
-            .filter(|w| w[0] == "--output" || w[0] == "--stop")
-            .map(|w| w[1].as_str())
-            .chain(ledger.as_deref())
-            .chain(judge.as_deref())
-            .collect();
-        if !written.is_empty() {
-            let made = w2m_vm::built_from::run_stamp(&root())?;
-            for file in written {
-                let dir = root().join(file);
-                w2m_vm::built_from::stamp(dir.parent().ok_or(format!("{file}: no directory"))?, &made)?;
-            }
         }
         if let [flag, directory, program, out_flag, output, stop_flag, stop_file] = args.as_slice()
             && flag == "--game"
