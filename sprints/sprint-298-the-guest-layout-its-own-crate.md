@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 298
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -93,7 +93,7 @@ The guest's layout is a crate of facts; the loader and the arena reach it withou
   `cache_file.rs`' key and the test. One concept, at its floor: a crate move changes the manifests, the lockfile and
   the re-exports together or the workspace does not build; the slots, the state block and the wider class went to
   Deferred (Sprint 298).
-- **The change** (WORK-COMMIT): `crates/guest_runtime/src/layout.rs` moved whole by `git mv` to
+- **The change** (0f1a9bfb8): `crates/guest_runtime/src/layout.rs` moved whole by `git mv` to
   `crates/guest_layout/src/lib.rs`, a crate with no dependencies; `guest_runtime` depending on it and re-exporting it
   (`pub use guest_layout as layout;`, `lib.rs` 11), so every `guest_runtime::layout` path stays; `pe_loader`'s three
   and `virtual_memory`'s one re-export read `guest_layout`, their manifests naming it in place of `guest_runtime`;
@@ -103,7 +103,11 @@ The guest's layout is a crate of facts; the loader and the arena reach it withou
 - **Expected values:** the 16 tests the change reaches passing before the pre-commit run, among them
   `the_image_rust_builds_is_the_python_builds_byte_for_byte`, `the_key_covers_every_crate_the_cache_is_made_from`, the
   constants tests and `guest_layout`'s `the_chained_offsets_land_where_the_python_host_puts_them`; before the commit, format, lint, the Linux check, `design_check`, the record check and the five crates' doc tests passing, and the batch-run step; its tests, stopped under WORKING_AGREEMENT's amendment at 298, run in the gates alone.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 1106 s, kept in `store/gates/passes.tsv` as sprint 298 at 0f1a9bfb8 with root=f66c4286f and "rust=all python=0 samples=0", all Rust tests (an input outside one crate changed), 327 tests, base=235fdd4e9, Sprint 297's close; multi-vCPU: not run (Python gates not run)
+- **The scope's "Not here" after the card's commit:** card 2d5dd545a named the three cards after the roll as 300,
+  301 and 302; with the work, before 0f1a9bfb8, they moved to Deferred (Sprint 298) behind the run loop's cards (the
+  Decision "Sequence: the constants' class behind the run loop"), and the bullet says so. The work's own scope did not
+  change.
 - **Plant 1,** restored by `cp` and checked by `cmp`: `"crates/guest_layout",` in `KEY_INPUTS` replaced by a second
   `"crates/pe_image",`, the array's length kept; `the_key_covers_every_crate_the_cache_is_made_from` failed,
   "crates/guest_layout, which the cache is made from, is not among the key's inputs".
