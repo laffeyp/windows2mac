@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 277
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -87,3 +87,25 @@ allows a one-line substitution and a one-line deletion.
 - [x] One concept: the `sed -i` class in the guard.
 
 ## result
+
+- **The check** (ef4dc2cd6): `multi_line_script` parses each command, `[address[,address]][!]command[arguments]`, inside
+  braces too, an `s` or `y` command's three delimiters with escapes, so a `;` in a pattern no longer splits it; it
+  refuses `a`, `i` and `c` in either form, `r`, `R`, `G`, `N`, `D`, `p`, `P`, `=`, `l`, `F`, `q`, `Q`, `w`, `W`, `e`,
+  `!`, an `s` flag `p`, `w` or `e`, and an address range before any command or brace. `refusal` refuses `sed -i` with
+  `-n` or `-f`, not reading an `-i` word, whose backup suffix may hold any letter.
+- **Expected values:** 18 commands refused, each with its reason, Sprint 276's `343r` among them; allowed still: a
+  substitution with `;` in its pattern and replacement, two substitutions inside braces, `y`, `sed -i.new`, and every
+  form the earlier tests allowed. One earlier test's expected reason changed from "a\, i\ or c\" to "an a, i or c
+  command". The `edit_guard` tests, 8.
+- **The gates' first run** on ef4dc2cd6 exited 100: `signal_report`'s `a_quoted_multi_line_sed_must_be_owned`
+  (`crates/signal_report/tests/check.rs` 567) held the old reason's text, "an a\\, i\\ or c\\ command"; the check before
+  the commit ran `edit_guard`'s tests only, not those of the crates that depend on it. Fixed in 1273eeaa2, the only
+  copy of the old text in the tree (`grep -F`); `signal_report --check` for Sprints 270 to 276 passed with the new
+  guard, so no recorded entry became an unowned breach.
+- **The gates:** `scripts/gates.sh` exit 0 in 291 s, kept in `store/gates/passes.tsv` as sprint 277 at 1273eeaa2 with root=a89c2ae0b and "rust=crates python=0 samples=0", rdeps(edit_guard) and rdeps(signal_report), 46 tests, base=38d19958d, Sprint 276's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: `r` dropped from the refused commands; the test failed, "sed -i ''
+  '343r /tmp/entry.txt' docs/a.md: sed -i with a w, W or e command": the parser then read `/tmp/` as an address and
+  `e` as a command, and the test caught the wrong reason.
+- **Plant 2,** restored by `cp` and checked by `cmp`: a brace read as a command that takes an argument up to the next
+  `;` (two one-line `sed`s); the card's plant, the brace branch removed, would not fire, as the fallback steps over a
+  bare `{`; the test failed, "allowed: sed -i '' '/x/{N;s/a/b/}' f.rs".
