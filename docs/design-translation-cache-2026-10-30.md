@@ -188,7 +188,12 @@ words in the real run; the VM's follows once the host's conforms.
      Sprint 255's limits; the installer only copies from it. Weighed: copying only the 128,456 blocks the batch run
      installs, about 14.5 MB at the cache's 112.8 bytes a block, and not the rest. Not taken: which blocks a run reaches is known only after it, and the cache
      serves any run. The file's table is written once and only read after, so several vCPUs read it with no lock,
-     as QEMU's lookups are (below).
+     as QEMU's lookups are (below). The guest's memory today (`Layout::new`, `guest.rs` 229-262) is the monitor area
+     (0xAA0_0000, 170 MiB), the process area, the loaded images, the heap (256 MiB) and the VirtualAlloc arena
+     (0x80_0000_0000, 512 GiB, sparse, 1 GiB aligned): a little over 513 GiB of the 40-bit IPA's 1 TiB (`Vm::new(40)`).
+     The file's 211 MB is one more entry in `Layout::maps` and one more part of the guest's allocation, made only
+     when a cache is in use; the two regions it replaces had no backing, and `tests/cache_layout.rs`, which holds
+     them, is rewritten for the one region and its IPA bound.
    - **II. Each block's fix-ups in the file.** For each block the file lists the word indices `relocate` re-encodes
      (a `B` or `BL` whose target leaves the block), so the installer copies and patches them without decoding a word.
      Version 2 of the file. Weighed: decoding in the VM as `relocate` does. Not taken: the rule would then live in two
