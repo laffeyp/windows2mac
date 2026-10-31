@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 270
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -94,3 +94,24 @@ what would show it met, and the Decision orders the step's cards from it.
 - [x] One concept: step 6's census.
 
 ## result
+
+- **The census** (975a98925): `docs/step-6-census-2026-10-30.md`, six gate items, five design changes and six waiting
+  Deferred items, each with the frozen host's state, the Rust host's, its status and what shows it met. All six gate
+  items absent on the Rust host, which makes one vCPU in every run; changes 1, 2, 3 and 5 absent, 4 partial (a child
+  `w2m-vm` a process, in turns).
+- **What the lookups found:** the memory XCHG lowers to a load and two plain stores (`rules.rs` 629-644), not atomic
+  on two vCPUs; `lock_runtime` is the frozen host's two-state `CASA` spin (`monitor_code.rs` 110-129); one transport
+  page a process (`layout.rs` 99); the frozen host ran two families on two vCPUs (Sprint 119), not 68, and two scratch
+  batch runs on the wall clock (Sprint 122); no host measured instructions a second on four vCPUs or the hot imports'
+  rate on six threads.
+- **The Decision** "Sequence for step 6": 271 the XCHG; 272 two vCPUs under the runtime word, judged by the five
+  litmus tests and the EnTSO plant; 273 the shared counters; 274 Sprint 122's guests with the kick tests; 275 the 68
+  families; 276 the batch run on the wall clock; then the rates and the design's changes in the order their waits name.
+- **A ground checked:** the Decision first said QEMU "ran several vCPUs under its big lock and split the translation
+  lock after"; QEMU's documentation states only its current design, and commit 0ac20318c ("tcg: remove tb_lock")
+  shows a translation lock removed, not vCPUs run under one first; the ground now holds what the commit says
+  (4668e5ead, 19e5ee826).
+- **The check:** `census.rs` holds the new document's paths.
+- **The gates:** `scripts/gates.sh` exit 0 in 249 s on 65951bbc9, copied from `store/gates/passes.tsv`; the timing stage 681 ns an exit at load 7.26.
+- **Plant 1,** restored by `cp` and checked by `cmp`: `crates/w2m_vm/src/turns.rs` misspelled `turn.rs`; the test
+  failed, "docs/step-6-census-2026-10-30.md names 1 path(s) never in the tree: [\"crates/w2m_vm/src/turn.rs\"]".
