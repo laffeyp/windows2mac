@@ -26,7 +26,16 @@ running vCPU may write.
    length, `Copy`, `Send` and `Sync`. It copies bytes in and out through the pointer (`read`, `write`, `read_u64` and
    the rest) where the guest's protocol says no running vCPU writes them at the time: under the runtime word, or before
    they are published. A word that running guest code may write is reached as an atomic (`atomic_u32`,
-   `atomic_u64`), the same physical word the guest reaches by `CASA`, `LDAR` and `STLR`.
+   `atomic_u64`), the same physical word the guest reaches by `CASA`, `LDAR` and `STLR`. *(Amended 2026-10-31, Sprint
+   279: the copies were plain, `copy_nonoverlapping`; a guest thread writing a buffer the host copies, as Windows
+   allows, made that a data race, undefined in Rust's model whatever the protocol. The copies are now relaxed atomic
+   loads and stores, a word where aligned and a byte at the ends, so a racing guest gives torn bytes, defined. RFC 3301,
+   "AtomicPerByte (aka atomic memcpy)" (https://github.com/rust-lang/rfcs/pull/3301, open, not merged): "All of the data
+   would have to be written and read through atomic operations to prevent a data race … it's fine if there's tearing";
+   C++'s P1478 `atomic_load_per_byte_memcpy` is "effectively a series of `AtomicU8::load`s". The protocol still sets
+   the ordering, by the table below; Rust's one remaining limit is that atomics of different sizes must not race on the
+   same bytes from two host threads, so no bulk copy covers a word another host thread reaches by `atomic_u32` or
+   `atomic_u64` at the time.)*
 3. **A pair the guest reads at once is published at once.** The dispatcher reads a dispatch slot, target and code
    address, by one `LDP` from a 16-byte-aligned slot (`monitor_code.rs`, `dispatcher`). With FEAT_LSE2 an aligned
    pair access of two 64-bit registers to Normal write-back memory is single-copy atomic (DDI 0487 B2.2.1.1); this M5
@@ -37,12 +46,30 @@ running vCPU may write.
    vCPUs a guest could have matched a new target and branched through an old address, or the reverse when a filled
    slot is rewritten.
 4. **A type of w2m's own, not `vm-memory`.** `vm-memory` serves several regions, guest addresses, dirty bitmaps and
-   volatile copies; w2m has one mapping, and its copies are plain because volatile changes nothing for concurrency.
-   The type is 194 lines with its tests, and its interface is the four kinds of access the host makes: bytes, words,
+   volatile copies; w2m has one mapping, and its copies are relaxed atomics, not volatile, because volatile changes
+   nothing for concurrency (plain until Sprint 279).
+   The type is 282 lines with its tests (194 at Sprint 276), and its interface is the four kinds of access the host makes: bytes, words,
    atomic words and the published pair.
 5. **Waiting tests read no time.** The take of the runtime word calls a hook each time it finds the word held
    (`host_take_runtime_word_waiting`); a test frees the word from the hook, or from the holder's thread once the hook
    has run, and so tells a take that waited from one that did not (reviewer-3's Low 1 at 275).
+
+## The structures the host reaches (Sprint 279, reviewer-3's Low 3 at 278)
+
+Each card that moves a module to the view cites the row of each structure it touches. "Copy" is the view's tearing
+copy; the ordering column says what makes the bytes the host reads the ones it needs.
+
+| Structure | Where | Access | Ordering, and the fact that makes it so |
+|---|---|---|---|
+| the runtime word | `RUN_TABLE + RUNTIME_LOCK` (0x80) | `atomic_u32`: compare-and-swap Acquire, store Release | the lock itself; the guest takes it by `CASA` and frees it by `STLR` (Sprint 275) |
+| the run table's other words: thread entries, the clock's warp, counts | `RUN_TABLE` | copy, `read_u64`, `write_u64` | the runtime word, which the guest holds while it writes them; on a second vCPU the host holds it across each serve, the frozen host's rule (Sprint 118, `vm_backend.py` 5011 and 5053 at tag python-final) |
+| the reconstruction table | `RECON_TABLE`, its count at `RUN_TABLE + RECON_COUNT` (0xC0) | entries: copy; the count: `atomic_u64` Acquire | entries below the count are published (vm_backend 4855-4859); the guest appends under the runtime word on TSO, but the host runs Arm's model, so it reads the count Acquire before the entries; `x86_address_at` reads it plain today, and the card that moves `run.rs` makes it Acquire |
+| the dispatch table | `DISPATCH_TABLE`, 16-byte slots | `store_pair_release` to write; copy to read the host's own entries | the dispatcher's one `LDP` sees a whole pair (choice 3); only the host writes the table, under its compile lock |
+| the in-VM compiler's log and counters, the code cursor | `VM_COMPILER + VMC_LOG_COUNT`, `VMC_CURSOR`, the log | copy | the runtime word, which every append and every host drain takes (Sprint 275, census D6) |
+| the code area | `MONITOR_VA` code | copy | written before the dispatch slot that names it is published by `store_pair_release`, whose release fence orders it |
+| the transport page | `PROCESS_VA + TRANSPORT_OFF` | copy | the requesting vCPU holds the runtime word across `hvc #8` (`design-rust-host-2026-10-24.md`, change 2, "Today"); the page goes per vCPU with change 2 |
+| a guest buffer a host request names (a file read's destination, a path, a structure) | anywhere in the guest | copy | none, as on Windows: another guest thread may write it while the host copies, and gets torn bytes, defined; the requesting thread is stopped at its exit |
+| a vCPU's own state block, save area and monitor data | `MONITOR_DATA` and each vCPU's area | copy | its vCPU is stopped at the exit its host thread serves; no other vCPU reaches it |
 
 ## Against the goal
 

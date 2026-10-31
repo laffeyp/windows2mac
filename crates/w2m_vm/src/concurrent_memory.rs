@@ -3,14 +3,20 @@
 //! Guest memory that other vCPUs write while the host reads or writes it (Sprint 276,
 //! `docs/design-guest-memory-on-several-vcpus-2026-10-31.md`). A `&[u8]` or `&mut [u8]` over such memory breaks Rust's
 //! rule that nothing changes what a reference covers, so this type makes none, as `vm-memory`'s `VolatileSlice` makes
-//! none for Firecracker and Cloud Hypervisor. Bytes no running vCPU writes at the time (the guest's protocol says
-//! which: under the runtime word, or not yet published) are copied through the pointer; a word running guest code may
-//! write is reached as an atomic. `vm-memory` copies by volatile accesses, which Rust's documentation says change
-//! nothing for concurrency, so the copies here are plain. A slice of guest memory stays sound only while every vCPU
-//! that may write it is stopped, as the one-vCPU run loop's are at each exit.
+//! none for Firecracker and Cloud Hypervisor. Bytes are copied by relaxed atomic loads and stores, a word at a time
+//! where aligned and a byte at the ends (Sprint 279): a guest thread writing a buffer the host copies, as Windows lets
+//! it, gives torn bytes, defined, not a data race, which Rust's model makes undefined for any non-atomic access. This is
+//! RFC 3301's "atomic memcpy" (https://github.com/rust-lang/rfcs/pull/3301, open): "All of the data would have to be
+//! written and read through atomic operations to prevent a data race … it's fine if there's tearing"; C++'s P1478 is
+//! the same. `vm-memory` copies by volatile accesses, which Rust's documentation says change nothing for concurrency.
+//! A word whose ordering matters is reached by `atomic_u32` or `atomic_u64` with its ordering; no bulk copy covers such
+//! a word while another host thread reaches it, as Rust forbids atomics of different sizes racing on the same bytes. A
+//! slice of guest memory stays sound only while every vCPU that may write it is stopped, as the one-vCPU run loop's are
+//! at each exit.
 
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU32, AtomicU64};
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64};
 
 /// A view of `len` bytes of guest memory from `ptr`, shared by copy among the threads that serve vCPUs.
 #[derive(Clone, Copy)]
@@ -20,7 +26,7 @@ pub struct ConcurrentGuestMemory<'a> {
     _memory: PhantomData<&'a mut [u8]>,
 }
 
-// SAFETY: the view makes no reference into the memory; every access is a copy through the raw pointer or an atomic,
+// SAFETY: the view makes no reference into the memory; every access is an atomic load or store through the pointer,
 // and the memory outlives `'a`, so several threads may hold copies of it as several vCPUs reach the memory at once
 unsafe impl Send for ConcurrentGuestMemory<'_> {}
 unsafe impl Sync for ConcurrentGuestMemory<'_> {}
@@ -66,18 +72,46 @@ impl<'a> ConcurrentGuestMemory<'a> {
         unsafe { self.ptr.add(off) }
     }
 
-    /// Copies `out.len()` bytes from `offset` into `out`.
+    /// Copies `out.len()` bytes from `offset` into `out`, by relaxed atomic loads: a byte a guest writes meanwhile reads
+    /// as its old or new value.
     pub fn read(&self, offset: u64, out: &mut [u8]) {
         let from = self.at(offset, out.len());
-        // SAFETY: in bounds by `at`; `out` is the host's own buffer, never inside guest memory
-        unsafe { std::ptr::copy_nonoverlapping(from, out.as_mut_ptr(), out.len()) }
+        let (n, mut i) = (out.len(), 0);
+        // SAFETY (each load): in bounds by `at`; a `u64` load only where `from + i` is 8-byte aligned; the bytes live
+        // for `'a`, and the host reaches them only by atomics while threads share the view
+        while i < n && !(from as usize + i).is_multiple_of(8) {
+            out[i] = unsafe { AtomicU8::from_ptr(from.add(i)) }.load(Relaxed);
+            i += 1;
+        }
+        while i + 8 <= n {
+            let word = unsafe { AtomicU64::from_ptr(from.add(i).cast()) }.load(Relaxed);
+            out[i..i + 8].copy_from_slice(&word.to_ne_bytes());
+            i += 8;
+        }
+        while i < n {
+            out[i] = unsafe { AtomicU8::from_ptr(from.add(i)) }.load(Relaxed);
+            i += 1;
+        }
     }
 
-    /// Copies `bytes` to `offset`.
+    /// Copies `bytes` to `offset`, by relaxed atomic stores.
     pub fn write(&self, offset: u64, bytes: &[u8]) {
         let to = self.at(offset, bytes.len());
-        // SAFETY: in bounds by `at`; `bytes` is the host's own buffer, never inside guest memory
-        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), to, bytes.len()) }
+        let (n, mut i) = (bytes.len(), 0);
+        // SAFETY (each store): as `read`'s loads
+        while i < n && !(to as usize + i).is_multiple_of(8) {
+            unsafe { AtomicU8::from_ptr(to.add(i)) }.store(bytes[i], Relaxed);
+            i += 1;
+        }
+        while i + 8 <= n {
+            let word = u64::from_ne_bytes(bytes[i..i + 8].try_into().unwrap());
+            unsafe { AtomicU64::from_ptr(to.add(i).cast()) }.store(word, Relaxed);
+            i += 8;
+        }
+        while i < n {
+            unsafe { AtomicU8::from_ptr(to.add(i)) }.store(bytes[i], Relaxed);
+            i += 1;
+        }
     }
 
     pub fn read_u32(&self, offset: u64) -> u32 {
@@ -148,6 +182,60 @@ impl<'a> ConcurrentGuestMemory<'a> {
 mod tests {
     use super::ConcurrentGuestMemory;
     use std::sync::atomic::Ordering;
+
+    /// Sprint 279: a copy of every length 0 to 40 at every offset 0 to 15 reads back what was written, the head, the
+    /// aligned words and the tail each exercised (plant 1 stops the word loop one word early).
+    #[test]
+    fn copies_of_every_length_and_offset_read_back() {
+        let mut buf = vec![0u64; 8];
+        let bytes = unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr().cast::<u8>(), 64) };
+        let mem = ConcurrentGuestMemory::new(bytes);
+        for offset in 0..16u64 {
+            for len in 0..=40usize {
+                let data: Vec<u8> = (0..len)
+                    .map(|k| (k as u8).wrapping_mul(7).wrapping_add(offset as u8 + 1))
+                    .collect();
+                mem.write(0, &[0; 64]);
+                mem.write(offset, &data);
+                let mut back = vec![0; len];
+                mem.read(offset, &mut back);
+                assert_eq!(back, data, "length {len} at offset {offset}");
+                let mut around = [0u8; 64];
+                mem.read(0, &mut around);
+                assert!(
+                    around[..offset as usize]
+                        .iter()
+                        .chain(&around[offset as usize + len..])
+                        .all(|b| *b == 0),
+                    "length {len} at offset {offset} wrote outside its bytes"
+                );
+            }
+        }
+    }
+
+    /// Sprint 279: a copy out of a buffer another thread writes meanwhile gives each byte one of the values written,
+    /// never a data race: the guest's thread writing a buffer the host copies, as Windows allows.
+    #[test]
+    fn a_copy_racing_a_writer_reads_only_bytes_written() {
+        let mut buf = vec![0x1111_1111_1111_1111u64; 8];
+        let bytes = unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr().cast::<u8>(), 64) };
+        let mem = ConcurrentGuestMemory::new(bytes);
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                for k in 0..20_000u32 {
+                    mem.write(3, &[if k % 2 == 0 { 0x22 } else { 0x11 }; 58]);
+                }
+            });
+            for _ in 0..20_000 {
+                let mut out = [0u8; 58];
+                mem.read(3, &mut out);
+                assert!(
+                    out.iter().all(|b| *b == 0x11 || *b == 0x22),
+                    "a byte never written: {out:?}"
+                );
+            }
+        });
+    }
 
     /// Sprint 276: a word written through the view reads back as bytes, as a word and as an atomic (plant 2 reads 4
     /// bytes past the offset).
