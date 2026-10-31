@@ -23,6 +23,7 @@ use pe_loader::{Loaded, Memory};
 
 use crate::CPSR_EL1H;
 use crate::assembler::{Assembler, Target};
+use crate::concurrent_memory::ConcurrentGuestMemory;
 use crate::guest::{Exception, Guest, VMC_CURSOR, VMC_ENABLED};
 use crate::host_request::{self, Served};
 use crate::model_step::{ModelStep, model_step, mxcsr_flags_from_fpsr};
@@ -73,12 +74,20 @@ pub fn case_memory() -> Loaded {
     Loaded::bare(mem, CODE_VA, STACK_VA + STACK_SIZE)
 }
 
-fn read_u64(mem: &[u8], off: u64) -> u64 {
-    u64::from_le_bytes(mem[off as usize..off as usize + 8].try_into().unwrap())
+// Guest memory through the view (Sprint 285, census D7): the case runner makes no reference into it.
+fn read_u64(mem: ConcurrentGuestMemory<'_>, off: u64) -> u64 {
+    mem.read_u64(off)
 }
 
-fn write_u64(mem: &mut [u8], off: u64, v: u64) {
-    mem[off as usize..off as usize + 8].copy_from_slice(&v.to_le_bytes());
+fn write_u64(mem: ConcurrentGuestMemory<'_>, off: u64, v: u64) {
+    mem.write_u64(off, v);
+}
+
+/// `n` bytes from `off`, copied out.
+fn bytes(mem: ConcurrentGuestMemory<'_>, off: u64, n: usize) -> Vec<u8> {
+    let mut out = vec![0; n];
+    mem.read(off, &mut out);
+    out
 }
 
 /// `parity_even` (vm_backend 564-566).
@@ -204,19 +213,16 @@ pub const EFLAGS_FAULT_MASK: u64 = 0x1 | 0x2 | 0x4 | 0x10 | 0x40 | 0x80 | 0x200 
 
 /// `windows` (vm_oracle 159-167): the data, stack and edge windows against Windows's.
 fn windows(guest: &Guest, r: &CaseResult) -> Vec<(String, String)> {
-    let mem = guest.memory.as_slice();
-    let at = |va: u64| guest.layout.offset(va).unwrap() as usize;
+    let mem = guest.memory_view();
+    let at = |va: u64| guest.layout.offset(va).unwrap();
     let mut out = Vec::new();
-    let o = at(DATA_VA + DATA_OFF);
-    if mem[o..o + WINDOW] != r.data[..] {
+    if bytes(mem, at(DATA_VA + DATA_OFF), WINDOW) != r.data[..] {
         out.push(("data window".into(), "differs".into()));
     }
-    let s = at(STACK_VA + STACK_OFF);
-    if mem[s..s + WINDOW] != r.stack[..] {
+    if bytes(mem, at(STACK_VA + STACK_OFF), WINDOW) != r.stack[..] {
         out.push(("stack window".into(), "differs".into()));
     }
-    let e = at(DATA_VA + EDGE_OFF);
-    if mem[e..e + EDGE] != r.edge[..] {
+    if bytes(mem, at(DATA_VA + EDGE_OFF), EDGE) != r.edge[..] {
         out.push(("edge window".into(), "differs (a store before the fault)".into()));
     }
     out
@@ -224,28 +230,28 @@ fn windows(guest: &Guest, r: &CaseResult) -> Vec<(String, String)> {
 
 /// `Vcpu.ymm_hi`: YMM0-15 bits 255:128, the monitor data page's slots (Sprint 049).
 fn vm_ymm_hi(guest: &Guest) -> [u128; 16] {
-    let mem = guest.memory.as_slice();
+    let mem = guest.memory_view();
     std::array::from_fn(|i| {
-        let at = (MONITOR_DATA + YMM_HI_OFF) as usize + 16 * i;
-        u128::from_le_bytes(mem[at..at + 16].try_into().unwrap())
+        let mut b = [0u8; 16];
+        mem.read(MONITOR_DATA + YMM_HI_OFF + 16 * i as u64, &mut b);
+        u128::from_le_bytes(b)
     })
 }
 
 /// `Vcpu.x87`: FCW from the monitor data page, FSW, the abridged tags and ST0-ST7 in stack order from the state block
 /// (Sprint 065).
 fn vm_x87(guest: &Guest) -> X87State {
-    let mem = guest.memory.as_slice();
-    let md = (MONITOR_DATA + FCW_OFF) as usize;
-    let st = (MONITOR_SIZE + STATE_OFF) as usize;
-    let sw = st + X87_SW_OFF as usize;
+    let mem = guest.memory_view();
+    let md = MONITOR_DATA + FCW_OFF;
+    let st = MONITOR_SIZE + STATE_OFF;
+    let sw = bytes(mem, st + X87_SW_OFF, 3);
     X87State {
-        cw: u16::from_le_bytes([mem[md], mem[md + 1]]),
-        sw: u16::from_le_bytes([mem[sw], mem[sw + 1]]),
-        tags: mem[sw + 2],
+        cw: u16::from_le_bytes(bytes(mem, md, 2).try_into().unwrap()),
+        sw: u16::from_le_bytes([sw[0], sw[1]]),
+        tags: sw[2],
         st: std::array::from_fn(|i| {
-            let at = st + X87_ST_OFF as usize + 16 * i;
             let mut b = [0u8; 16];
-            b[..10].copy_from_slice(&mem[at..at + 10]);
+            mem.read(st + X87_ST_OFF + 16 * i as u64, &mut b[..10]);
             u128::from_le_bytes(b)
         }),
     }
@@ -376,12 +382,12 @@ pub fn run_cases(
     let md = MONITOR_DATA;
     let mut tally = Tally::default();
     {
-        let mem = guest.memory.as_mut_slice();
+        let mem = crate::guest::memory_view(&guest.memory);
         write_u64(mem, md + 8, 1 << 40); // the run's limit, one thread
         write_u64(mem, VM_COMPILER + VMC_ENABLED, 0); // lockstep: every miss reaches the host
         write_u64(mem, md + LOCK_OWNER, 1);
-        mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4].copy_from_slice(&0x1F80u32.to_le_bytes());
-        mem[(md + FCW_OFF) as usize..(md + FCW_OFF) as usize + 2].copy_from_slice(&0x27Fu16.to_le_bytes());
+        mem.write_u32(md + MXCSR_OFF, 0x1F80);
+        mem.write(md + FCW_OFF, &0x27Fu16.to_le_bytes());
     }
     set_system_registers(vcpu, guest.ttbr)?;
     vcpu.set_reg(Reg::Fpcr, fpcr_for(0x1F80))?;
@@ -392,14 +398,14 @@ pub fn run_cases(
     // the code cache and reconstruction table as this call found them, put back at its end, so every call lays its
     // blocks out alike
     let found = {
-        let mem = guest.memory.as_slice();
+        let mem = crate::guest::memory_view(&guest.memory);
         (
             read_u64(mem, VM_COMPILER + VMC_CURSOR),
             read_u64(mem, RUN_TABLE + RECON_COUNT),
         )
     };
     let vectors_va = {
-        let mem = guest.memory.as_mut_slice();
+        let mem = crate::guest::memory_view(&guest.memory);
         let off = read_u64(mem, VM_COMPILER + VMC_CURSOR);
         let mut a = Assembler::new(MONITOR_VA + off);
         a.emit(&a64_encoder::mov_imm(16, MONITOR_VA + VECTOR_SLOTS));
@@ -413,13 +419,13 @@ pub fn run_cases(
         ]);
         a.branch(a64_encoder::b, Target::Va(guest.code.miss_va + 4));
         let bytes: Vec<u8> = a.finish().iter().flat_map(|w| w.to_le_bytes()).collect();
-        mem[off as usize..off as usize + bytes.len()].copy_from_slice(&bytes);
+        mem.write(off, &bytes);
         write_u64(mem, VM_COMPILER + VMC_CURSOR, off + bytes.len() as u64);
         MONITOR_VA + off
     };
     // the flush point (vm_backend 2511, 2786-2796): the code cache and reconstruction table after construction
     let (cursor0, recon0) = {
-        let mem = guest.memory.as_slice();
+        let mem = crate::guest::memory_view(&guest.memory);
         (
             read_u64(mem, VM_COMPILER + VMC_CURSOR),
             read_u64(mem, RUN_TABLE + RECON_COUNT),
@@ -456,11 +462,14 @@ pub fn run_cases(
         }
         // `flush_translations` (2782-2797): the code cache, the reconstruction table and the dispatch table as built
         let block = {
-            let mem = guest.memory.as_mut_slice();
+            // the table's 16 MiB by one slice copy (Sprint 285): the case runner's one vCPU is stopped between cases,
+            // so a slice is sound (the design's choice 1), and the view's word-by-word atomic copy took the runner
+            // from 68.66 s to 145.88 s (census D7)
+            let at = DISPATCH_TABLE as usize;
+            guest.memory.as_mut_slice()[at..at + empty_table.len()].copy_from_slice(&empty_table);
+            let mem = crate::guest::memory_view(&guest.memory);
             write_u64(mem, VM_COMPILER + VMC_CURSOR, cursor0);
             write_u64(mem, RUN_TABLE + RECON_COUNT, recon0);
-            let at = DISPATCH_TABLE as usize;
-            mem[at..at + empty_table.len()].copy_from_slice(&empty_table);
             match assemble_one(
                 compile,
                 &c.code,
@@ -482,20 +491,18 @@ pub fn run_cases(
         {
             let (code_at, data_at, stack_at) =
                 (offset(guest, CODE_VA), offset(guest, DATA_VA), offset(guest, STACK_VA));
-            let mem = guest.memory.as_mut_slice();
-            mem[code_at..code_at + 0x1000].fill(0);
-            mem[code_at..code_at + c.code.len()].copy_from_slice(&c.code);
-            mem[data_at..data_at + 0x1000].fill(0);
-            let (o, e) = (data_at + DATA_OFF as usize, data_at + EDGE_OFF as usize);
-            mem[o..o + WINDOW].copy_from_slice(&c.data);
-            mem[e..e + EDGE].copy_from_slice(&c.edge);
-            mem[stack_at..stack_at + STACK_SIZE as usize].fill(0);
-            let s = stack_at + STACK_OFF as usize;
-            mem[s..s + WINDOW].copy_from_slice(&c.stack);
+            let mem = crate::guest::memory_view(&guest.memory);
+            let (code_at, data_at, stack_at) = (code_at as u64, data_at as u64, stack_at as u64);
+            mem.write(code_at, &[0; 0x1000]);
+            mem.write(code_at, &c.code);
+            mem.write(data_at, &[0; 0x1000]);
+            mem.write(data_at + DATA_OFF, &c.data);
+            mem.write(data_at + EDGE_OFF, &c.edge);
+            mem.write(stack_at, &vec![0; STACK_SIZE as usize]);
+            mem.write(stack_at + STACK_OFF, &c.stack);
             let (words, marks) = &block;
-            let at = cursor0 as usize;
             let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
-            mem[at..at + bytes.len()].copy_from_slice(&bytes);
+            mem.write(cursor0, &bytes);
             write_u64(mem, VM_COMPILER + VMC_CURSOR, cursor0 + bytes.len() as u64);
             for (k, (host, x86)) in marks.iter().enumerate() {
                 let slot = RECON_TABLE + 16 * (recon0 + k as u64);
@@ -503,11 +510,7 @@ pub fn run_cases(
                 write_u64(mem, slot + 8, *x86);
             }
             write_u64(mem, RUN_TABLE + RECON_COUNT, recon0 + marks.len() as u64);
-            dispatch_insert(
-                crate::concurrent_memory::ConcurrentGuestMemory::new(mem),
-                CODE_VA,
-                MONITOR_VA + cursor0,
-            );
+            dispatch_insert(mem, CODE_VA, MONITOR_VA + cursor0);
             // `flush_translations` dropped the tails; `_note_tails` (4630) the block's one instruction mark
             tails.clear();
             tails.note(&[marks[1].0]);
@@ -516,31 +519,30 @@ pub fn run_cases(
             write_u64(mem, md + AF_OPERANDS, if bit('A') == 1 { 0x10 } else { 0 });
             write_u64(mem, md + AF_OPERANDS + 8, 0);
             write_u64(mem, md + PF_RESULT, if bit('P') == 1 { 0 } else { 1 });
-            mem[(md + DF_BYTE) as usize] = (c.rflags >> DF_BIT & 1) as u8;
+            mem.write(md + DF_BYTE, &[(c.rflags >> DF_BIT & 1) as u8]);
             write_u64(mem, md, 0); // the count
             // set_mxcsr (2072-2075): MXCSR stored, XMM0-15 and FPCR from it into the vector slot the stub loads
-            mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4]
-                .copy_from_slice(&((c.mxcsr & 0xFFFF) as u32).to_le_bytes());
+            mem.write_u32(md + MXCSR_OFF, (c.mxcsr & 0xFFFF) as u32);
             for (k, x) in c.xmm.iter().enumerate() {
-                let at = (VECTOR_SLOTS + 16 * k as u64) as usize;
-                mem[at..at + 16].copy_from_slice(&x.to_le_bytes());
+                mem.write(VECTOR_SLOTS + 16 * k as u64, &x.to_le_bytes());
             }
             write_u64(mem, VECTOR_SLOTS + 256, fpcr_for(c.mxcsr as u32));
             write_u64(mem, VECTOR_SLOTS + 264, 0);
             // set_ymm_hi (2047-2049)
             for (k, y) in c.ymm_hi.iter().enumerate() {
-                let at = (md + YMM_HI_OFF + 16 * k as u64) as usize;
-                mem[at..at + 16].copy_from_slice(&y.to_le_bytes());
+                mem.write(md + YMM_HI_OFF + 16 * k as u64, &y.to_le_bytes());
             }
             // set_x87 (2060-2065): FCW in the monitor data, the status word, tags and ST0-ST7 in the state block
             if let Some(x) = c.x87 {
-                mem[(md + FCW_OFF) as usize..(md + FCW_OFF) as usize + 2].copy_from_slice(&x.cw.to_le_bytes());
-                let st = (MONITOR_SIZE + STATE_OFF) as usize;
-                mem[st + X87_SW_OFF as usize..st + X87_SW_OFF as usize + 2].copy_from_slice(&x.sw.to_le_bytes());
-                mem[st + X87_SW_OFF as usize + 2] = x.tags;
+                mem.write(md + FCW_OFF, &x.cw.to_le_bytes());
+                let sw = MONITOR_SIZE + STATE_OFF + X87_SW_OFF;
+                mem.write(sw, &x.sw.to_le_bytes());
+                mem.write(sw + 2, &[x.tags]);
                 for (k, r) in x.st.iter().enumerate() {
-                    let at = st + X87_ST_OFF as usize + 16 * k;
-                    mem[at..at + 10].copy_from_slice(&r.to_le_bytes()[..10]);
+                    mem.write(
+                        MONITOR_SIZE + STATE_OFF + X87_ST_OFF + 16 * k as u64,
+                        &r.to_le_bytes()[..10],
+                    );
                 }
             }
         }
@@ -598,7 +600,7 @@ pub fn run_cases(
             if e.hvc_immediate() != Some(8) {
                 break Ok(e);
             }
-            let op = read_u64(guest.memory.as_slice(), MONITOR_SIZE + TRANSPORT_OFF);
+            let op = read_u64(crate::guest::memory_view(&guest.memory), MONITOR_SIZE + TRANSPORT_OFF);
             *tally.host_requests.entry(op).or_default() += 1;
             match host_request::serve(guest, vcpu) {
                 Ok(Served::Answered) => {}
@@ -693,7 +695,7 @@ pub fn run_cases(
             }
         }
         let undefined = vcpu.reg(Reg::X(REG_UNDEFINED_FLAGS))?;
-        let mem = guest.memory.as_slice();
+        let mem = crate::guest::memory_view(&guest.memory);
         for (f, b) in FLAG_BITS {
             let u = FLAG_BIT.iter().find(|(k, _)| *k == f).unwrap().1;
             if undefined >> u & 1 == 1 {
@@ -720,16 +722,12 @@ pub fn run_cases(
                 );
             }
         }
-        let df = mem[(md + DF_BYTE) as usize] != 0;
+        let df = bytes(mem, md + DF_BYTE, 1)[0] != 0;
         if df != (r.rflags >> DF_BIT & 1 == 1) {
             tally.note(iclass, "DF", example(format!("vm {}", u8::from(df))));
         }
         // MXCSR (the stored word with FPSR's flags folded in) and XMM0-15 (judge_done 143-149)
-        let stored = u64::from(u32::from_le_bytes(
-            mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4]
-                .try_into()
-                .unwrap(),
-        ));
+        let stored = u64::from(mem.read_u32(md + MXCSR_OFF));
         let mx = stored | mxcsr_flags_from_fpsr(vcpu.reg(Reg::Fpsr)?);
         if mx != r.mxcsr {
             let detail = format!("vm 0x{mx:x}, cpu 0x{:x} (in 0x{:x})", r.mxcsr, c.mxcsr);
@@ -752,7 +750,7 @@ pub fn run_cases(
             tally.note(iclass, &k, example(detail));
         }
     }
-    let mem = guest.memory.as_mut_slice();
+    let mem = crate::guest::memory_view(&guest.memory);
     write_u64(mem, VM_COMPILER + VMC_CURSOR, found.0);
     write_u64(mem, RUN_TABLE + RECON_COUNT, found.1);
     tally.seconds = started.elapsed().as_secs_f64();

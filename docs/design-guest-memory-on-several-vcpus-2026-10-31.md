@@ -80,7 +80,12 @@ and the host serves each vCPU's exits while the others run. Every access it make
 1 or goes through the view; a reference held across another vCPU's write is undefined behaviour, which the compiler may
 turn into a wrong read of a lock word or a lost store to a dispatch slot. The view takes no lock, and reads the same
 bytes the slices read; the pair store adds one fence to each dispatch insert. Its effect on the run's rate is not
-measured here; the batch run in the gates holds its stream and stop.
+measured here; the batch run in the gates holds its stream and stop. *(Amended 2026-10-31, Sprint 285: a large copy
+through the view costs more than a slice's: its relaxed atomic words are not vectorized, where `copy_from_slice` is.
+The case runner fills the 16 MiB dispatch table before each case; through the view its test took 145.88 s, by one
+slice copy 69.29 s, the committed slice code 68.66 s. The runner, one vCPU stopped between cases, keeps that one
+slice. The game's large copies, a host request's file reads, go through the view; their rate on several vCPUs is
+measured with G5 and G6, and a faster whole-word copy, by pair or vector loads, is weighed then.)*
 
 ## Against the systems that solved it
 
