@@ -239,6 +239,9 @@ fn qpc_runs_past_its_first_decline_compiling_as_the_python_host() {
     }
     assert_eq!(ours, python_starts, "the blocks compiled differ from the Python host's");
     assert!(!host.translations.is_empty(), "the host compiled nothing");
+    // Sprint 286: every miss the host served, its compiles among them, ran under the runtime word, taken by the miss
+    // service or held by the vCPU (plant 1 takes none)
+    assert_eq!(out.misses_outside_word, 0, "misses served outside the runtime word");
     // and each host compile's words, at the same code address, are the Python host's words for that block
     for (start, va) in &host.blocks {
         let want = &python["blocks"][format!("0x{start:x}")];

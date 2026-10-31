@@ -166,6 +166,26 @@ impl<'a> ConcurrentGuestMemory<'a> {
         }
     }
 
+    /// The pair at `offset`, 16-byte aligned, `(low, high)`, read by one `LDP`, single-copy atomic with FEAT_LSE2 as
+    /// `store_pair_release`'s `STP` is, after which an acquire fence (Sprint 286): a dispatch pair moved from one way to
+    /// the other is read whole, whatever the dispatcher or another writer does meanwhile.
+    #[cfg(target_arch = "aarch64")]
+    pub fn load_pair(&self, offset: u64) -> (u64, u64) {
+        let p = self.at(offset, 16);
+        assert!(
+            p.cast::<u128>().is_aligned(),
+            "a pair at 0x{offset:x}, not 16-byte aligned"
+        );
+        let (low, high): (u64, u64);
+        // SAFETY: in bounds and 16-byte aligned; the pair is reached only by whole-pair accesses while threads share it
+        unsafe {
+            std::arch::asm!("ldp {low}, {high}, [{p}]", low = out(reg) low, high = out(reg) high, p = in(reg) p,
+                options(nostack, preserves_flags, readonly));
+        }
+        std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire);
+        (low, high)
+    }
+
     /// The 64-bit word at `offset`, 8-byte aligned, as an atomic.
     pub fn atomic_u64(&self, offset: u64) -> &'a AtomicU64 {
         let p = self.at(offset, 8);
@@ -263,6 +283,8 @@ mod tests {
         let mem = ConcurrentGuestMemory::new(bytes);
         mem.store_pair_release(16, 0x1111, 0x2222);
         assert_eq!((mem.read_u64(16), mem.read_u64(24)), (0x1111, 0x2222));
+        // Sprint 286: the pair read back whole, low then high (plant 2 swaps them)
+        assert_eq!(mem.load_pair(16), (0x1111, 0x2222), "the pair load_pair read");
     }
 
     #[test]

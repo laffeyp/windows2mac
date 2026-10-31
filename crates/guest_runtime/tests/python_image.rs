@@ -70,7 +70,7 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 const DEPARTURES: [(&str, &str); 4] = [
     (
         "tools/guest_runtime/block_compiler.c",
-        "Sprint 284: a dispatch pair stored whole by one stp",
+        "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
     ),
     (
         "tools/vm_compiler/vm_compiler.c",

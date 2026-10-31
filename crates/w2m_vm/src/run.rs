@@ -322,6 +322,10 @@ pub struct Outcome {
     /// the start of each block the in-VM compiler compiled, in its log's order, the host's compiles not among them
     /// (Sprint 249: the compiles by image)
     pub vm_compile_starts: Vec<u64>,
+    /// the misses the host served with the runtime word held neither by the host nor by the vCPU itself, the word read
+    /// after the take (Sprint 286): 0 when the compile or install and the dispatch insert always run under the word,
+    /// beside the in-VM compiler and the installer, which hold it
+    pub misses_outside_word: u64,
     /// the instructions retired at each in-VM compile and install, in its log's order (Sprint 266), from the words
     /// `Timing::instructions_at_compile` writes; all 0 without it
     pub instructions_at: InstructionsAt,
@@ -394,7 +398,8 @@ fn swap_vectors(vcpu: &Vcpu<'_>, mem: ConcurrentGuestMemory<'_>, save: u64, load
 /// the table, under its compile lock, so its own reads are plain.
 pub fn dispatch_insert(mem: ConcurrentGuestMemory<'_>, target: u64, va: u64) {
     let at = DISPATCH_TABLE + 16 * dispatch_slot(target);
-    let (t0, v0, t1) = (mem.read_u64(at), mem.read_u64(at + 8), mem.read_u64(at + 16));
+    // way 0 read whole, as it may be moved to way 1 (Sprint 286)
+    let ((t0, v0), t1) = (mem.load_pair(at), mem.read_u64(at + 16));
     let publish = |slot: u64, t: u64, v: u64| mem.store_pair_release(slot, t, v);
     if t0 == EMPTY_TARGET || t0 == target {
         publish(at, target, va);
@@ -628,6 +633,7 @@ fn run(
         translations: Vec::new(),
         vm_compile_starts: Vec::new(),
         instructions_at: InstructionsAt::default(),
+        misses_outside_word: 0,
     };
     if let Err(why) = add_thread(guest, first) {
         out.stop = Stop::Exit(format!("the first thread's entry: {why}")); // a guest run before
@@ -1050,33 +1056,53 @@ fn run(
             // two-way slot may have let it go, and it is inserted again)
             break Stop::Repeated { target };
         }
-        let va = match guest.bridges.get(&target) {
-            Some(&va) => {
-                *out.bridged.entry(target).or_default() += 1;
-                va
-            }
-            None => match (
-                known_block(&out.blocks, host.as_deref().map(|h| &h.blocks), target),
-                host.as_deref_mut(),
-            ) {
-                (Some(va), _) => va,
-                (None, None) => break Stop::Declined { target },
-                (None, Some(h)) => match h.install(guest, target) {
-                    // a cached block installed (Sprint 257): counted apart, not one of the compiles
-                    Some(Ok(va)) => va,
-                    Some(Err(why)) => break Stop::Untranslated { target, why },
-                    None => match h.compile(guest, target) {
-                        Ok(va) => {
-                            let (start, end) = *h.translations.last().unwrap();
-                            out.translations.push(Translation { start, end, code: va });
-                            va
-                        }
-                        Err(why) => break Stop::Untranslated { target, why },
+        // the install or compile and the dispatch insert under the runtime word (Sprint 286): they write the code cursor,
+        // the reconstruction table and the dispatch table, which the in-VM compiler and the installer write holding the
+        // word, and the miss stub released it before `hvc 1`; released on every path before the loop goes on or stops
+        let own = u32::try_from(guest.memory_view().read_u64(MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0);
+        let took = crate::monitor_code::host_take_runtime_word(guest.memory_view(), own);
+        // served under the word: the host took it, or this vCPU holds it already (a miss inside the runtime)
+        let holder = guest
+            .memory_view()
+            .atomic_u32(RUN_TABLE + crate::monitor_code::RUNTIME_LOCK)
+            .load(std::sync::atomic::Ordering::Relaxed);
+        out.misses_outside_word += u64::from(holder != crate::monitor_code::HOST_OWNER && holder != own);
+        let served: Result<u64, Stop> = 'serve: {
+            let va = match guest.bridges.get(&target) {
+                Some(&va) => {
+                    *out.bridged.entry(target).or_default() += 1;
+                    va
+                }
+                None => match (
+                    known_block(&out.blocks, host.as_deref().map(|h| &h.blocks), target),
+                    host.as_deref_mut(),
+                ) {
+                    (Some(va), _) => va,
+                    (None, None) => break 'serve Err(Stop::Declined { target }),
+                    (None, Some(h)) => match h.install(guest, target) {
+                        // a cached block installed (Sprint 257): counted apart, not one of the compiles
+                        Some(Ok(va)) => va,
+                        Some(Err(why)) => break 'serve Err(Stop::Untranslated { target, why }),
+                        None => match h.compile(guest, target) {
+                            Ok(va) => {
+                                let (start, end) = *h.translations.last().unwrap();
+                                out.translations.push(Translation { start, end, code: va });
+                                va
+                            }
+                            Err(why) => break 'serve Err(Stop::Untranslated { target, why }),
+                        },
                     },
                 },
-            },
+            };
+            dispatch_insert(guest.memory_view(), target, va);
+            Ok(va)
         };
-        dispatch_insert(guest.memory_view(), target, va);
+        if took {
+            crate::monitor_code::host_release_runtime_word(guest.memory_view());
+        }
+        if let Err(stop) = served {
+            break stop;
+        }
         vcpu.set_reg(Reg::Pc, guest.code.miss_va + 4)?; // ic ialluis; tlbi; dsb; isb; re-dispatch
     };
     // the stop's own row, then the file whole (Sprint 206)

@@ -159,7 +159,10 @@ static void dispatch_insert(u64 target, u64 code) {
     } else if (p[2] == ~0ull || p[2] == target) {
         store_pair(p + 2, target, code);
     } else {
-        store_pair(p + 2, p[0], p[1]);
+        /* way 0 read whole by one `ldp` before it is moved to way 1 (Sprint 286) */
+        u64 t0, c0;
+        __asm__ volatile("ldp %0, %1, [%2]" : "=r"(t0), "=r"(c0) : "r"(p) : "memory");
+        store_pair(p + 2, t0, c0);
         store_pair(p, target, code);
     }
 }
