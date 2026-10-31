@@ -43,6 +43,7 @@ pub mod process;
 pub mod record;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod run;
+pub mod run_outputs;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod shared;
 pub mod tables;

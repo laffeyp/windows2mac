@@ -180,46 +180,17 @@ mod run {
         Ok(output_file)
     }
 
-    /// The flags whose next argument names a file the run writes, stamped beside it (Sprint 288).
-    const WRITTEN: [&str; 4] = ["--output", "--stop", "--exit-ledger", "--judge-blocks"];
-
-    /// `serve`, each file it is told to write stamped with the sources the run read: the file and its stamp removed at
-    /// the start, with an exit ledger's children's `<path>.<pid>`, and the stamp written after the run beside each such
-    /// file it wrote, so a test refuses a file of other sources and a file a run did not reach (Sprint 288;
-    /// reviewer-3's Lows 1 at 287 and 288). The `--stop` file, written last, stands for the files the same run writes
-    /// beside it under its name. One stamp a run, its `git` call about 40 ms.
+    /// `serve`, each file it is told to write stamped with the sources the run read: an earlier run's files cleared at
+    /// the start (`run_outputs::clear`) and the stamp written after the run beside each such file it wrote, so a test
+    /// refuses a file of other sources and a file a run did not reach (Sprints 288 and 289; reviewer-3's Lows 1 at 287
+    /// and 288). One stamp a run, its `git` call about 40 ms.
     pub fn main() -> Result<(), String> {
         let args: Vec<String> = std::env::args().skip(1).collect();
-        let written: Vec<PathBuf> = args
-            .windows(2)
-            .filter(|w| WRITTEN.contains(&w[0].as_str()))
-            .map(|w| root().join(&w[1]))
-            .collect();
+        let written = w2m_vm::run_outputs::written(&root(), &args);
         if written.is_empty() {
             return serve();
         }
-        let gone = |f: &Path| match fs::remove_file(f) {
-            Err(e) if e.kind() != io::ErrorKind::NotFound => Err(format!("{}: {e}", f.display())),
-            _ => Ok(()),
-        };
-        for file in &written {
-            gone(file)?;
-            w2m_vm::built_from::unstamp(file)?;
-        }
-        if let Some(i) = args.iter().position(|a| a == "--exit-ledger")
-            && let Some(ledger) = args.get(i + 1).map(|l| root().join(l))
-            && let (Some(dir), Some(name)) = (ledger.parent(), ledger.file_name())
-        {
-            let children = format!("{}.", name.to_string_lossy());
-            for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
-                let n = entry.file_name().to_string_lossy().to_string();
-                if n.strip_prefix(&children)
-                    .is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()))
-                {
-                    gone(&entry.path())?;
-                }
-            }
-        }
+        w2m_vm::run_outputs::clear(&root(), &args)?;
         let made = w2m_vm::built_from::run_stamp(&root())?;
         let served = serve();
         let stamped = written
@@ -905,7 +876,7 @@ mod run {
         let out = on_one_vcpu(&mut guest, &loaded, Some(GAME_SECONDS), MAX_STEPS, &mut host)?;
         // the log beside the stop file, which `batch_run.rs` holds to the reference's, line for line (Sprint 219)
         if let Some(log) = &log {
-            let beside = format!("{}.unity.log", stop_file.trim_end_matches(".tsv"));
+            let beside = w2m_vm::run_outputs::companion(stop_file, ".unity.log");
             fs::write(root.join(&beside), fs::read(log).unwrap_or_default()).map_err(|e| format!("{beside}: {e}"))?;
         }
         fs::write(root.join(output), &guest.stdout).map_err(|e| format!("{output}: {e}"))?;
@@ -969,14 +940,14 @@ mod run {
             dropped,
             strings,
         } = guest.traced()?;
-        let calls_file = format!("{}.calls.tsv", stop_file.trim_end_matches(".tsv"));
+        let calls_file = w2m_vm::run_outputs::companion(stop_file, ".calls.tsv");
         fs::write(root.join(&calls_file), &calls).map_err(|e| format!("{calls_file}: {e}"))?;
         // the calls' string arguments beside them, as run_frontier.py writes `<run>.strings.tsv` (Sprint 214): the
         // comparison against Windows names the game's threads by them
-        let strings_file = format!("{}.calls.strings.tsv", stop_file.trim_end_matches(".tsv"));
+        let strings_file = w2m_vm::run_outputs::companion(stop_file, ".calls.strings.tsv");
         fs::write(root.join(&strings_file), strings).map_err(|e| format!("{strings_file}: {e}"))?;
         // the calls not yet returned at the stop (Sprint 194), without their return and error
-        let in_flight_file = format!("{}.in-flight.tsv", stop_file.trim_end_matches(".tsv"));
+        let in_flight_file = w2m_vm::run_outputs::companion(stop_file, ".in-flight.tsv");
         fs::write(root.join(&in_flight_file), &in_flight).map_err(|e| format!("{in_flight_file}: {e}"))?;
         tsv += &format!(
             "calls traced\t{}\ncalls in flight\t{}\ncalls dropped\t{dropped}\n",

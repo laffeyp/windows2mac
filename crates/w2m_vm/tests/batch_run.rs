@@ -51,8 +51,13 @@ fn root() -> PathBuf {
 /// file, a guest's output among them, its own.
 fn stamped_for(root: &Path, name: &str) -> Vec<PathBuf> {
     let dir = root.join("build/batch_run");
-    if name.starts_with("first-stop.") {
-        return vec![dir.join("first-stop.tsv")];
+    let stop = "first-stop.tsv";
+    if name == stop
+        || w2m_vm::run_outputs::STOP_COMPANIONS
+            .iter()
+            .any(|s| name == w2m_vm::run_outputs::companion(stop, s))
+    {
+        return vec![dir.join(stop)];
     }
     if name == "guests.tsv" {
         let mut stops: Vec<PathBuf> = fs::read_dir(&dir)
