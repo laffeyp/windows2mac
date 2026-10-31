@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-//! The translation cache's regions (Sprint 254; `docs/design-translation-cache-2026-10-30.md`, B and B'): just below
-//! the monitor area, each other's neighbours, overlapping no area the guest or the loader maps, and the code region
-//! within a branch's reach of every exit its words take. `MONITOR_SIZE` and the runtime image's addresses stay as
-//! `guest_runtime::layout`'s own test holds them, since the regions lie outside the monitor area.
+//! The translation cache's addresses (Sprint 254; `docs/design-translation-cache-2026-10-30.md`, B; Sprint 261, card
+//! 5's I): the range its words are assembled at, just below the monitor area and within a branch's reach of every exit
+//! its words take, and below it the region the cache file is mapped at; neither overlapping any area the guest or the
+//! loader maps. `MONITOR_SIZE` and the runtime image's addresses stay as `guest_runtime::layout`'s own test holds them,
+//! since both lie outside the monitor area.
 
 use guest_runtime::layout::{
-    BRANCH_REACH, CACHE_CODE_SIZE, CACHE_CODE_VA, CACHE_DATA_SIZE, CACHE_DATA_VA, CODE_CACHE, HEAP_SIZE, HEAP_VA,
+    BRANCH_REACH, CACHE_CODE_SIZE, CACHE_CODE_VA, CACHE_FILE_SIZE, CACHE_FILE_VA, CODE_CACHE, HEAP_SIZE, HEAP_VA,
     MONITOR_SIZE, MONITOR_VA, PROCESS_VA,
 };
 
@@ -23,18 +24,18 @@ fn the_cache_regions_lie_below_the_monitor_area_and_overlap_nothing() {
     assert_eq!(
         CACHE_CODE_VA + CACHE_CODE_SIZE,
         MONITOR_VA,
-        "the code region ends at the monitor area"
+        "the assembly range ends at the monitor area"
     );
     assert_eq!(
-        CACHE_DATA_VA + CACHE_DATA_SIZE,
+        CACHE_FILE_VA + CACHE_FILE_SIZE,
         CACHE_CODE_VA,
-        "the data region ends at the code region"
+        "the file's region ends at the assembly range"
     );
     assert_eq!(
         MONITOR_SIZE, 0xAA0_0000,
         "the monitor area's size, which the runtime image links against"
     );
-    let regions = [(CACHE_CODE_VA, CACHE_CODE_SIZE), (CACHE_DATA_VA, CACHE_DATA_SIZE)];
+    let regions = [(CACHE_CODE_VA, CACHE_CODE_SIZE), (CACHE_FILE_VA, CACHE_FILE_SIZE)];
     let others = [
         ("the monitor area", (MONITOR_VA, MONITOR_SIZE)),
         (

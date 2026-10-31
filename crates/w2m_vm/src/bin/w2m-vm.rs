@@ -631,11 +631,11 @@ mod run {
 
     /// `--make-cache <directory>` (Sprint 254; the translation cache's design, card 3): UnityPlayer.dll's cache file
     /// made with the addresses `guest`'s setup fixed, as `<directory>/<key>.w2mcache`, and its figures printed: the
-    /// blocks, the refusals, the code region's and the data region's use (the design's B'), the blocks whose live
-    /// flags miss a successor's read, and, when the gates' exit ledger's blocks are at hand, the run's starts the
-    /// walk reaches inside a block, by what ends the block before them.
+    /// blocks, the refusals, the code region's use and the file's against its region (card 5, I), the fix-ups, the
+    /// blocks whose live flags miss a successor's read, and, when the gates' exit ledger's blocks are at hand, the
+    /// run's starts the walk reaches inside a block, by what ends the block before them.
     fn make_cache_file(root: &Path, directory: &Path, guest: &Guest, dir: &str) -> Result<(), String> {
-        use guest_runtime::layout::{BRANCH_REACH, CACHE_CODE_SIZE, CACHE_CODE_VA, CACHE_DATA_SIZE, PAGE};
+        use guest_runtime::layout::{BRANCH_REACH, CACHE_CODE_SIZE, CACHE_CODE_VA, CACHE_FILE_SIZE};
         use w2m_vm::cache_file;
         let (image, data, exits, key) = cached_image(root, directory, guest)?;
         for (name, target) in [("the dispatcher", exits.exit_va), ("the slice stub", exits.slice_va)] {
@@ -656,12 +656,14 @@ mod run {
         let out = root.join(dir);
         fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
         let path = out.join(format!("{}.w2mcache", cache.key));
+        // the file is mapped whole into the guest at `CACHE_FILE_VA` (Sprint 261; card 5, I)
+        if bytes.len() as u64 > CACHE_FILE_SIZE {
+            return Err(format!(
+                "the cache file's {} bytes exceed its region's {CACHE_FILE_SIZE}",
+                bytes.len()
+            ));
+        }
         fs::write(&path, &bytes).map_err(|e| format!("{}: {e}", path.display()))?;
-        // the data region: the lookup table held half full, 16 bytes a slot; the page bitmap; the page index
-        let slots = (2 * cache.blocks.len()).next_power_of_two() as u64;
-        let index: u64 = cache.pages.values().map(|l| 8 + 4 * l.len() as u64).sum();
-        let bitmap = u64::from(image.pe.size_of_image).div_ceil(PAGE).div_ceil(8);
-        let data_bytes = 16 * slots + bitmap + index;
         let code_bytes = 4 * cache.words.len() as u64;
         let mut figures = serde_json::json!({
             "key": cache.key,
@@ -670,8 +672,8 @@ mod run {
             "refused": refused,
             "code_bytes": code_bytes,
             "code_region": CACHE_CODE_SIZE,
-            "data_bytes": data_bytes,
-            "data_region": CACHE_DATA_SIZE,
+            "fixups": cache.fixups.len(),
+            "file_region": CACHE_FILE_SIZE,
             "file_bytes": bytes.len(),
             "uncovered_reads": uncovered.len(),
             "relocated_equal": moved,
@@ -737,13 +739,13 @@ mod run {
     }
 
     /// The translation cache's file for `guest`, `<dir>/<key>.w2mcache` (Sprint 257): Err when none has the key, so a
-    /// file made under another tree or setup is never used.
+    /// file made under another tree or setup is never used; with its bytes, which the guest maps (Sprint 261).
     fn load_cache_file(
         root: &Path,
         directory: &Path,
         guest: &Guest,
         dir: &str,
-    ) -> Result<w2m_vm::cache_file::CacheFile, String> {
+    ) -> Result<(w2m_vm::cache_file::CacheFile, Vec<u8>), String> {
         let (_, _, _, key) = cached_image(root, directory, guest)?;
         let path = root.join(dir).join(format!("{key}.w2mcache"));
         let bytes = fs::read(&path).map_err(|e| format!("--cache: {}: {e}", path.display()))?;
@@ -751,7 +753,7 @@ mod run {
         if file.key != key {
             return Err(format!("{}: its key is {}", path.display(), file.key));
         }
-        Ok(file)
+        Ok((file, bytes))
     }
 
     /// How a game run is watched beside its record: the exit ledger (Sprint 206), the batch run's end (Sprint 219),
@@ -832,7 +834,8 @@ mod run {
         }
         let mut host = HostCompiler::default();
         if let Some(dir) = cache {
-            let file = load_cache_file(&root, directory, &guest, dir)?;
+            let (file, bytes) = load_cache_file(&root, directory, &guest, dir)?;
+            guest.place_cache_file(&bytes)?;
             host.use_cache(&mut guest, file)?;
         }
         let out = on_one_vcpu(&mut guest, &loaded, Some(GAME_SECONDS), MAX_STEPS, &mut host)?;

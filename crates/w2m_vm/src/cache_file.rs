@@ -18,7 +18,7 @@ use translator::lower::{MAX_BLOCK_INSNS, RuntimeCalls, assemble_block, insn_flag
 pub const CACHED_IMAGE: &str = "UnityPlayer.dll";
 
 const MAGIC: &[u8; 8] = b"W2MCACHE";
-const VERSION: u32 = 1;
+const VERSION: u32 = 2; // 2: each block's fix-ups (Sprint 261)
 
 /// What a block's words embed besides the image's bytes: the dispatcher, the slice stub, the state block and the
 /// runtime's functions, all fixed by a guest's setup.
@@ -42,6 +42,9 @@ pub struct CachedBlock {
     pub nmarks: u32,
     pub live: u32,
     pub insns: u32,
+    /// its fix-ups, `fixups[fixup..fixup + nfixups]` (version 2, Sprint 261)
+    pub fixup: u32,
+    pub nfixups: u32,
 }
 
 /// The cache of one image.
@@ -55,6 +58,9 @@ pub struct CacheFile {
     pub marks: Vec<(u32, u32)>,
     /// each page an RVA's 4 KB page, and the indices into `blocks` of every block whose bytes touch it
     pub pages: BTreeMap<u32, Vec<u32>>,
+    /// each block's fix-ups, the indices in its words of a `B` or `BL` whose target leaves the block, which an install
+    /// re-encodes (`branch_leaving`; version 2, Sprint 261, card 5's II)
+    pub fixups: Vec<u32>,
 }
 
 /// The walked starts `make` did not make, by why: the maker's report, not part of the file.
@@ -110,6 +116,25 @@ pub struct Unmovable {
 /// target, its offset re-encoded; a branch inside the block keeps its offset. Err names the first word of another kind
 /// whose meaning depends on the block's address (a conditional or compare branch, an `ADR`/`ADRP`, a literal load
 /// reaching outside the block), which no re-encoding here moves.
+/// The target of word `k` of a block of `len` words assembled at `from`, when the word is a `B` or `BL` whose target
+/// leaves the block: the one rule `relocate` re-encodes by and `fixups` lists by.
+pub fn branch_leaving(w: u32, k: usize, len: usize, from: u64) -> Option<u64> {
+    if w & 0x7C00_0000 != 0x1400_0000 {
+        return None;
+    }
+    let offset = (i64::from(w & 0x03FF_FFFF) << 38) >> 36; // imm26, sign-extended, times 4
+    let target = (from + 4 * k as u64).wrapping_add(offset as u64);
+    (!(from..from + 4 * len as u64).contains(&target)).then_some(target)
+}
+
+/// The indices of a block's words that `relocate` re-encodes (version 2's fix-ups).
+pub fn fixups(words: &[u32], from: u64) -> Vec<u32> {
+    (0..words.len())
+        .filter(|&k| branch_leaving(words[k], k, words.len(), from).is_some())
+        .map(|k| k as u32)
+        .collect()
+}
+
 pub fn relocate(words: &[u32], from: u64, to: u64) -> Result<Vec<u32>, Unmovable> {
     let end = from + 4 * words.len() as u64;
     let outside = |target: u64| !(from..end).contains(&target);
@@ -121,8 +146,7 @@ pub fn relocate(words: &[u32], from: u64, to: u64) -> Result<Vec<u32>, Unmovable
             (i64::from(v) << (64 - bits)) >> (64 - bits)
         };
         if w & 0x7C00_0000 == 0x1400_0000 {
-            let target = pc.wrapping_add((field(26, 0) * 4) as u64);
-            if outside(target) {
+            if let Some(target) = branch_leaving(*w, k, words.len(), from) {
                 let off = (target.wrapping_sub(to + 4 * k as u64) as i64) / 4;
                 if !(-(1 << 25)..(1 << 25)).contains(&off) {
                     return Err(Unmovable {
@@ -224,7 +248,7 @@ pub fn make(img: &PeImage, data: &[u8], base: u64, exits: &Exits, key: String) -
     let mut refused = Refused::new();
     let mut refuse = |why: &str| *refused.entry(why.to_string()).or_default() += 1;
     let mut blocks = Vec::new();
-    let (mut words, mut marks) = (Vec::new(), Vec::new());
+    let (mut words, mut marks, mut fix) = (Vec::new(), Vec::new(), Vec::new());
     for &start in &walk.block_starts {
         let (insns, addr) = lift_block(&at, base + u64::from(start));
         if insns.is_empty() {
@@ -253,6 +277,7 @@ pub fn make(img: &PeImage, data: &[u8], base: u64, exits: &Exits, key: String) -
             refuse("the code region is full");
             continue;
         }
+        let block_fixups = fixups(&w, CACHE_CODE_VA + offset);
         blocks.push(CachedBlock {
             start,
             end: (addr - base) as u32,
@@ -262,7 +287,10 @@ pub fn make(img: &PeImage, data: &[u8], base: u64, exits: &Exits, key: String) -
             nmarks: m.len() as u32,
             live,
             insns: insns.len() as u32,
+            fixup: fix.len() as u32,
+            nfixups: block_fixups.len() as u32,
         });
+        fix.extend(block_fixups);
         words.extend(w);
         marks.extend(m.iter().map(|(h, x)| ((h - CACHE_CODE_VA) as u32, (x - base) as u32)));
     }
@@ -281,6 +309,7 @@ pub fn make(img: &PeImage, data: &[u8], base: u64, exits: &Exits, key: String) -
         words,
         marks,
         pages,
+        fixups: fix,
     };
     (cache, refused)
 }
@@ -356,11 +385,19 @@ pub fn to_bytes(c: &CacheFile) -> Vec<u8> {
     put(&mut out, VERSION);
     out.extend_from_slice(c.key.as_bytes());
     out.extend_from_slice(&c.base.to_le_bytes());
-    for n in [c.blocks.len(), c.words.len(), c.marks.len(), c.pages.len()] {
+    for n in [
+        c.blocks.len(),
+        c.words.len(),
+        c.marks.len(),
+        c.pages.len(),
+        c.fixups.len(),
+    ] {
         put(&mut out, n as u32);
     }
     for b in &c.blocks {
-        for v in [b.start, b.end, b.word, b.nwords, b.mark, b.nmarks, b.live, b.insns] {
+        for v in [
+            b.start, b.end, b.word, b.nwords, b.mark, b.nmarks, b.live, b.insns, b.fixup, b.nfixups,
+        ] {
             put(&mut out, v);
         }
     }
@@ -377,6 +414,9 @@ pub fn to_bytes(c: &CacheFile) -> Vec<u8> {
         for i in list {
             put(&mut out, *i);
         }
+    }
+    for k in &c.fixups {
+        put(&mut out, *k);
     }
     out
 }
@@ -401,7 +441,7 @@ pub fn from_bytes(b: &[u8]) -> Result<CacheFile, String> {
     }
     let key = String::from_utf8(take(64)?.to_vec()).map_err(|e| e.to_string())?;
     let base = u64::from_le_bytes(take(8)?.try_into().unwrap());
-    let mut n = [0usize; 4];
+    let mut n = [0usize; 5];
     for x in &mut n {
         *x = u32_of(take(4)?) as usize;
     }
@@ -411,7 +451,7 @@ pub fn from_bytes(b: &[u8]) -> Result<CacheFile, String> {
         ..CacheFile::default()
     };
     for _ in 0..n[0] {
-        let mut v = [0u32; 8];
+        let mut v = [0u32; 10];
         for x in &mut v {
             *x = u32_of(take(4)?);
         }
@@ -424,6 +464,8 @@ pub fn from_bytes(b: &[u8]) -> Result<CacheFile, String> {
             nmarks: v[5],
             live: v[6],
             insns: v[7],
+            fixup: v[8],
+            nfixups: v[9],
         });
     }
     for _ in 0..n[1] {
@@ -441,6 +483,9 @@ pub fn from_bytes(b: &[u8]) -> Result<CacheFile, String> {
             list.push(u32_of(take(4)?));
         }
         c.pages.insert(page, list);
+    }
+    for _ in 0..n[4] {
+        c.fixups.push(u32_of(take(4)?));
     }
     Ok(c)
 }

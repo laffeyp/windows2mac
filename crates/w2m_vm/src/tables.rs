@@ -95,6 +95,21 @@ pub fn page_descriptor(mem: &[u8], va: u64) -> Option<u64> {
     (read(mem, at) & 3 == 3).then_some(at)
 }
 
+/// The offset in `mem` of the level-2 descriptor that maps the 2 MB block holding `va` (Sprint 261): `None` when a
+/// table, or nothing, maps it there.
+pub fn block_descriptor(mem: &[u8], va: u64) -> Option<u64> {
+    let mut off = TRANSLATION_TABLES;
+    for shift in [39, 30] {
+        let desc = read(mem, off + 8 * ((va >> shift) & 0x1FF));
+        if desc & 3 != 3 {
+            return None;
+        }
+        off = (desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE;
+    }
+    let at = off + 8 * ((va >> 21) & 0x1FF);
+    (read(mem, at) & 3 == 1).then_some(at)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

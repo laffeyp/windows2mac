@@ -11,9 +11,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use a64_encoder as a64;
 use guest_runtime::Image;
 use guest_runtime::layout::{
-    BLOCK, CODE_CACHE, CURRENT_ENTRY, E_X, HEAP_SIZE, IPA_BASE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, PAGE,
-    PROCESS_VA, RECON_COUNT, RECON_ENTRIES, RECON_TABLE, RUN_TABLE, RUNTIME_STACK, RUNTIME_STACK_SIZE, SLICE_UNTIL,
-    SPLIT_TABLES, SPLIT_TABLES_SIZE, STATE_OFF, TIME_SLICE, TRANSLATION_TABLES, VM_COMPILER,
+    AP_READ_ONLY, BLOCK, CACHE_FILE_SIZE, CACHE_FILE_VA, CODE_CACHE, CURRENT_ENTRY, E_X, HEAP_SIZE, IPA_BASE,
+    MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, PAGE, PROCESS_VA, RECON_COUNT, RECON_ENTRIES, RECON_TABLE, RUN_TABLE,
+    RUNTIME_STACK, RUNTIME_STACK_SIZE, SLICE_UNTIL, SPLIT_TABLES, SPLIT_TABLES_SIZE, STATE_OFF, TIME_SLICE,
+    TRANSLATION_TABLES, VM_COMPILER,
 };
 use guest_runtime::services::Service;
 use pe_loader::{Loaded, THUNK_BASE};
@@ -220,6 +221,8 @@ pub struct Layout {
     /// the loaded regions but the thunks: (region index in `Loaded::memory`, offset)
     pub placed: Vec<(usize, u64)>,
     pub heap_off: u64,
+    /// the cache file's part, mapped read-only at `CACHE_FILE_VA` when a run uses a cache (Sprint 261)
+    pub cache_file_off: Option<u64>,
     pub virtual_off: u64,
     pub size: u64,
     /// (VA, IPA, size)
@@ -227,7 +230,8 @@ pub struct Layout {
 }
 
 impl Layout {
-    pub fn new(loaded: &Loaded) -> Layout {
+    /// The guest's memory for `loaded`, with the cache file's region when `cache` (card 5's I).
+    pub fn new(loaded: &Loaded, cache: bool) -> Layout {
         let mut size = MONITOR_SIZE + PROCESS_SIZE;
         let mut placed = Vec::new();
         for (i, r) in loaded.memory.regions.iter().enumerate() {
@@ -239,6 +243,12 @@ impl Layout {
         }
         let heap_off = round_up(size, BLOCK); // the process heap: 2 MB aligned, mapped in blocks
         size = heap_off + HEAP_SIZE;
+        // the cache file: 2 MB aligned, mapped in blocks, read-only (`Guest::new`)
+        let cache_file_off = cache.then(|| {
+            let off = round_up(size, BLOCK);
+            size = off + CACHE_FILE_SIZE;
+            off
+        });
         // the VirtualAlloc arena: its IPA 1 GB aligned for 1 GB blocks; sparse
         let virtual_off = round_up(IPA_BASE + size, GIGA_BLOCK) - IPA_BASE;
         size = virtual_off + VIRTUAL_SIZE;
@@ -251,10 +261,14 @@ impl Layout {
             (r.base, IPA_BASE + off, round_up(r.data.len() as u64, PAGE))
         }));
         maps.push((guest_runtime::layout::HEAP_VA, IPA_BASE + heap_off, HEAP_SIZE));
+        if let Some(off) = cache_file_off {
+            maps.push((CACHE_FILE_VA, IPA_BASE + off, CACHE_FILE_SIZE));
+        }
         maps.push((VIRTUAL_VA, IPA_BASE + virtual_off, VIRTUAL_SIZE));
         Layout {
             placed,
             heap_off,
+            cache_file_off,
             virtual_off,
             size: round_up(size, 0x4000),
             maps,
@@ -763,7 +777,7 @@ impl Guest {
         system_modules: &BTreeSet<String>,
         vm_compiler_symbols: &[String],
     ) -> Result<Guest, GuestError> {
-        let layout = Layout::new(loaded);
+        let layout = Layout::new(loaded, start.host_range.is_some());
         let mut memory = match start.memory_fd {
             // a child's: the supervisor's unlinked file, sized here and mapped shared (Sprint 197)
             Some(fd) => {
@@ -792,6 +806,14 @@ impl Guest {
                 .map_err(GuestError::Process)?
         };
         let (ttbr, _) = write_translation_tables(mem, &layout.maps).map_err(GuestError::Tables)?;
+        if layout.cache_file_off.is_some() {
+            // the installer only reads the file (card 5's I): its blocks read-only
+            for va in (CACHE_FILE_VA..CACHE_FILE_VA + CACHE_FILE_SIZE).step_by(BLOCK as usize) {
+                let at =
+                    crate::tables::block_descriptor(mem, va).expect("Layout::new maps the cache file in 2 MB blocks");
+                write_u64(mem, at, read_u64(mem, at) | AP_READ_ONLY);
+            }
+        }
         write_u64(mem, VM_COMPILER + VMC_CURSOR, CODE_CACHE);
         let timed = start.time_runtime_word;
         let timing = monitor_code::Timing {
@@ -956,6 +978,23 @@ impl Guest {
                 write_u64(self.memory.as_mut_slice(), at + 8 * i as u64, thunk);
             }
         }
+        Ok(())
+    }
+
+    /// The cache file's bytes into its read-only region at `CACHE_FILE_VA` (Sprint 261; card 5's I), the rest of the
+    /// region left zero. Err when the guest was built without the region, or the file is larger than it.
+    pub fn place_cache_file(&mut self, bytes: &[u8]) -> Result<(), String> {
+        let off = self
+            .layout
+            .cache_file_off
+            .ok_or("the guest has no cache file region: its start set no host range")?;
+        if bytes.len() as u64 > CACHE_FILE_SIZE {
+            return Err(format!(
+                "the cache file's {} bytes exceed its region's {CACHE_FILE_SIZE}",
+                bytes.len()
+            ));
+        }
+        self.memory.as_mut_slice()[off as usize..off as usize + bytes.len()].copy_from_slice(bytes);
         Ok(())
     }
 

@@ -9,7 +9,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use guest_runtime::layout::{CACHE_CODE_SIZE, CACHE_DATA_SIZE, CODE_CACHE, MONITOR_VA, PAGE, PROCESS_VA, STATE_OFF};
+use guest_runtime::layout::{CACHE_CODE_SIZE, CACHE_FILE_SIZE, CODE_CACHE, MONITOR_VA, PAGE, PROCESS_VA, STATE_OFF};
 use w2m_vm::cache_file::{self, Exits};
 
 fn root() -> PathBuf {
@@ -61,6 +61,24 @@ fn every_fixture_cache_covers_its_reads_indexes_its_pages_and_reads_back() {
                 "{name}: relocation refused {unmovable:?}, differing at {differ:x?}"
             ));
         }
+        // the fix-ups (Sprint 261, card 5's II): each block's list is the words `relocate` changes in a move
+        for b in &cache.blocks {
+            let from = guest_runtime::layout::CACHE_CODE_VA + 4 * u64::from(b.word);
+            let words = &cache.words[b.word as usize..(b.word + b.nwords) as usize];
+            let Ok(moved) = cache_file::relocate(words, from, to) else {
+                continue;
+            };
+            let changed: Vec<u32> = (0..words.len() as u32)
+                .filter(|&k| moved[k as usize] != words[k as usize])
+                .collect();
+            let listed = &cache.fixups[b.fixup as usize..(b.fixup + b.nfixups) as usize];
+            if listed != changed.as_slice() {
+                wrong.push(format!(
+                    "{name}: block 0x{:x}'s fix-ups {listed:?}, where the move changes {changed:?}",
+                    b.start
+                ));
+            }
+        }
         if cache_file::from_bytes(&cache_file::to_bytes(&cache)).as_ref() != Ok(&cache) {
             wrong.push(format!("{name}: the file does not read back equal"));
         }
@@ -88,7 +106,10 @@ fn the_stored_cache_figures_add_up_within_their_regions() {
         walk["block_starts"].as_u64().unwrap()
     );
     assert!(f["code_bytes"].as_u64().unwrap() <= CACHE_CODE_SIZE, "the code region");
-    assert!(f["data_bytes"].as_u64().unwrap() <= CACHE_DATA_SIZE, "the data region");
+    assert!(
+        f["file_bytes"].as_u64().unwrap() <= CACHE_FILE_SIZE,
+        "the file's region"
+    );
     assert_eq!(
         f["uncovered_reads"], 0,
         "blocks whose live flags miss a successor's read"

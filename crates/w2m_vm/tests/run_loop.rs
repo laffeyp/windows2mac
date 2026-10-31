@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 
 use cpu_cases::sha256;
 use guest_runtime::layout::{
-    AP_READ_ONLY, IPA_BASE, PAGE, PROCESS_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE, RUNTIME_IMAGE_VA, STATE_OFF,
-    runtime_defines,
+    AP_READ_ONLY, CACHE_FILE_SIZE, CACHE_FILE_VA, IPA_BASE, PAGE, PROCESS_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE,
+    RUNTIME_IMAGE_VA, STATE_OFF, runtime_defines,
 };
 use hypervisor::{Vcpu, Vm, memory};
 use pe_loader::{Loaded, load};
@@ -28,7 +28,7 @@ use w2m_vm::compile::HostCompiler;
 use w2m_vm::guest::{Guest, vm_compiler_symbols};
 use w2m_vm::process::Start;
 use w2m_vm::run::{JUDGE_KIND, Outcome, Stop, run_compiling};
-use w2m_vm::tables::page_descriptor;
+use w2m_vm::tables::{block_descriptor, page_descriptor};
 
 /// One VM per process (Hypervisor.framework): the tests here each make one, in turn.
 static ONE_VM: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -104,6 +104,7 @@ fn cached_guest(root: &Path, name: &str) -> (Loaded, Guest, HostCompiler) {
     };
     let (file, _) = cache_file::make(&program.pe, &data, program.base, &exits, name.to_string());
     assert!(!file.blocks.is_empty(), "{name}'s cache holds no block");
+    guest.place_cache_file(&cache_file::to_bytes(&file)).unwrap();
     let mut host = HostCompiler::default();
     host.use_cache(&mut guest, file).unwrap();
     (loaded, guest, host)
@@ -311,6 +312,38 @@ fn the_judges_time_is_counted_apart_from_the_exits() {
         by_kind,
         out.serve_ns.iter().sum::<u64>(),
         "the kinds add up to the host's time"
+    );
+}
+
+/// Sprint 261 (card 5's I): a guest built for a cache holds the file's bytes at `CACHE_FILE_VA`, its region's blocks
+/// read-only; a guest built without one has no such region and its maps are as before.
+#[test]
+fn a_cached_guest_holds_the_file_read_only_at_its_region() {
+    let root = root();
+    let (_, guest, host) = cached_guest(&root, "qpc");
+    let bytes = cache_file::to_bytes(&host.cache.as_ref().unwrap().file);
+    let at = guest.layout.offset(CACHE_FILE_VA).expect("no map at CACHE_FILE_VA") as usize;
+    assert_eq!(
+        &guest.memory.as_slice()[at..at + bytes.len()],
+        bytes.as_slice(),
+        "the file's bytes"
+    );
+    assert!(
+        IPA_BASE + guest.layout.size <= 1 << 40,
+        "the guest's memory, 0x{:x}, past the VM's 40-bit IPA (`Vm::new(40)`)",
+        guest.layout.size
+    );
+    for va in (CACHE_FILE_VA..CACHE_FILE_VA + CACHE_FILE_SIZE).step_by(0x20_0000) {
+        let d = block_descriptor(guest.memory.as_slice(), va).unwrap_or_else(|| panic!("no block at 0x{va:x}"));
+        let desc = u64::from_le_bytes(guest.memory.as_slice()[d as usize..d as usize + 8].try_into().unwrap());
+        assert_ne!(desc & AP_READ_ONLY, 0, "the block at 0x{va:x} is writable");
+    }
+    let (_, plain) = guest_for(&root, "qpc");
+    assert_eq!(plain.layout.cache_file_off, None);
+    assert_eq!(
+        plain.layout.offset(CACHE_FILE_VA),
+        None,
+        "a guest without a cache maps the region"
     );
 }
 
