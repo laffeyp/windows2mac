@@ -28,11 +28,11 @@ use crate::monitor_code::{
 };
 use crate::threads::{STILL_ACTIVE, Switch, Thread, add_thread, slice_until};
 
+pub use guest_runtime::layout::FCW_OFF;
+pub use guest_runtime::layout::LOCK_OWNER;
 /// MONITOR_DATA + these (vm_backend 96, 107, 113, 119).
-pub const MXCSR_OFF: u64 = 0x50;
-pub const FCW_OFF: u64 = 0x70;
-pub const LOCK_OWNER: u64 = 0xB0;
-pub const RUN_END: u64 = 0xC8;
+pub use guest_runtime::layout::MXCSR_OFF;
+pub use guest_runtime::layout::RUN_END;
 /// x24 holds the flags not yet defined (vm_backend 359); at entry every one.
 pub const REG_UNDEFINED_FLAGS: u8 = 24;
 
@@ -464,10 +464,10 @@ fn vm_compiled_waiting(
     wait: &mut dyn FnMut(&std::sync::atomic::AtomicU32),
 ) {
     use crate::monitor_code::{host_release_runtime_word, host_take_runtime_word_waiting};
-    use guest_runtime::layout::{LOCK_OWNER, PAGE, RECON_TABLE};
+    use guest_runtime::layout::{PAGE, RECON_TABLE};
     // the log is read and reset under the runtime word, which every in-VM compile and install appends under (Sprint
     // 275, census D6): on several vCPUs another's append between the read and the reset would be lost
-    let own = u32::try_from(mem.read_u64(MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0);
+    let own = crate::monitor_code::vcpu_owner(mem);
     let took = host_take_runtime_word_waiting(mem, own, wait);
     let n = mem.read_u64(VM_COMPILER + VMC_LOG_COUNT);
     for i in 0..n {
@@ -554,17 +554,12 @@ fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
     Ok(())
 }
 
-/// The exiting vCPU's owner in the runtime word, its `LOCK_OWNER` in its monitor data.
-pub(crate) fn own_word(guest: &Guest) -> u32 {
-    u32::try_from(guest.memory_view().read_u64(MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0)
-}
-
 /// The runtime word taken for a service that changes state two vCPUs share (`hvc #1`, `#4`, `#12`, `#13`;
 /// `docs/design-run-loop-on-several-vcpus-2026-10-31.md`, "The exits"): whether the host took it, and so must release
 /// it; a vCPU that holds it already (a miss inside the runtime) keeps it. A service found outside it after the take,
 /// the word held neither by the host nor by this vCPU, is counted in `outside`.
 fn take_word(guest: &Guest, outside: &mut u64) -> bool {
-    let own = own_word(guest);
+    let own = crate::monitor_code::vcpu_owner(guest.memory_view());
     let took = crate::monitor_code::host_take_runtime_word(guest.memory_view(), own);
     let holder = guest
         .memory_view()

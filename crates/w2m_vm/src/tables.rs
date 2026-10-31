@@ -78,7 +78,7 @@ pub fn write_translation_tables(mem: &mut [u8], maps: &[(u64, u64, u64)]) -> Res
 }
 
 /// A descriptor's AP[2]: no writes at EL1 (vm_backend 1129; Arm ARM D8.4.1).
-pub const AP_READ_ONLY: u64 = 1 << 7;
+pub use guest_runtime::layout::AP_READ_ONLY;
 
 /// The offset in `mem` of the level-3 descriptor that maps page `va`: `_page_descriptor` (vm_backend 4507-4530)
 /// without its block split, so `None` when a block or nothing maps it.

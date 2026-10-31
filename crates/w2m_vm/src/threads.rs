@@ -46,7 +46,7 @@ pub const SCHEDULE_ANSWER: u32 = 8;
 const SCRATCH_OFF: u64 = 0x1900;
 /// The monitor data ranges each thread keeps (scheduler.py 31): lazy AF and DF, MXCSR, the x87 control word, the YMM
 /// upper halves.
-pub const PER_THREAD_MONITOR: [(u64, u64); 4] = [(0x20, 0x40), (0x50, 0x58), (0x70, 0x72), (0x400, 0x500)];
+pub use guest_runtime::layout::PER_THREAD_MONITOR;
 /// scheduler.py 24-26; the first thread's id (vm_backend `_first_tid`).
 pub const STILL_ACTIVE: u32 = 259;
 const DLL_THREAD_ATTACH: u32 = 2;
@@ -685,7 +685,10 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
     // the threads and the turn are every vCPU's services' to change, under the runtime word (Sprint 294): a caller
     // that skipped the take fails here in debug builds, the tests'
     debug_assert!(
-        crate::monitor_code::runtime_word_held(guest.memory_view(), crate::run::own_word(guest)),
+        crate::monitor_code::runtime_word_held(
+            guest.memory_view(),
+            crate::monitor_code::vcpu_owner(guest.memory_view())
+        ),
         "the scheduler entered without the runtime word"
     );
     let current = current_tid(guest);

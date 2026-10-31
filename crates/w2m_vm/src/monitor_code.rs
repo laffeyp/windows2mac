@@ -162,6 +162,12 @@ pub fn host_take_runtime_word_waiting(
     }
 }
 
+/// The exiting vCPU's owner in the runtime word, its `LOCK_OWNER` word in its monitor data (Sprint 296: the one read of
+/// it, the run loop's and the scheduler's).
+pub fn vcpu_owner(mem: ConcurrentGuestMemory<'_>) -> u32 {
+    u32::try_from(mem.read_u64(MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0)
+}
+
 /// Whether the runtime word is held by the host or by the vCPU whose owner is `own` (Sprint 294): what a service that
 /// changes state two vCPUs share checks at its start, so a caller that skipped the take fails there.
 pub fn runtime_word_held(mem: ConcurrentGuestMemory<'_>, own: u32) -> bool {
@@ -1111,6 +1117,19 @@ mod tests {
         assert_eq!(mem.read_u32(RUN_TABLE + RUNTIME_LOCK), super::HOST_OWNER);
         host_release_runtime_word(mem);
         assert_eq!(mem.read_u32(RUN_TABLE + RUNTIME_LOCK), 0);
+    }
+
+    /// Sprint 296: `vcpu_owner` reads the owner the runtime's lock writes, the low half of the `LOCK_OWNER` word in the
+    /// monitor data, and not the words beside it.
+    #[test]
+    fn the_owner_is_the_monitor_datas_lock_owner_word() {
+        use super::{LOCK_OWNER, MONITOR_DATA, vcpu_owner};
+        let mut page = vec![0u64; ((MONITOR_DATA + LOCK_OWNER) / 8 + 2) as usize];
+        let at = ((MONITOR_DATA + LOCK_OWNER) / 8) as usize;
+        page[at - 1] = 7;
+        page[at] = 0xFFFF_FFFF_0000_0003;
+        page[at + 1] = 9;
+        assert_eq!(vcpu_owner(view(&mut page)), 3);
     }
 
     /// Sprint 275: the take does not wait for the vCPU whose exit it serves, which holds the word across a host

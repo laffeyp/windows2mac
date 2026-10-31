@@ -22,7 +22,7 @@ pub const CLOCK_MODE: u64 = 0x60;
 pub const CLOCK_RATE: u64 = 0x90;
 pub const CLOCK_EPOCH: u64 = 0xA0;
 /// RUN_TABLE + this: the instruction clock's warp (vm_backend 104).
-pub const CLOCK_WARP: u64 = 0xC8;
+pub use guest_runtime::layout::CLOCK_WARP;
 /// vm_backend 226-276, 345; modules.py 46; virtual_memory.py 36.
 pub const RING_APIS: u64 = 512;
 pub const RING_HEADER: u64 = 16 + 8 * RING_APIS;
