@@ -2,6 +2,10 @@
 
 Reviews rolled out of `BLACKBOARD.md` `## Surfaced for review`, verbatim, newest first (Sprint 232).
 
+- **2026-10-30 agent** — reviewer-3's project review at Sprint 253 (the walk, 8d99af9d3, its gates running), on the user's request verbatim; arrived after 253's close, its dispositions in card 254's commit. Read: tail entries 252 and 253, 8d99af9d3's stat, the stored walk, `image_walk/src/lib.rs` 59 and 192-194, the design's choices B to E. No High; one Medium.
+  - *Medium 1, the region holds the code with about 16.8 MB to spare, and C's table (about 32 MB half full), E's bitmap and the page index have no place:* holds. Resolved: the design's B' puts them in a second region, `[MONITOR_VA − 0x780_0000 − 0x400_0000, MONITOR_VA − 0x780_0000)`, read by absolute address outside the branch bound, held by the same layout test; card 3 measures the code's true size.
+  - *Low 1, 3,836 of the run's starts the cache cannot serve (3,081 unwalked, 755 inside a walk block):* holds. Resolved: card 4's gate in the design states its expected fall before it runs, at most 128,523 distinct starts and their repeats.
+  - *On track:* order: 253's close; card 3, the cache file, with Medium 1 and the Deferred (Sprint 251) and (Sprint 253) items; card 4.
 - **2026-10-30 agent** — reviewer-3's review of Sprint 251's revised design (dfcf29cd8, its gates running), on the user's request verbatim. Read: tail entry 251, the design's diff in dfcf29cd8 against its review at 251 and `layout.rs` 10-82 and 167-226. No High or Medium; its review at 251's two Mediums and two Lows resolved.
   - *Low 1, the write handler needs a page-to-starts index, a block's every page:* holds. Disposition: Deferred (Sprint 251), card 3's file format and card 4's plant into a block's second page.
   - *Low 2, the region's backing within the IPA size, and a guest's fixed-base request inside it:* holds. Disposition: Deferred (Sprint 251), card 3's layout test and card 4's arena lookup with a unit test.
