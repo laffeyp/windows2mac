@@ -64,6 +64,22 @@ impl Kind {
     fn newest_first(self) -> bool {
         self == Kind::Surfaced
     }
+
+    /// The entries of the section that leave, by index: the reviews but the newest `number`; the Decisions marked
+    /// closed or superseded (`number` unused); the Built paragraphs whose first sprint is at or below `number`.
+    fn chosen(self, all: &[String], number: u32) -> Vec<usize> {
+        let picked = |keep: &dyn Fn(&str) -> bool| (0..all.len()).filter(|i| keep(&all[*i])).collect::<Vec<usize>>();
+        match self {
+            Kind::Surfaced => {
+                let reviews = picked(&is_review);
+                reviews[..reviews.len().saturating_sub(number as usize)].to_vec()
+            }
+            Kind::Decisions => picked(&is_closed),
+            Kind::Built => {
+                picked(&|e| !e.starts_with(Kind::Built.pointer()) && first_sprint(e).is_some_and(|s| s <= number))
+            }
+        }
+    }
 }
 
 /// The section's entries: each from its "- **" line to the next one's, blank lines with the entry before them; the
@@ -162,12 +178,12 @@ fn pointer(kind: Kind, archive_name: &str, archive: &str) -> String {
     }
 }
 
-/// The record with the entries `chosen` picks out of `kind`'s section and one pointer in their place, and the archive
-/// with them in: (record, archive, entries moved).
+/// The record with the entries `Kind::chosen` picks out of `kind`'s section by `number` and one pointer in their
+/// place, and the archive with them in: (record, archive, entries moved).
 fn roll(
     blackboard: &str,
     kind: Kind,
-    chosen: &dyn Fn(&[String]) -> Vec<usize>,
+    number: u32,
     archive_name: &str,
     archive_old: Option<&str>,
 ) -> Result<(String, String, usize), String> {
@@ -181,7 +197,7 @@ fn roll(
         .find("\n## ")
         .map_or(blackboard.len(), |i| start + i + 1);
     let (preamble, all) = entries(&blackboard[start..end]);
-    let moved = chosen(&all);
+    let moved = kind.chosen(&all, number);
     if moved.is_empty() {
         return Ok((blackboard.to_string(), archive_old.unwrap_or_default().to_string(), 0));
     }
@@ -255,22 +271,7 @@ fn run() -> Result<(), String> {
     let blackboard = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let into = root.join(archive);
     let old = fs::read_to_string(&into).ok();
-    let n = number.unwrap_or(0);
-    let chosen = |all: &[String]| -> Vec<usize> {
-        match kind {
-            Kind::Surfaced => {
-                let reviews: Vec<usize> = (0..all.len()).filter(|i| is_review(&all[*i])).collect();
-                reviews[..reviews.len().saturating_sub(n as usize)].to_vec()
-            }
-            Kind::Decisions => (0..all.len()).filter(|i| is_closed(&all[*i])).collect(),
-            Kind::Built => (0..all.len())
-                .filter(|i| {
-                    !all[*i].starts_with(Kind::Built.pointer()) && first_sprint(&all[*i]).is_some_and(|s| s <= n)
-                })
-                .collect(),
-        }
-    };
-    let (text, archived, moved) = roll(&blackboard, kind, &chosen, archive, old.as_deref())?;
+    let (text, archived, moved) = roll(&blackboard, kind, number.unwrap_or(0), archive, old.as_deref())?;
     if moved == 0 {
         println!("nothing to move from {}", kind.section());
         return Ok(());
@@ -302,18 +303,11 @@ mod tests {
                           - **2026-10-29 agent** — reviewer-3's review c\n- **2026-10-30 agent** — reviewer-3's review d\n\n\
                           ## Decisions\n- d\n";
 
-    fn reviews_but(keep: usize) -> impl Fn(&[String]) -> Vec<usize> {
-        move |all: &[String]| {
-            let reviews: Vec<usize> = (0..all.len()).filter(|i| is_review(&all[*i])).collect();
-            reviews[..reviews.len().saturating_sub(keep)].to_vec()
-        }
-    }
-
     /// The two oldest of four reviews leave, newest first; everything else stays in its order; the kept and moved
     /// entries hold every byte of the section but the new line.
     #[test]
     fn the_oldest_reviews_leave_and_nothing_else_moves() {
-        let (text, archive, moved) = roll(RECORD, Kind::Surfaced, &reviews_but(2), "docs/a.md", None).unwrap();
+        let (text, archive, moved) = roll(RECORD, Kind::Surfaced, 2, "docs/a.md", None).unwrap();
         assert_eq!(moved, 2);
         let entries: Vec<&str> = archive.split("\n- **").skip(1).collect();
         assert!(entries[0].contains("pasted code review b") && entries[1].contains("review a\n  - *Medium 1:* y\n\n"));
@@ -336,7 +330,7 @@ mod tests {
 
     #[test]
     fn nothing_moves_when_no_review_is_older_than_the_kept() {
-        let (text, _, moved) = roll(RECORD, Kind::Surfaced, &reviews_but(4), "docs/a.md", None).unwrap();
+        let (text, _, moved) = roll(RECORD, Kind::Surfaced, 4, "docs/a.md", None).unwrap();
         assert_eq!(moved, 0);
         assert_eq!(text, RECORD);
     }
@@ -345,13 +339,12 @@ mod tests {
     /// line beside the first): one pointer stays, its count and dates the archive's, the first roll's and the second's.
     #[test]
     fn a_second_roll_leaves_one_pointer_counting_the_whole_archive() {
-        let (once, archive, _) = roll(RECORD, Kind::Surfaced, &reviews_but(2), "docs/a.md", None).unwrap();
+        let (once, archive, _) = roll(RECORD, Kind::Surfaced, 2, "docs/a.md", None).unwrap();
         let again = once.replace(
             "- **2026-10-30 agent** — reviewer-3's review d\n",
             "- **2026-10-30 agent** — reviewer-3's review d\n- **2026-10-31 agent** — reviewer-3's review e\n",
         );
-        let (twice, archive, moved) =
-            roll(&again, Kind::Surfaced, &reviews_but(2), "docs/a.md", Some(&archive)).unwrap();
+        let (twice, archive, moved) = roll(&again, Kind::Surfaced, 2, "docs/a.md", Some(&archive)).unwrap();
         assert_eq!(moved, 1, "review c leaves");
         let pointers: Vec<&str> = twice
             .lines()
@@ -403,25 +396,11 @@ mod tests {
                            ## Built\n\n- **2026-10-05** — Sprint 000 (zero) a.\n- **2026-10-06** — Sprint 241 (b) b.\n\
                            - **2026-10-07** — Sprint 242 (c) c.\n- **2026-10-08** — Sprint 243 (d) d.\n\n## Sprint tail\n";
 
-    fn through(n: u32) -> impl Fn(&[String]) -> Vec<usize> {
-        move |all: &[String]| {
-            (0..all.len())
-                .filter(|i| {
-                    !all[*i].starts_with(Kind::Built.pointer()) && first_sprint(&all[*i]).is_some_and(|s| s <= n)
-                })
-                .collect()
-        }
-    }
-
-    fn closed(all: &[String]) -> Vec<usize> {
-        (0..all.len()).filter(|i| is_closed(&all[*i])).collect()
-    }
-
     /// The closed and superseded Decisions leave in the record's order, the pointer where the first stood; the rest,
     /// the user's scope first, stay byte for byte (Sprint 269).
     #[test]
     fn the_closed_decisions_leave_and_the_rest_stay() {
-        let (text, archive, moved) = roll(DECIDED, Kind::Decisions, &closed, "docs/d.md", None).unwrap();
+        let (text, archive, moved) = roll(DECIDED, Kind::Decisions, 0, "docs/d.md", None).unwrap();
         assert_eq!(moved, 2);
         assert!(
             archive.find("— A.").unwrap() < archive.find("— C.").unwrap(),
@@ -444,9 +423,9 @@ mod tests {
     /// one pointer (Sprint 269; plant 1 moves 243 by an off-by-one bound).
     #[test]
     fn the_built_paragraphs_through_the_bound_leave_and_a_second_roll_keeps_one_pointer() {
-        let (text, archive, moved) = roll(DECIDED, Kind::Built, &through(241), "docs/b.md", None).unwrap();
+        let (text, archive, moved) = roll(DECIDED, Kind::Built, 241, "docs/b.md", None).unwrap();
         assert_eq!(moved, 2);
-        let (again, archive, moved) = roll(&text, Kind::Built, &through(242), "docs/b.md", Some(&archive)).unwrap();
+        let (again, archive, moved) = roll(&text, Kind::Built, 242, "docs/b.md", Some(&archive)).unwrap();
         assert_eq!(moved, 1);
         let built = &again[again.find("## Built").unwrap()..again.find("## Sprint tail").unwrap()];
         assert_eq!(
