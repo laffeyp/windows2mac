@@ -322,10 +322,10 @@ pub struct Outcome {
     /// the start of each block the in-VM compiler compiled, in its log's order, the host's compiles not among them
     /// (Sprint 249: the compiles by image)
     pub vm_compile_starts: Vec<u64>,
-    /// the misses the host served with the runtime word held neither by the host nor by the vCPU itself, the word read
-    /// after the take (Sprint 286): 0 when the compile or install and the dispatch insert always run under the word,
-    /// beside the in-VM compiler and the installer, which hold it
-    pub misses_outside_word: u64,
+    /// the services that change state two vCPUs share (`hvc #1`, `#4`, `#12`, `#13`) served with the runtime word held
+    /// neither by the host nor by the vCPU itself, the word read after the take (Sprint 286 for the miss, 294 for the
+    /// rest): 0 when each runs under the word, beside the guest's own services, which hold it
+    pub served_outside_word: u64,
     /// the instructions retired at each in-VM compile and install, in its log's order (Sprint 266), from the words
     /// `Timing::instructions_at_compile` writes; all 0 without it
     pub instructions_at: InstructionsAt,
@@ -554,6 +554,34 @@ fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
     Ok(())
 }
 
+/// The runtime word taken for a service that changes state two vCPUs share (`hvc #1`, `#4`, `#12`, `#13`;
+/// `docs/design-run-loop-on-several-vcpus-2026-10-31.md`, "The exits"): whether the host took it, and so must release
+/// it; a vCPU that holds it already (a miss inside the runtime) keeps it. A service found outside it after the take,
+/// the word held neither by the host nor by this vCPU, is counted in `outside`.
+fn take_word(guest: &Guest, outside: &mut u64) -> bool {
+    let own = u32::try_from(guest.memory_view().read_u64(MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0);
+    let took = crate::monitor_code::host_take_runtime_word(guest.memory_view(), own);
+    let holder = guest
+        .memory_view()
+        .atomic_u32(RUN_TABLE + crate::monitor_code::RUNTIME_LOCK)
+        .load(std::sync::atomic::Ordering::Relaxed);
+    *outside += u64::from(holder != crate::monitor_code::HOST_OWNER && holder != own);
+    took
+}
+
+/// `hand_over` with the runtime word let go for the wait when the host took it, and taken again after (Sprint 294): a
+/// process's turn waits on the other processes, and no wait holds the word (the design's "The exits").
+fn turn(guest: &mut Guest, message: crate::turns::Message, took: bool, outside: &mut u64) -> Result<(), String> {
+    if took {
+        crate::monitor_code::host_release_runtime_word(guest.memory_view());
+    }
+    let handed = hand_over(guest, message);
+    if took {
+        take_word(guest, outside);
+    }
+    handed
+}
+
 /// The process's turn ends (Sprint 197: `VM.steps` yields "idle" or "slice", vm_backend 5066, 5082): the machine runs
 /// the others until this process's turn comes back; a pending wake readies its blocked threads, and on the instruction
 /// clock it is caught up to the machine's (`_catch_up`). Err: the run stops (a deadlock, a child's stop).
@@ -633,7 +661,7 @@ fn run(
         translations: Vec::new(),
         vm_compile_starts: Vec::new(),
         instructions_at: InstructionsAt::default(),
-        misses_outside_word: 0,
+        served_outside_word: 0,
     };
     if let Err(why) = add_thread(guest, first) {
         out.stop = Stop::Exit(format!("the first thread's entry: {why}")); // a guest run before
@@ -814,9 +842,15 @@ fn run(
         if number == HVC_CODE_WRITE as u16
             && let Some(h) = host.as_deref_mut()
         {
-            // a write faulted: behind translated code? (5297-5299)
+            // a write faulted: behind translated code? (5297-5299) Under the runtime word (Sprint 294): it changes the host
+            // compiler's tables, and whether this vCPU holds the word here is not established
             let address = vcpu.reg(Reg::X(17))?;
-            match h.code_written(guest, address) {
+            let took = take_word(guest, &mut out.served_outside_word);
+            let written = h.code_written(guest, address);
+            if took {
+                crate::monitor_code::host_release_runtime_word(guest.memory_view());
+            }
+            match written {
                 Ok(written) => vcpu.set_reg(Reg::X(17), u64::from(written))?,
                 Err(why) => break Stop::Untranslated { target: address, why },
             }
@@ -907,12 +941,19 @@ fn run(
             for (r, v) in x.iter_mut().enumerate() {
                 *v = vcpu.reg(Reg::X(r as u8))?;
             }
+            // under the runtime word (Sprint 294): the switch stub released it before `hvc #12`, and the scheduler
+            // changes the threads and the turn, which another vCPU's services change under it
+            let took = take_word(guest, &mut out.served_outside_word);
             let from = crate::threads::current_tid(guest);
             let mut switched = crate::threads::schedule(guest, &mut x, bits);
             // no thread ready in a process of a machine: the turn goes to the others until one is (Sprint 197)
             while switched == Ok(Switch::Idle) {
-                switched = hand_over(guest, crate::turns::Message::Idle)
+                switched = turn(guest, crate::turns::Message::Idle, took, &mut out.served_outside_word)
                     .and_then(|()| crate::threads::resume_idle(guest, &mut x, from, bits));
+            }
+            let to = crate::threads::current_tid(guest);
+            if took {
+                crate::monitor_code::host_release_runtime_word(guest.memory_view());
             }
             match switched {
                 Err(why) => break Stop::Handover { pc, why },
@@ -929,7 +970,7 @@ fn run(
                     out.handovers.push(Handover {
                         schedule: bits,
                         from,
-                        to: crate::threads::current_tid(guest),
+                        to,
                     });
                     if let Some((save, load)) = vectors {
                         swap_vectors(vcpu, guest.memory_view(), save, load)?;
@@ -983,41 +1024,52 @@ fn run(
                     pc,
                 };
             }
-            crate::threads::set_budget(guest);
-            crate::threads::wake_expired(guest);
-            let others = guest
-                .link
-                .as_ref()
-                .is_some_and(|l| l.others_ready(crate::threads::counter_now(guest)));
-            if !others && guest.threads.len() < 2 {
-                continue;
-            }
-            let at = match x86_address_at(guest.memory_view(), pc - 4) {
-                Ok(at) => at,
-                Err(why) => break Stop::Exit(why),
-            };
             let mut x = [0u64; 31];
             for (r, v) in x.iter_mut().enumerate() {
                 *v = vcpu.reg(Reg::X(r as u8))?;
             }
-            x[17] = at;
-            if let Err(why) = give_back(guest, pc) {
-                break Stop::Exit(why);
-            }
-            if others && let Err(why) = hand_over(guest, crate::turns::Message::Slice) {
-                break Stop::Handover { pc, why };
-            }
-            let from = crate::threads::current_tid(guest);
-            let mut switched = crate::threads::schedule(guest, &mut x, 0);
-            while switched == Ok(Switch::Idle) {
-                switched = hand_over(guest, crate::turns::Message::Idle)
-                    .and_then(|()| crate::threads::resume_idle(guest, &mut x, from, 0));
+            // under the runtime word (Sprint 294): a slice's end comes from a translated block, which holds nothing,
+            // and the budget, the wakes and the scheduler change the threads and the turn; released once, after
+            let took = take_word(guest, &mut out.served_outside_word);
+            let switched: Result<Option<Switch>, Stop> = 'slice: {
+                crate::threads::set_budget(guest);
+                crate::threads::wake_expired(guest);
+                let others = guest
+                    .link
+                    .as_ref()
+                    .is_some_and(|l| l.others_ready(crate::threads::counter_now(guest)));
+                if !others && guest.threads.len() < 2 {
+                    break 'slice Ok(None);
+                }
+                x[17] = match x86_address_at(guest.memory_view(), pc - 4) {
+                    Ok(at) => at,
+                    Err(why) => break 'slice Err(Stop::Exit(why)),
+                };
+                if let Err(why) = give_back(guest, pc) {
+                    break 'slice Err(Stop::Exit(why));
+                }
+                if others
+                    && let Err(why) = turn(guest, crate::turns::Message::Slice, took, &mut out.served_outside_word)
+                {
+                    break 'slice Err(Stop::Handover { pc, why });
+                }
+                let from = crate::threads::current_tid(guest);
+                let mut switched = crate::threads::schedule(guest, &mut x, 0);
+                while switched == Ok(Switch::Idle) {
+                    switched = turn(guest, crate::turns::Message::Idle, took, &mut out.served_outside_word)
+                        .and_then(|()| crate::threads::resume_idle(guest, &mut x, from, 0));
+                }
+                switched.map(Some).map_err(|why| Stop::Handover { pc, why })
+            };
+            if took {
+                crate::monitor_code::host_release_runtime_word(guest.memory_view());
             }
             match switched {
-                Err(why) => break Stop::Handover { pc, why },
-                Ok(Switch::Idle) => unreachable!(),
-                Ok(Switch::Ended(code)) => break Stop::ExitProcess { code },
-                Ok(Switch::Go { vectors }) => {
+                Err(stop) => break stop,
+                Ok(None) => continue,
+                Ok(Some(Switch::Idle)) => unreachable!(),
+                Ok(Some(Switch::Ended(code))) => break Stop::ExitProcess { code },
+                Ok(Some(Switch::Go { vectors })) => {
                     if let Some((save, load)) = vectors {
                         swap_vectors(vcpu, guest.memory_view(), save, load)?;
                     }
@@ -1059,14 +1111,7 @@ fn run(
         // the install or compile and the dispatch insert under the runtime word (Sprint 286): they write the code cursor,
         // the reconstruction table and the dispatch table, which the in-VM compiler and the installer write holding the
         // word, and the miss stub released it before `hvc 1`; released on every path before the loop goes on or stops
-        let own = u32::try_from(guest.memory_view().read_u64(MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0);
-        let took = crate::monitor_code::host_take_runtime_word(guest.memory_view(), own);
-        // served under the word: the host took it, or this vCPU holds it already (a miss inside the runtime)
-        let holder = guest
-            .memory_view()
-            .atomic_u32(RUN_TABLE + crate::monitor_code::RUNTIME_LOCK)
-            .load(std::sync::atomic::Ordering::Relaxed);
-        out.misses_outside_word += u64::from(holder != crate::monitor_code::HOST_OWNER && holder != own);
+        let took = take_word(guest, &mut out.served_outside_word);
         let served: Result<u64, Stop> = 'serve: {
             let va = match guest.bridges.get(&target) {
                 Some(&va) => {
