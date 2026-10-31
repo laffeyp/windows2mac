@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 286
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -97,3 +97,23 @@ moved pair is read whole, and the design's table names every writer and its guar
 - [x] One concept: the runtime word's coverage of the host's writers.
 
 ## result
+
+- **The service** (98a25aa09): the run loop takes the runtime word by `host_take_runtime_word` before the install or
+  compile and releases it after the dispatch insert; the service yields `Result<u64, Stop>` from a labelled block, so
+  the five `break`s release the word before the loop stops.
+- **The count, not the card's:** the card named `host_word_takes`, the host's takes, and an assertion that they cover
+  the host's compiles. It failed at 6 takes for 8: at two misses the take returned at once, the vCPU holding the word
+  already (`Err(holder) if holder == own`), and `host.translations` also counts the in-VM compiler's blocks, which
+  `vm_compiled` pushes onto it. The count is `misses_outside_word`: the word read after the take, a miss counted when
+  it holds neither `HOST_OWNER` nor the vCPU; the test asserts 0.
+- **The reads:** `ConcurrentGuestMemory::load_pair`, one `ldp` and an acquire fence; the host's `dispatch_insert` and
+  the C's read way 0 whole before a move; the image judge's reason for `block_compiler.c` names it.
+- **The design's table:** the compiler-words row names every writer under the word, the host's miss service among
+  them; the reconstruction and dispatch rows likewise; the goal paragraph records the game's timing (Low 1).
+- **Expected values:** the 11 run-loop tests, `qpc` with 0 misses outside the word; the pair test.
+- **The gates:** `scripts/gates.sh` exit 0 in 1059 s, kept in `store/gates/passes.tsv` as sprint 286 at 98a25aa09 with root=a49ad6bdb and "rust=all python=0 samples=0", every Rust test, 318 run, 318 passed, 1 skipped, base=91802f99a, Sprint 285's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: the take replaced by `let took = false;`;
+  `qpc_runs_past_its_first_decline_compiling_as_the_python_host` failed, "misses served outside the runtime word
+  left: 6", the six misses the host took the word for.
+- **Plant 2,** restored by `cp` and checked by `cmp`: `load_pair` returning `(high, low)`; the pair test failed, "the
+  pair load_pair read left: (8738, 4369) right: (4369, 8738)".
