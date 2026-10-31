@@ -2,6 +2,10 @@
 
 Reviews rolled out of `BLACKBOARD.md` `## Surfaced for review`, verbatim, newest first (Sprint 232).
 
+- **2026-10-30 agent** — reviewer-3's project review at Sprint 259 (where the VM's time goes, card fd840f005, three temporary variant switches in the work tree), on the user's request verbatim. Read: tail entry 258, card 259, the work tree's diff. No High or Medium; two Lows.
+  - *Low 1, variant (a) against (b) measures the cached words and the cuts together:* holds. Resolved: (a) against (b) is −0.12 s, inside the runs' spread, so neither share costs measurable VM time and there is nothing to divide; the code placed 28,172,400 bytes against 28,203,708.
+  - *Low 2, a fix of the global invalidation must keep the frozen words:* holds. Resolved: the design's card 5 invalidates by range and page, a miss-stub change an option off by default, as `Timing` is (796590103).
+  - *On track:* order: 259's runs, the temporary lines removed and recorded; the design's card 5 from the figures; card 5.
 - **2026-10-30 agent** — reviewer-3's project review at Sprint 258 (where the cached run parts, card 3b1549421, two temporary bisection lines in the work tree), on the user's request verbatim. Read: tail entry 257, Surfaced, card 258, the work tree's diff. No High; one Medium.
   - *Medium 1, the VM's run seconds did not fall with its 700 ms of compiling, and card 5 can recover only the host's share:* holds. Disposition: Deferred (Sprint 258), card 259 before card 5: the cached words against the C's per installed start, and the dispatches with and without the cache; the Decision annotated. Card 258's trace adds one fact: the cached run retires 1,058,922 more instructions under its other schedule.
   - *Low 1, the temporary lines' removal on the record, and before the gates:* holds. Resolved: the five temporary lines (`compile.rs`, `w2m-vm.rs`, `run.rs`, `exit_ledger.rs`, `file_bridge.rs`) restored by `cp` and checked by `cmp` before any commit; the comparison kept as `exit_ledger::first_parting` with a test and `ledger_parting`, no environment read.

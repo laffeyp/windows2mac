@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 264
-status: active
+status: done
 phase: 6
 pass_kind: observation
 ---
@@ -92,3 +92,37 @@ held to the record's figure.
 - [x] One concept: what fills the worst frame.
 
 ## result
+
+- **The probe:** three temporary lines from e06d16415's tree, each file backed up by `cp` first and restored and checked
+  by `cmp`: after a call that returned code, its ticks and its start counter's low 32 bits stored at bytes 120 and 124
+  of the newest log entry (`monitor_code.rs`, after `compile_probe`); the replay printing each entry's start, ticks,
+  start and kind (`run.rs`); the counter's frequency printed, 24,000,000 (`w2m-vm.rs`). A cache made under that tree.
+- **The runs:** two timed runs alone, judge and ledger off, each to the reference's end: without the cache at load 1.75,
+  276,560 calls printed, the record's most in a 60 Hz frame 11.87 ms; with it at load 2.28, 272,805 calls, 7.34 ms.
+- **The rebuild:** `build/frame/frames.awk`, the probe's rule (a frame opens at a call's start and holds every call
+  ending within 1/60 s of it; the first to end past it opens the next at its own start; the open frame folded at the
+  end): 11.864 ms over 923 frames and 7.345 ms over 894, each the record's figure; the declined calls, which print no
+  entry, change neither.
+- **The worst frames:**
+
+  | | without the cache | with the installer |
+  |---|---|---|
+  | the worst frame | 11.864 ms, 21.09 s in | 7.345 ms, 0.38 s in |
+  | its calls | 1,633 compiles, 0 installs | 1,819 compiles, 0 installs |
+  | their image | all in UnityPlayer.dll (0x181000000) | all in mono-2.0-bdwgc.dll (0x1180000000) |
+
+  The cached run's ten worst frames, 5.00 to 7.35 ms: eight are mono-2.0-bdwgc.dll's in the run's first 1.04 s, and
+  two, at 15.19 s and 16.82 s, code at 0x1222000000 outside any image, Mono's run-time code (Sprint 250 found its
+  arena there).
+- **What it shows:** with the installer, UnityPlayer.dll leaves the worst frame, and what remains is Mono's, which the
+  cache does not cover; at this load the frame falls from 11.86 to 7.35 ms, below Sprint 248's 10.9 to 12.0. Sprint
+  263's six records read 14.4 to 14.9 ms either way at load 3.3 to 4.2; these two runs are one each and not records, and
+  what raised those figures is not measured, so step 5's gate is read again on six records alike at a load near 2
+  (Deferred, Sprint 263, annotated).
+- **The evidence kept** (f84997f57): the three rebuilds and their figures in `store/batch_run/worst-frames-2026-10-30/`.
+  The first close, 51aac859d, was refused by `signal_report --check`, "no commit "Sprint 264: ..." to compare its gates
+  run's trees with", the card having changed no file outside the bookkeeping; it was not pushed, undone by `git reset
+  --soft`, and the gates run again on this commit, the first run's row kept in `store/gates/passes.tsv`.
+- **The gates:** `scripts/gates.sh` exit 0 in 607 s on f84997f57, copied from `store/gates/passes.tsv`; the timing stage 669 ns an exit at load 3.66.
+- **Plant 1,** the rebuild with a 1/30 s frame (`hz=30`): its worst frames, "worst 15.060 ms" without the cache and
+  "worst 11.436 ms" with it, are not the record's 11.87 and 7.34; the rebuild at 1/60 s is the probe's rule.
