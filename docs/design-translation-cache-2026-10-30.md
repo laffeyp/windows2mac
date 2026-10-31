@@ -164,7 +164,15 @@ words in the real run; the VM's follows once the host's conforms.
    page of the image read-only from the load (`HostCompiler::use_cache`), stopped the cache on no write.
 5. **The install inside the VM.** The copy and the re-encoding in the miss stub's path, no exit. Gate: card 4's counts
    unchanged, and the run's compile time falling below Sprint 248's 1,351 to 1,362 ms and its most in a 60 Hz frame
-   below 248's 10.9 to 12.0 ms, on timed records run alone. Step 5 is met at this card's close.
+   below 248's 10.9 to 12.0 ms, on timed records run alone. Step 5 is met at this card's close. *(Amended 2026-10-30,
+   Sprint 258.)* A cached run is another schedule of the same guest, conforming: a time slice ends at a block's stop
+   (`threads.c` 17-18), each block charged whole on entry, and the cache cuts blocks where the in-VM compiler does not
+   (a page boundary among them), so the same 14 switches fall at other instructions and the threads interleave
+   otherwise from the batch run's 5,539th host request on, 20,683,462,044 instructions in; the run retires
+   80,307,872,496 instructions with the cache against 80,306,813,574 without, each deterministic, and both reach the
+   reference's end. An install inside the VM installs the same blocks, so card 5's runs retire card 4's cached count
+   exactly, and `ledger_parting` against a card 4 ledger finds no parting; its rate and times are read against card
+   4's cached records and the uncached ones alike.
 
 Each card's census rows: row 13 (flag liveness on composed blocks) at 1 and 3; row 2 (the loader's tests) at 4,
 where the cache loads with the image; row 15c (a full code area) at 3, the cache taking the image's code out of it.
