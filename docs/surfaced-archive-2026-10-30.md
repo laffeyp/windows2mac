@@ -2,6 +2,11 @@
 
 Reviews rolled out of `BLACKBOARD.md` `## Surfaced for review`, verbatim, newest first (Sprint 232).
 
+- **2026-10-30 agent** — reviewer-3's project review at Sprint 261 (the cache file in the guest, c6b91f41a and bde425323, its gates running), on the user's request verbatim; the design review Sprint 260 asked for before card 5. Read: tail entries 259 to 261, the Decision's 259 annotations, the design's card 5 and choices I to VII, `scripts/batch-run-record.sh` and the harness's command. No High; one Medium.
+  - *Medium 1, every timed record writes the exit ledger, which hid the cache's VM-time gain, and 257's "1.1% slower" stands on such records:* holds. Disposition: card 262, as Deferred (Sprint 259)'s annotation names: the script and `batch_record.rs` refuse a ledgered timed record; card 4's time measured again ledger-free; the Decision, the design's card 4 and census row 10 annotated; card 5's gate on ledger-free records.
+  - *Low 1, choice I's file size is version 1's:* holds. Disposition: amended to version 2's (228,971,368 bytes) in a work commit of the installer's card.
+  - *Low 2, the installer's shared writes become races at step 6, and its test needs misses at both ends of the table:* holds. Disposition: the three shared words named in Deferred (Sprint 247); the both-ends test in the installer's card.
+  - *On track:* order: 261's close; card 262, ledger-free timed records and card 4's time; the installer; the bookkeeping roll (BLACKBOARD at 502,039 bytes).
 - **2026-10-30 agent** — reviewer-3's project review at Sprint 259 (where the VM's time goes, card fd840f005, three temporary variant switches in the work tree), on the user's request verbatim. Read: tail entry 258, card 259, the work tree's diff. No High or Medium; two Lows.
   - *Low 1, variant (a) against (b) measures the cached words and the cuts together:* holds. Resolved: (a) against (b) is −0.12 s, inside the runs' spread, so neither share costs measurable VM time and there is nothing to divide; the code placed 28,172,400 bytes against 28,203,708.
   - *Low 2, a fix of the global invalidation must keep the frozen words:* holds. Resolved: the design's card 5 invalidates by range and page, a miss-stub change an option off by default, as `Timing` is (796590103).

@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 267
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -84,3 +84,20 @@ command it allowed before; the Drift watchlist counts both rules' breaches.
 - [x] One concept: the guard over both rules.
 
 ## result
+
+- **The guard** (d9c467292): `refusal` reads each simple command's program, after `NAME=value` words and inside `$(` or
+  a backtick, and refuses `python`, `python2`, `python3`, `python3.<n>`, `pip` and `pip3`, directly or by `uv run`
+  (its value-taking options skipped) or `uvx`; `perl` with an option cluster holding `i` (not `-I`); `awk` or `gawk`
+  with `-i inplace`, `-iinplace` or `--inplace`. A word that only names Python, in `grep`, a message or a heredoc body,
+  is allowed, as are `uv run substrate`, `perl -ne` and `perl -I`.
+- **The tests:** ten Python starts refused, Sprint 266's `python3 - 2>/dev/null; perl -0pi …` among them; five in-place
+  edits refused; eight commands allowed. Two first drafts were caught by the tests: `uv run --with x python3` took `x`
+  for the program, and `x=$(python3 -c 1)` read `x=$(python3` as one.
+- **The watchlist:** the edits entry annotated with 262, 263 and 266; an entry added for the Python starts, 238, 240,
+  250 and 266, to close when the hook is installed.
+- **The gates:** `scripts/gates.sh` exit 0 in 305 s on d9c467292, copied from `store/gates/passes.tsv`; the timing stage 737 ns an exit at load 11.68.
+- **Plant 1,** restored by `cp` and checked by `cmp`: `"python3"` left out of the interpreters; the test failed,
+  `"python3 - 2>/dev/null; perl -0pi -e 's/a/b/' f.rs": perl editing in place: a multi-line edit goes through the Edit
+  tool`, the command refused for its `perl` alone and its Python start passed.
+- **Plant 2,** restored by `cp` and checked by `cmp`: the in-place check reading `-i` exactly; the test failed,
+  `"perl -0pi -e 's/(a\\n)/$1b/' crates/w2m_vm/src/run.rs" allowed`.
