@@ -157,6 +157,8 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    marked to retry; the runtime's broadcast; the table on the retry. Splitting every block of the arena at load
    instead would cost 1 GiB of tables (`VIRTUAL_SIZE` 0x80_0000_0000, 512 GiB, in 2 MB blocks of one 4 KB table
    each), so the split stays at run time; its card counts how often a valid block is split in the batch run.
+   *(Sprint 303: a vCPU reads `ID_AA64MMFR2_EL1` = 0x1001001102001011, BBM 0, so the guest is promised no FEAT_BBM
+   and a change of block size needs the break; the two steps are card 304's.)*
 5. Every dispatch writer stores a pair whole: met (Sprint 284).
 6. The host's miss service under the word: met (Sprint 286).
 7. The lock order: the word outermost (the guest-memory design's choice 6); `served` inside it, here.

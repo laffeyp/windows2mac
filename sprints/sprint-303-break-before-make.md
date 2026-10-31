@@ -90,3 +90,21 @@ register and a test of the writes' order.
 
 ## result
 
+- **The lookup, and the card narrowed by it:** a vCPU reads `ID_AA64MMFR2_EL1` = 0x1001001102001011, BBM 0: the
+  guest is promised no FEAT_BBM, whatever the chip implements, and the host writes its tables, so a change of block
+  size needs the break. The two steps (the block invalid and the request marked to retry, the runtime's broadcast,
+  the table on the retry) change the C runtime's request return, a second concept past rule 6; they are card 304,
+  with the count on the batch run and the recording test of the writes' order. This card keeps the read, its test and
+  the design's precondition 4 stating the value.
+- **The change** (WORK-COMMIT): `hypervisor::sys_reg::ID_AA64MMFR2_EL1` (0xc03a, `hv_vcpu_types.h` 336);
+  `tests/id_registers.rs`, `the_vcpu_reports_its_bbm_level`, printing the register and its BBM, failing on a level the
+  Arm ARM does not define or one the design does not state, declared in the root; the design's precondition 4 and
+  card 3 amended; and a consequence of Sprint 300 named: Hypervisor.framework allows one VM a process, nextest giving
+  each test its own, `cargo test` on macOS would not, said in `hypervisor`'s root and `first_exit.rs`' header, whose
+  "each scenario is its own test file" the merge had made untrue.
+- **Expected values:** BBM 0; the test and `every_file_is_a_module` passing.
+- **The gates:** GATES-LINE
+- **Plant 1,** restored by `cp` and checked by `cmp`: the card's plant reordered the split's writes, which this card
+  no longer changes; the plant set the design's stated level to "BBM 2"; the test failed, "this vCPU reports BBM 0,
+  which the design's precondition 4 does not state".
+

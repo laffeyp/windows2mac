@@ -163,6 +163,8 @@ impl Reg {
 /// `hv_sys_reg_t` ids (`hv_vcpu_types.h`), those the host sets or reads.
 pub mod sys_reg {
     pub const MPIDR_EL1: u16 = 0xc005;
+    /// the memory model features, its BBM field (bits 55:52) the level of FEAT_BBM (`hv_vcpu_types.h` 336; Sprint 303)
+    pub const ID_AA64MMFR2_EL1: u16 = 0xc03a;
     pub const SCTLR_EL1: u16 = 0xc080;
     pub const ACTLR_EL1: u16 = 0xc081;
     pub const CPACR_EL1: u16 = 0xc082;

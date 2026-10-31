@@ -2,10 +2,13 @@
 // Copyright (C) 2026 Peter Laffey
 //! The crate's integration tests as one binary (Sprint 300), as `w2m_vm`'s `tests/all.rs` says why: one link and one
 //! assessment by macOS's `syspolicyd` a rebuild, not one a file. Each file stays where it was, a module here
-//! (`autotests = false` in the manifest).
+//! (`autotests = false` in the manifest). Hypervisor.framework allows one VM a process, so on macOS these run under
+//! nextest, a process a test, as the gates run them; `cargo test` would run them as threads of one process (Sprint
+//! 303, a consequence of the merge Sprint 300 did not name).
 
 mod exit_time;
 mod first_exit;
+mod id_registers;
 mod no_wall_clock_bound;
 mod stop_from_another_thread;
 mod vector_register;
