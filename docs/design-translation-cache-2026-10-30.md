@@ -188,9 +188,10 @@ words in the real run; the VM's follows once the host's conforms.
    words visible by range and invalidates by page, as the in-VM compiler does (`block_compiler.c` 113-118, 166-176);
    a change to the miss stub's words is an option off by default, as `Timing` is, so the gates' frozen-word tests hold
    the default stub (reviewer-3's Low 2 at 259). *(Amended 2026-10-30, Sprint 260: how it is built.)*
-   - **I. The file in the guest, read only.** The cache file's bytes, 211,190,784 for UnityPlayer.dll, are mapped
-     read-only at a fixed address below the monitor area, replacing `CACHE_CODE_VA` and `CACHE_DATA_VA` (184 MiB,
-     too small), in the layout the file already has: the blocks in start order, their words, their marks. Nothing
+   - **I. The file in the guest, read only.** The cache file's bytes, 211,190,784 for UnityPlayer.dll at version 1
+     and 228,971,368 at version 2 with its fix-ups (Sprint 261; reviewer-3's Low 1 at 261), are mapped read-only at
+     `CACHE_FILE_VA`, 256 MiB below the assembly range, in place of `CACHE_DATA_VA` (the two regions, 184 MiB, too
+     small), in the layout the file already has: the blocks in start order, their words, their marks. Nothing
      there runs and the C runtime never reads it, so its addresses outside `W2M_CODE_START..END` meet none of
      Sprint 255's limits; the installer only copies from it. Weighed: copying only the 128,456 blocks the batch run
      installs, about 14.5 MB at the cache's 112.8 bytes a block, and not the rest.
