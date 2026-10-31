@@ -9,16 +9,16 @@ use guest_runtime::layout::{MONITOR_DATA, MONITOR_SIZE, SAVE_AREA, STATE_OFF};
 use hypervisor::{HvError, Reg, Vcpu};
 
 use crate::cases::{AF_OPERANDS, DF_BYTE, FLAG_BIT, FLAG_REG, PF_RESULT, X87_ST_OFF, X87_SW_OFF, YMM_HI_OFF};
+use crate::concurrent_memory::ConcurrentGuestMemory;
 use crate::guest::Guest;
 use crate::monitor_code::SAVE_VECTORS;
 use crate::run::{FCW_OFF, MXCSR_OFF, REG_UNDEFINED_FLAGS, fpcr_for};
 
-fn read_u64(mem: &[u8], off: u64) -> u64 {
-    u64::from_le_bytes(mem[off as usize..off as usize + 8].try_into().unwrap())
-}
-
-fn write_u64(mem: &mut [u8], off: u64, v: u64) {
-    mem[off as usize..off as usize + 8].copy_from_slice(&v.to_le_bytes());
+/// The `N` bytes at `off`, read through the view.
+fn array<const N: usize>(mem: ConcurrentGuestMemory<'_>, off: u64) -> [u8; N] {
+    let mut out = [0; N];
+    mem.read(off, &mut out);
+    out
 }
 
 /// PF from a result's low byte (vm_backend `x86_flags`).
@@ -29,8 +29,9 @@ fn parity_even(v: u64) -> bool {
 /// vm_backend 1117: (FPSR bit, MXCSR bit): IOC IE, DZC ZE, OFC OE, UFC UE, IXC PE, IDC DE.
 const FPSR_TO_MXCSR: [(u32, u32); 6] = [(0, 0), (1, 2), (2, 3), (3, 4), (4, 5), (7, 1)];
 
-/// Guest memory as the model reads it (`loader.Memory`): an access wholly inside mapped, contiguous memory.
-struct GuestModelMemory<'a>(&'a mut Guest);
+/// Guest memory as the model reads it (`loader.Memory`): an access wholly inside mapped, contiguous memory, made through
+/// the view (Sprint 287, census D7), the guest's own loads and stores while another vCPU may write the same pages.
+struct GuestModelMemory<'a>(&'a Guest);
 
 impl GuestModelMemory<'_> {
     fn span(&self, va: u64, n: usize) -> Result<usize, crate::model::Fault> {
@@ -50,12 +51,14 @@ impl GuestModelMemory<'_> {
 impl crate::model::Memory for GuestModelMemory<'_> {
     fn read(&self, va: u64, n: usize) -> Result<Vec<u8>, crate::model::Fault> {
         let at = self.span(va, n)?;
-        Ok(self.0.memory.as_slice()[at..at + n].to_vec())
+        let mut out = vec![0; n];
+        self.0.memory_view().read(at as u64, &mut out);
+        Ok(out)
     }
 
     fn write(&mut self, va: u64, data: &[u8]) -> Result<(), crate::model::Fault> {
         let at = self.span(va, data.len())?;
-        self.0.memory.as_mut_slice()[at..at + data.len()].copy_from_slice(data);
+        self.0.memory_view().write(at as u64, data);
         Ok(())
     }
 }
@@ -90,20 +93,16 @@ pub fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> 
     for (k, v) in x.iter_mut().enumerate() {
         *v = vcpu.reg(Reg::X(k as u8))?;
     }
-    let mem = guest.memory.as_slice();
+    let mem = guest.memory_view();
     let undefined = x[REG_UNDEFINED_FLAGS as usize];
     let defined = |f: char| undefined >> FLAG_BIT.iter().find(|(k, _)| *k == f).unwrap().1 & 1 == 0;
     let reg_flag = |f: char| defined(f).then(|| x[usize::from(FLAG_REG.iter().find(|(k, _)| *k == f).unwrap().1)] != 0);
     let (af_a, af_b, pf_r) = (
-        read_u64(mem, md + AF_OPERANDS),
-        read_u64(mem, md + AF_OPERANDS + 8),
-        read_u64(mem, md + PF_RESULT),
+        mem.read_u64(md + AF_OPERANDS),
+        mem.read_u64(md + AF_OPERANDS + 8),
+        mem.read_u64(md + PF_RESULT),
     );
-    let stored = u32::from_le_bytes(
-        mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4]
-            .try_into()
-            .unwrap(),
-    );
+    let stored = mem.read_u32(md + MXCSR_OFF);
     let fpsr = vcpu.reg(Reg::Fpsr)?;
     let mut th = Thread {
         regs: x[..16].try_into().unwrap(),
@@ -116,13 +115,9 @@ pub fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> 
             p: defined('P').then(|| parity_even(pf_r)),
             a: defined('A').then_some((af_a ^ af_b ^ pf_r) & 0x10 != 0),
         },
-        df: mem[(md + DF_BYTE) as usize] != 0,
+        df: array::<1>(mem, md + DF_BYTE)[0] != 0,
         mxcsr: stored | mxcsr_flags_from_fpsr(fpsr) as u32,
-        fcw: u16::from_le_bytes(
-            mem[(md + FCW_OFF) as usize..(md + FCW_OFF) as usize + 2]
-                .try_into()
-                .unwrap(),
-        ),
+        fcw: u16::from_le_bytes(array(mem, md + FCW_OFF)),
         rip,
         xmm: [0; 18],
         ymm_hi: [0; 16],
@@ -134,36 +129,33 @@ pub fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> 
         th.xmm[usize::from(k)] = vcpu.simd(k)?;
     }
     // YMM0-15 bits 255:128 from the monitor data page (4282-4283)
-    let ymm_hi = (md + YMM_HI_OFF) as usize;
+    let ymm_hi = md + YMM_HI_OFF;
     for (i, v) in th.ymm_hi.iter_mut().enumerate() {
-        *v = u128::from_le_bytes(mem[ymm_hi + 16 * i..ymm_hi + 16 * i + 16].try_into().unwrap());
+        *v = u128::from_le_bytes(array(mem, ymm_hi + 16 * i as u64));
     }
     // the x87 state as `_slow_sse` reads it (4293-4298): FSW and the abridged tags from the state block, ST(i) in FXSAVE
     // order, physical register (TOP + i) & 7
-    let st = (MONITOR_SIZE + STATE_OFF) as usize;
-    th.x87_sw = u16::from_le_bytes(
-        mem[st + X87_SW_OFF as usize..st + X87_SW_OFF as usize + 2]
-            .try_into()
-            .unwrap(),
-    );
-    th.x87_tags = mem[st + X87_SW_OFF as usize + 2];
+    let st = MONITOR_SIZE + STATE_OFF;
+    th.x87_sw = u16::from_le_bytes(array(mem, st + X87_SW_OFF));
+    th.x87_tags = array::<1>(mem, st + X87_SW_OFF + 2)[0];
     let top = usize::from(th.x87_sw >> 11 & 7);
     for i in 0..8 {
-        let at = st + X87_ST_OFF as usize + 16 * i;
         let mut b = [0u8; 16];
-        b[..10].copy_from_slice(&mem[at..at + 10]);
+        mem.read(st + X87_ST_OFF + 16 * i as u64, &mut b[..10]);
         th.x87_regs[(top + i) & 7] = u128::from_le_bytes(b);
     }
     let result = step(&mut th, &mut GuestModelMemory(guest), &ins, code);
-    let mem = guest.memory.as_mut_slice();
-    mem[(md + MXCSR_OFF) as usize..(md + MXCSR_OFF) as usize + 4].copy_from_slice(&th.mxcsr.to_le_bytes());
+    let mem = guest.memory_view();
+    mem.write_u32(md + MXCSR_OFF, th.mxcsr);
     // `_store_x87` (4325-4330), after a step or a fault alike (a faulting MMX store has set TOP 0, set 065b)
-    mem[st + X87_SW_OFF as usize..st + X87_SW_OFF as usize + 2].copy_from_slice(&th.x87_sw.to_le_bytes());
-    mem[st + X87_SW_OFF as usize + 2] = th.x87_tags;
+    mem.write(st + X87_SW_OFF, &th.x87_sw.to_le_bytes());
+    mem.write(st + X87_SW_OFF + 2, &[th.x87_tags]);
     let top = usize::from(th.x87_sw >> 11 & 7);
     for i in 0..8 {
-        let at = st + X87_ST_OFF as usize + 16 * i;
-        mem[at..at + 10].copy_from_slice(&th.x87_regs[(top + i) & 7].to_le_bytes()[..10]);
+        mem.write(
+            st + X87_ST_OFF + 16 * i as u64,
+            &th.x87_regs[(top + i) & 7].to_le_bytes()[..10],
+        );
     }
     match result {
         Ok(()) => {
@@ -185,14 +177,14 @@ pub fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> 
             }
             vcpu.set_reg(Reg::X(REG_UNDEFINED_FLAGS), undefined)?;
             // `set_af_df` (2089-2092): lazy operands that read back as AF and PF, and DF
-            write_u64(mem, md + AF_OPERANDS, if f.a == Some(true) { 0x10 } else { 0 });
-            write_u64(mem, md + AF_OPERANDS + 8, 0);
-            write_u64(mem, md + PF_RESULT, if f.p == Some(true) { 0 } else { 1 });
-            mem[(md + DF_BYTE) as usize] = u8::from(th.df);
-            mem[(md + FCW_OFF) as usize..(md + FCW_OFF) as usize + 2].copy_from_slice(&th.fcw.to_le_bytes());
+            mem.write_u64(md + AF_OPERANDS, if f.a == Some(true) { 0x10 } else { 0 });
+            mem.write_u64(md + AF_OPERANDS + 8, 0);
+            mem.write_u64(md + PF_RESULT, if f.p == Some(true) { 0 } else { 1 });
+            mem.write(md + DF_BYTE, &[u8::from(th.df)]);
+            mem.write(md + FCW_OFF, &th.fcw.to_le_bytes());
             // YMM0-15 bits 255:128 back (4315-4316); a fault leaves the page's halves as they were
             for (i, v) in th.ymm_hi.iter().enumerate() {
-                mem[ymm_hi + 16 * i..ymm_hi + 16 * i + 16].copy_from_slice(&v.to_le_bytes());
+                mem.write(ymm_hi + 16 * i as u64, &v.to_le_bytes());
             }
             // the vectors with FPCR from MXCSR, FPSR's flags now in the stored word (4318)
             vcpu.set_reg(Reg::Fpcr, fpcr_for(th.mxcsr))?;
@@ -210,14 +202,13 @@ pub fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> 
             // exception call
             let save = md + SAVE_AREA;
             for (i, v) in x.iter().enumerate() {
-                write_u64(mem, save + 8 * i as u64, *v);
+                mem.write_u64(save + 8 * i as u64, *v);
             }
-            write_u64(mem, save + 0x118, u64::from(code));
-            write_u64(mem, save + 0x120, rip);
+            mem.write_u64(save + 0x118, u64::from(code));
+            mem.write_u64(save + 0x120, rip);
             for k in 0..16u8 {
                 let q = vcpu.simd(k)?;
-                let at = (save + SAVE_VECTORS + 16 * u64::from(k)) as usize;
-                mem[at..at + 16].copy_from_slice(&q.to_le_bytes());
+                mem.write(save + SAVE_VECTORS + 16 * u64::from(k), &q.to_le_bytes());
             }
             vcpu.set_reg(Reg::Fpsr, 0)?;
             vcpu.set_reg(Reg::Pc, guest.code.exception_call_va)?;

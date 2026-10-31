@@ -10,8 +10,10 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-/// Each file's slice calls, as census row D7 states them; a file not named holds none.
-const SLICES: [(&str, usize); 17] = [
+/// Each file's slice calls, as census row D7 states them; a file not named holds none. The match is by text, so it takes
+/// a `Vec`'s or an array's slice too (Sprint 287: 9 of the 40, every guest one on a receiver named `memory`); it stays
+/// wide, since a guest slice under another name would pass a narrower one.
+const SLICES: [(&str, usize); 16] = [
     ("batch_stop.rs", 1),
     ("bin/class_judge.rs", 1),
     ("bin/ledger_parting.rs", 1),
@@ -22,7 +24,6 @@ const SLICES: [(&str, usize); 17] = [
     ("guest.rs", 5),
     ("host_request.rs", 2),
     ("kernel.rs", 1),
-    ("model_step.rs", 4),
     ("modules.rs", 5),
     ("monitor.rs", 6),
     ("run.rs", 2),
