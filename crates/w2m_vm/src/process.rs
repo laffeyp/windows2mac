@@ -42,7 +42,7 @@ pub const START_GROUP: u32 = 1000;
 pub const STDOUT_HANDLE: u64 = 0x74;
 pub const PROCESS_ID: u64 = 4096;
 pub const APP_DIRECTORY: &str = "C:\\w2m\\app\\";
-pub const STACK_GUARD_PAGES: u64 = 3;
+pub use virtual_memory::STACK_GUARD_PAGES;
 /// kernel.py 65-66: an inherited entry's kind that is a standard handle, or the parent's error mode.
 pub const KIND_STANDARD: u64 = 100;
 pub const KIND_ERROR_MODE: u64 = 101;

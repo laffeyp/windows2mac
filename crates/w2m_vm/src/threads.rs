@@ -48,7 +48,7 @@ const SCRATCH_OFF: u64 = 0x1900;
 /// upper halves.
 pub use guest_runtime::layout::PER_THREAD_MONITOR;
 /// scheduler.py 24-26; the first thread's id (vm_backend `_first_tid`).
-pub const STILL_ACTIVE: u32 = 259;
+pub const STILL_ACTIVE: u32 = crate::kernel::STILL_ACTIVE as u32;
 const DLL_THREAD_ATTACH: u32 = 2;
 const DLL_THREAD_DETACH: u32 = 3;
 const START_LAST_ERROR: u32 = 187;

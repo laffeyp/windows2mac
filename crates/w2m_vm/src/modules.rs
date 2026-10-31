@@ -19,7 +19,7 @@ use std::sync::OnceLock;
 use crate::guest::Guest;
 
 /// `APP_DIRECTORY` (modules.py 46)
-pub const APP_DIRECTORY: &str = "C:\\w2m\\app\\";
+pub use crate::process::APP_DIRECTORY;
 
 /// `API_SET_HOSTS` (modules.py 49-53): API sets whose host is not kernelbase, as LoadLibraryExW answered on Server 2025
 /// and 2022 (Sprint 055, rows load.api_sets) and the C runtime's thread start (Sprint 063).

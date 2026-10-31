@@ -1,24 +1,111 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-//! The guest's layout is defined once (Sprint 296): `guest_runtime/src/layout.rs` holds each constant the runtime's C
-//! takes as a define (`runtime_defines`), and `w2m_vm` re-exports what it uses. Seven names had a second definition in
-//! `w2m_vm/src/`, equal today: `LOCK_OWNER`, `MXCSR_OFF`, `FCW_OFF`, `RUN_END`, `CLOCK_WARP`, `AP_READ_ONLY` and
-//! `PER_THREAD_MONITOR`; a change to one copy would leave the host reading a word the runtime does not write.
+//! One definition a fact (Sprints 296 and 297). A `pub const` name defined in two source files under `crates/` is a
+//! fact stated twice, which a change to one copy would split: Sprint 296 found seven of `guest_runtime/src/layout.rs`'
+//! names defined again in `w2m_vm`, and reviewer-3's Low 1 at 296 found 24 more across the crates. A name in two files
+//! passes only if one definition derives its value from the other's path, or a named test holds the two equal, or the
+//! two are different facts that share a name, each allowed below with its reason.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-/// The names `text` defines as `pub const NAME`.
-fn defined(text: &str) -> BTreeSet<String> {
+/// Names two crates define, held equal by the test named, where no dependency joins them.
+const HELD: [(&str, &str); 3] = [
+    (
+        "ACCESS_VIOLATION",
+        "w2m_vm/tests/layout_constants.rs `access_violation_is_one_status`",
+    ),
+    (
+        "X87_ST_OFF",
+        "translator/tests/layout.rs `the_x87_offsets_are_the_guest_layouts` (Sprint 236)",
+    ),
+    (
+        "X87_SW_OFF",
+        "translator/tests/layout.rs `the_x87_offsets_are_the_guest_layouts` (Sprint 236)",
+    ),
+];
+
+/// Different facts that share a name.
+const DIFFERENT: [(&str, &str); 12] = [
+    (
+        "ALL",
+        "each generated enum's own list of its values (events/src/generated.rs), and the runtime word's sites",
+    ),
+    (
+        "STACK_SIZE",
+        "cpu_cases' case stack, 0x10000; pe_loader's thread default, 1 MiB",
+    ),
+    (
+        "ELR_EL1",
+        "a64_encoder's MSR operand tuple; hypervisor's Hypervisor.framework register id",
+    ),
+    (
+        "ESR_EL1",
+        "a64_encoder's MSR operand tuple; hypervisor's Hypervisor.framework register id",
+    ),
+    (
+        "FAR_EL1",
+        "a64_encoder's MSR operand tuple; hypervisor's Hypervisor.framework register id",
+    ),
+    (
+        "SPSR_EL1",
+        "a64_encoder's MSR operand tuple; hypervisor's Hypervisor.framework register id",
+    ),
+    (
+        "IE",
+        "the FPU status word's bit (x87.rs) and MXCSR's (x86fp.rs), two registers laid out alike",
+    ),
+    (
+        "DE",
+        "the FPU status word's bit (x87.rs) and MXCSR's (x86fp.rs), two registers laid out alike",
+    ),
+    (
+        "ZE",
+        "the FPU status word's bit (x87.rs) and MXCSR's (x86fp.rs), two registers laid out alike",
+    ),
+    (
+        "OE",
+        "the FPU status word's bit (x87.rs) and MXCSR's (x86fp.rs), two registers laid out alike",
+    ),
+    (
+        "UE",
+        "the FPU status word's bit (x87.rs) and MXCSR's (x86fp.rs), two registers laid out alike",
+    ),
+    (
+        "PE",
+        "the FPU status word's bit (x87.rs) and MXCSR's (x86fp.rs), two registers laid out alike",
+    ),
+];
+
+/// Each `pub const NAME` in `text`, at any indent, with the rest of its line.
+fn defined(text: &str) -> Vec<(String, String)> {
     text.lines()
-        .filter_map(|l| l.strip_prefix("pub const "))
-        .filter_map(|rest| rest.split(':').next())
-        .map(|name| name.trim().to_string())
+        .filter_map(|l| l.trim_start().strip_prefix("pub const "))
+        .filter_map(|rest| rest.split_once(':'))
+        .map(|(name, value)| (name.trim().to_string(), value.to_string()))
         .collect()
 }
 
-/// Each `.rs` file under `dir`, with its text.
+/// Whether `value` names a path ending `::name`, the whole identifier: `layout::HEAP_VA` names `HEAP_VA`, not `HEAP`.
+fn names(value: &str, name: &str) -> bool {
+    let tail = format!("::{name}");
+    value.match_indices(&tail).any(|(at, _)| {
+        !value[at + tail.len()..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+    })
+}
+
+#[test]
+fn a_derived_value_names_the_whole_identifier() {
+    assert!(names(" u32 = crate::kernel::STILL_ACTIVE as u32;", "STILL_ACTIVE"));
+    assert!(!names(" u64 = layout::HEAP_VA;", "HEAP"));
+    assert!(names(" u16 = translator::lower::HVC_SLOW_SSE as u16;", "HVC_SLOW_SSE"));
+}
+
+/// Each `.rs` file under a crate's `src/`, with its text.
 fn sources(dir: &Path, out: &mut Vec<(String, String)>) {
     for entry in fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
@@ -31,21 +118,65 @@ fn sources(dir: &Path, out: &mut Vec<(String, String)>) {
 }
 
 #[test]
-fn no_layout_constant_is_defined_again_in_w2m_vm() {
+fn every_fact_has_one_definition_or_a_named_reason() {
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let layout = defined(&fs::read_to_string(crates.join("guest_runtime/src/layout.rs")).unwrap());
-    assert!(layout.contains("LOCK_OWNER"), "layout.rs read: {} names", layout.len());
     let mut files = Vec::new();
-    sources(&crates.join("w2m_vm/src"), &mut files);
-    let again: Vec<String> = files
+    for entry in fs::read_dir(&crates).unwrap() {
+        let src = entry.unwrap().path().join("src");
+        if src.is_dir() {
+            sources(&src, &mut files);
+        }
+    }
+    // name -> (file, the rest of its definition's line)
+    let mut by_name: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
+    for (file, text) in &files {
+        for (name, value) in defined(text) {
+            by_name.entry(name).or_default().push((file.clone(), value));
+        }
+    }
+    assert!(
+        by_name.contains_key("LOCK_OWNER"),
+        "the crates read: {} names",
+        by_name.len()
+    );
+    let allowed = |name: &str| HELD.iter().chain(DIFFERENT.iter()).any(|(n, _)| *n == name);
+    let twice: Vec<String> = by_name
         .iter()
-        .flat_map(|(file, text)| defined(text).into_iter().map(move |name| (file.clone(), name)))
-        .filter(|(_, name)| layout.contains(name))
-        .map(|(file, name)| format!("{name} in {file}"))
+        .filter(|(_, defs)| {
+            let files: std::collections::BTreeSet<&String> = defs.iter().map(|(f, _)| f).collect();
+            files.len() > 1
+        })
+        .filter(|(name, defs)| {
+            let derived = defs.iter().any(|(_, v)| names(v, name));
+            !derived && !allowed(name)
+        })
+        .map(|(name, defs)| {
+            let files: Vec<&str> = defs.iter().map(|(f, _)| f.as_str()).collect();
+            format!("{name} in {}", files.join(", "))
+        })
         .collect();
     assert!(
-        again.is_empty(),
-        "defined again outside layout.rs: {}",
-        again.join("; ")
+        twice.is_empty(),
+        "defined in two files, neither derived from the other nor held nor allowed: {}",
+        twice.join("; ")
+    );
+    // an allowed name no longer defined twice is struck from the lists, so they say only what is true
+    let stale: Vec<&str> = HELD
+        .iter()
+        .chain(DIFFERENT.iter())
+        .map(|(n, _)| *n)
+        .filter(|n| by_name.get(*n).is_none_or(|d| d.len() < 2))
+        .collect();
+    assert!(stale.is_empty(), "allowed but defined once: {stale:?}");
+}
+
+/// `STATUS_ACCESS_VIOLATION`, stated by `cpu_cases` (the case runner's faults) and `pe_loader` (the loader's), which
+/// no dependency joins (Sprint 297).
+#[test]
+fn access_violation_is_one_status() {
+    assert_eq!(
+        u64::from(pe_loader::ACCESS_VIOLATION),
+        cpu_cases::ACCESS_VIOLATION,
+        "pe_loader's and cpu_cases' ACCESS_VIOLATION"
     );
 }

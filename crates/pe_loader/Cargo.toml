@@ -8,3 +8,5 @@ publish.workspace = true
 
 [dependencies]
 pe_image = { path = "../pe_image" }
+# the guest's layout, its one definition of the heap's and the monitor's places (Sprint 297)
+guest_runtime = { path = "../guest_runtime" }

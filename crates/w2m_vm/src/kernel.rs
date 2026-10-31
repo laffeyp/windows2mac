@@ -28,7 +28,7 @@ pub const STILL_ACTIVE: u64 = 259;
 pub const OBJECT_IDS: u64 = 1 << 32;
 pub const PIPE_CAPACITY: usize = 4096;
 /// handle kinds in PROCESS_CREATE's inherited list (kernel.py 63-67, runtime.h 310-317)
-pub const KIND_STANDARD: u64 = 100;
+pub use crate::process::KIND_STANDARD;
 pub const KIND_DIRECTORY: u64 = 102;
 /// `next_pid` (kernel.py 113): the first process's id less 4 is the floor of `allocate_ids`
 const FIRST_PID: u64 = 4096;

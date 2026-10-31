@@ -47,8 +47,8 @@ pub const YMM_HI_OFF: u64 = 0x400;
 /// in the guest layout from Sprint 236, where the translator's MMX lowering reads them too.
 pub use guest_runtime::layout::{X87_ST_OFF, X87_SW_OFF};
 /// The model's exits: an SSE instruction and one instruction run whole (vm_backend 1118, 1125).
-pub const HVC_SLOW_SSE: u16 = 10;
-pub const HVC_SLOW_STEP: u16 = 11;
+pub const HVC_SLOW_SSE: u16 = translator::lower::HVC_SLOW_SSE as u16;
+pub const HVC_SLOW_STEP: u16 = translator::lower::HVC_SLOW_STEP as u16;
 /// `Tally::host_requests`' key for the give-backs: above every transport op.
 pub const HOST_GIVE_BACK: u64 = 1 << 32;
 

@@ -47,7 +47,7 @@ pub const RT_IN_VM: u32 = 0x18;
 /// VM_COMPILER + this: the stencil table's symbols' addresses, in `vmc_symbol_name`'s order (vm_backend 198).
 pub const VMC_SYMBOLS: u64 = 0x40;
 /// VM_COMPILER + this: whether a miss compiles in the VM first (vm_backend 197, 4968-4969).
-pub const VMC_ENABLED: u64 = 0x00;
+pub use crate::monitor_code::VMC_ENABLED;
 /// VM_COMPILER + these: the C compiler's counts by cause, and their names (vm_backend 199-202).
 pub const VMC_COUNTS: u64 = 0x100;
 pub const VMC_COUNT_NAMES: [&str; 23] = [

@@ -18,7 +18,7 @@ use std::fmt;
 use pe_image::{PeImage, SCN_MEM_EXECUTE, SCN_MEM_READ, SCN_MEM_WRITE};
 
 /// virtual_memory.py 26-36.
-pub const PAGE: u64 = 0x1000;
+pub use guest_runtime::layout::PAGE;
 pub const GRANULARITY: u64 = 0x10000;
 pub const MEM_COMMIT: u32 = 0x1000;
 pub const MEM_RESERVE: u32 = 0x2000;

@@ -34,7 +34,7 @@ pub use guest_runtime::layout::LOCK_OWNER;
 pub use guest_runtime::layout::MXCSR_OFF;
 pub use guest_runtime::layout::RUN_END;
 /// x24 holds the flags not yet defined (vm_backend 359); at entry every one.
-pub const REG_UNDEFINED_FLAGS: u8 = 24;
+pub const REG_UNDEFINED_FLAGS: u8 = translator::lower::REG_UNDEFINED_FLAGS as u8;
 
 /// The blocks' instructions in the code cache (vm_backend `tail_hosts`, `tail_left`, 2466-2467): each instruction's
 /// first host address, in the order the cache grows, and the instructions after it in its block.
