@@ -458,6 +458,23 @@ fn the_installer_installs_a_cached_start_and_declines_the_rest() {
     }
 }
 
+/// Sprint 263 (reviewer-3's Low 2 at 263): the exits a cached block's words embed, the dispatcher and the slice stub,
+/// lie at the same addresses whether the installer is placed or not, so the cache made without it serves a run with it.
+#[test]
+fn the_installer_moves_no_exit_a_cached_block_embeds() {
+    let root = root();
+    let (_, plain, _) = cached_guest(&root, "qpc", false);
+    let (_, with, _) = cached_guest(&root, "qpc", true);
+    assert_eq!(with.code.dispatch_va, plain.code.dispatch_va, "the dispatcher");
+    assert_eq!(with.slice_va, plain.slice_va, "the slice stub");
+    let read = |g: &Guest| {
+        let at = (VM_COMPILER + VMC_INSTALLER) as usize;
+        u64::from_le_bytes(g.memory.as_slice()[at..at + 8].try_into().unwrap())
+    };
+    assert_eq!(read(&plain), 0, "an installer without install_in_vm");
+    assert!(read(&with) > with.slice_va, "the installer before the slice stub");
+}
+
 /// Sprint 263 (card 5's VI, VII): `qpc` runs with its blocks installed inside the VM to the stop, the output and the
 /// instruction count of its run with the host's install, with fewer `hvc 1` exits; a write to the image's code then
 /// stops the installer.
