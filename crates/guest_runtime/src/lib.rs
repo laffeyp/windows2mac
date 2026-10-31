@@ -199,6 +199,99 @@ pub fn build(root: &Path, defines: &[(String, u64)], base_va: u64) -> Result<(St
     ))
 }
 
+/// The tag whose C the frozen Python host built (the Decision "No Python runs"); its image stays the judge of the
+/// Rust build (Sprint 271) and of every runtime address the frozen host's records hold (Sprint 272).
+pub const FROZEN_TAG: &str = "frozen-python-2026-10-29";
+
+/// A root holding `FROZEN_TAG`'s `tools/`, `specs/` and the code pages' probe run (`headers.rs` 70), every input
+/// `build` reads, exported by `git archive` under `root/build/guest_runtime_frozen/` and kept there.
+pub fn frozen_root(root: &Path) -> Result<PathBuf, String> {
+    let out = root.join(format!("build/guest_runtime_frozen/{FROZEN_TAG}"));
+    if !out.join("tools/guest_runtime/runtime.h").exists() {
+        fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+        let archive = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args([
+                "archive",
+                "--format=tar",
+                FROZEN_TAG,
+                "tools",
+                "specs",
+                "store/probe-runs/38044229348",
+            ])
+            .output()
+            .map_err(|e| format!("git archive: {e}"))?;
+        if !archive.status.success() {
+            return Err(format!(
+                "git archive {FROZEN_TAG}: {}",
+                String::from_utf8_lossy(&archive.stderr)
+            ));
+        }
+        let mut tar = Command::new("tar")
+            .arg("-x")
+            .arg("-C")
+            .arg(&out)
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("tar: {e}"))?;
+        std::io::Write::write_all(tar.stdin.as_mut().ok_or("tar's stdin")?, &archive.stdout)
+            .map_err(|e| e.to_string())?;
+        if !tar.wait().map_err(|e| e.to_string())?.success() {
+            return Err(format!("tar -x into {}", out.display()));
+        }
+    }
+    Ok(out)
+}
+
+/// The image the frozen Python host built from `FROZEN_TAG`'s C, as its build cached it in `root/build/guest_runtime/`
+/// under the frozen sources' key: the key and the image.
+pub fn frozen_python_image(root: &Path, defines: &[(String, u64)], base_va: u64) -> Result<(String, Image), String> {
+    let frozen = frozen_root(root)?;
+    let key = cache_key(&frozen, &texts(&frozen)?, defines, base_va)?;
+    let file = root.join(format!("build/guest_runtime/{key}.bin"));
+    let data = fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let (segments, symbols) = macho::parse_preload(&data)?;
+    Ok((
+        key,
+        Image {
+            segments,
+            symbols,
+            file,
+        },
+    ))
+}
+
+/// An image's symbols by address, to name an address in the runtime image by what it is, `name+0xoffset` from the
+/// nearest symbol at or below it, not by where the linker put it (Sprint 272: a C change moved `create_step` 0x38
+/// bytes, and the frozen host's call stream holds its address in a DefWindowProcW argument).
+pub struct AddressNames {
+    by_address: Vec<(u64, String)>,
+    range: std::ops::Range<u64>,
+}
+
+impl AddressNames {
+    /// The names of `image`, for addresses in `[base, base + size)`.
+    pub fn new(image: &Image, base: u64, size: u64) -> AddressNames {
+        let mut by_address: Vec<(u64, String)> = image.symbols.iter().map(|(n, a)| (*a, n.clone())).collect();
+        by_address.sort();
+        AddressNames {
+            by_address,
+            range: base..base + size,
+        }
+    }
+
+    /// `address` as `name+0xoffset`, or None outside the image or below its first symbol.
+    pub fn name(&self, address: u64) -> Option<String> {
+        if !self.range.contains(&address) {
+            return None;
+        }
+        let i = self.by_address.partition_point(|(a, _)| *a <= address).checked_sub(1)?;
+        let (at, name) = &self.by_address[i];
+        Some(format!("{name}+0x{:x}", address - at))
+    }
+}
+
 /// Reading the linked MH_PRELOAD Mach-O (`guest_runtime._parse`).
 pub mod macho {
     use std::collections::BTreeMap;
@@ -352,5 +445,36 @@ pub mod sha256 {
                 "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AddressNames, Image};
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    /// Sprint 272: an address names its nearest symbol at or below it; one outside the image, or below its first
+    /// symbol, has no name; a moved image names the same code alike.
+    #[test]
+    fn an_address_is_named_by_its_nearest_symbol_in_the_image() {
+        let image = |at: u64| Image {
+            segments: Vec::new(),
+            symbols: BTreeMap::from([
+                ("create_step".to_string(), at),
+                ("user32_DefWindowProcW".to_string(), at + 0x1ac),
+            ]),
+            file: PathBuf::new(),
+        };
+        let (frozen, moved) = (image(0x1000_02cc), image(0x1000_0304));
+        let names = |i: &Image| AddressNames::new(i, 0x1000_0000, 0x10_0000);
+        assert_eq!(names(&frozen).name(0x1000_02cc).as_deref(), Some("create_step+0x0"));
+        assert_eq!(names(&frozen).name(0x1000_02d0), names(&moved).name(0x1000_0308));
+        assert_eq!(
+            names(&frozen).name(0x1000_0478).as_deref(),
+            Some("user32_DefWindowProcW+0x0")
+        );
+        assert_eq!(names(&frozen).name(0x1000_0100), None, "below the first symbol");
+        assert_eq!(names(&frozen).name(0x2000_0000), None, "outside the image");
     }
 }

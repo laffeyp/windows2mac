@@ -1,7 +1,7 @@
 # the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs
 stop	ReferenceEnd: the log holds the reference's 168 lines and the main thread its calls
 images	Hail to the Rainbow.exe UnityPlayer.dll
-hvc 1	1091
+hvc 1	1147
 hvc 4	10
 hvc 8	38881
 hvc 10	258
@@ -9,13 +9,13 @@ hvc 11	286
 hvc 13	13639
 hvc 14	167
 code cache full	0
-compiled	274837
+compiled	274830
 cut by decode	243
 cut by encoder	0
 cut by guarded	210
 cut by key size	0
 cut by no choice	0
-cut by no stencil	143
+cut by no stencil	191
 decode	304
 encoder	0
 full	0
@@ -24,14 +24,14 @@ host only	1
 key size	0
 log full	0
 no choice	0
-no stencil	123
+no stencil	179
 not a code page	366
 page needs a split	15
 pages protected	17086
 pause	2
 recon full	0
 scan pages	0
-blocks the host compiled	275559
+blocks the host compiled	275608
 calls traced	10505
 calls in flight	0
 calls dropped	0

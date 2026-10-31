@@ -17,6 +17,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use guest_runtime::AddressNames;
+use guest_runtime::layout::{RUNTIME_IMAGE_SIZE, RUNTIME_IMAGE_VA, runtime_defines};
+
 const HELD: &str = "store/batch_run/first-stop-2026-10-28.tsv";
 /// The Python batch run's calls, in `scripts/call_compare.py` `write_tsv`'s form: the frozen host's recorded run of
 /// 2026-10-21 (store/runs/frontier-643a6283510c-1792623423346201000, whose COMPARISON_COMPLETED against the Windows
@@ -171,22 +174,33 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
     let python: Vec<&str> = stream.lines().take(ours.len() + 1).collect();
     assert!(!ours.is_empty(), "the Rust run traced no call");
     let past = ours.len() >= python.len();
+    // an address in the runtime image read by what it is, `name+0xoffset`, the Rust run's by the image it ran and the
+    // Python's by the frozen image, so a C change that moves the image's code compares equal where the code it names
+    // is the same (Sprint 272; reviewer-3's Medium 1 at 272: the C runtime changes in step 6, and row 2535 holds
+    // `create_step`'s address in a DefWindowProcW argument)
+    let names = |image: &guest_runtime::Image| AddressNames::new(image, RUNTIME_IMAGE_VA, RUNTIME_IMAGE_SIZE);
+    let (_, ran) = guest_runtime::build(&root, &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
+    let (_, frozen) = guest_runtime::frozen_python_image(&root, &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
+    let (ours_names, python_names) = (names(&ran), names(&frozen));
+    let cells = |row: usize, l: &str, names: &AddressNames| -> Vec<String> {
+        l.split('\t')
+            .enumerate()
+            .map(|(c, x)| {
+                if skip.contains(&(row, c)) {
+                    "*".to_string()
+                } else {
+                    u64::from_str_radix(x, 16)
+                        .ok()
+                        .and_then(|a| names.name(a))
+                        .unwrap_or_else(|| x.to_string())
+                }
+            })
+            .collect()
+    };
     for (row, (r, p)) in ours.iter().zip(&python).enumerate() {
-        let cells = |l: &'_ str| -> Vec<String> {
-            l.split('\t')
-                .enumerate()
-                .map(|(c, x)| {
-                    if skip.contains(&(row, c)) {
-                        "*".to_string()
-                    } else {
-                        x.to_string()
-                    }
-                })
-                .collect()
-        };
         assert_eq!(
-            cells(r),
-            cells(p),
+            cells(row, r, &ours_names),
+            cells(row, p, &python_names),
             "row {row} of the call stream differs from the Python batch run's"
         );
     }
@@ -212,9 +226,9 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
         "a call is in flight at row {row}, past the Python's {} rows",
         python.len()
     );
-    let p: Vec<&str> = python[row].split('\t').collect();
+    let p = cells(row, python[row], &python_names);
     assert_eq!(
-        first.split('\t').collect::<Vec<_>>(),
+        cells(row, first, &ours_names),
         p[..13],
         "row {row}, the call in flight at the stop, differs from the Python batch run's"
     );

@@ -12,10 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use guest_runtime::layout::{RUNTIME_IMAGE_VA, runtime_defines};
-use guest_runtime::{build, cache_key, services, texts};
-
-/// The tag whose C the frozen Python host built (the Decision "No Python runs").
-const FROZEN: &str = "frozen-python-2026-10-29";
+use guest_runtime::{FROZEN_TAG as FROZEN, build, cache_key, frozen_root, services, texts};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -24,47 +21,10 @@ fn root() -> PathBuf {
         .unwrap()
 }
 
-/// A root holding `FROZEN`'s `tools/`, `specs/` and the code pages' probe run (`headers.rs` 70), every input `build`
-/// reads, exported by `git archive`; made once and kept under the build directory.
-fn frozen_root(root: &Path) -> PathBuf {
-    let out = root.join(format!("build/guest_runtime_frozen/{FROZEN}"));
-    if !out.join("tools/guest_runtime/runtime.h").exists() {
-        fs::create_dir_all(&out).unwrap();
-        let archive = Command::new("git")
-            .arg("-C")
-            .arg(root)
-            .args([
-                "archive",
-                "--format=tar",
-                FROZEN,
-                "tools",
-                "specs",
-                "store/probe-runs/38044229348",
-            ])
-            .output()
-            .unwrap();
-        assert!(
-            archive.status.success(),
-            "git archive {FROZEN}: {}",
-            String::from_utf8_lossy(&archive.stderr)
-        );
-        let mut tar = Command::new("tar")
-            .arg("-x")
-            .arg("-C")
-            .arg(&out)
-            .stdin(std::process::Stdio::piped())
-            .spawn()
-            .unwrap();
-        std::io::Write::write_all(tar.stdin.as_mut().unwrap(), &archive.stdout).unwrap();
-        assert!(tar.wait().unwrap().success(), "tar -x into {}", out.display());
-    }
-    out
-}
-
 /// The frozen sources' key, and the root to build them at: the repository's while its C keys the same, so its build
-/// cache serves, else the export.
+/// cache serves, else the export (`guest_runtime::frozen_root`).
 fn frozen_build_root(root: &Path) -> (String, PathBuf) {
-    let frozen = frozen_root(root);
+    let frozen = frozen_root(root).unwrap();
     let key = cache_key(&frozen, &texts(&frozen).unwrap(), &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
     let here = cache_key(root, &texts(root).unwrap(), &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
     (key.clone(), if here == key { root.to_path_buf() } else { frozen })
