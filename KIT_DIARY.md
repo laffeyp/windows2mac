@@ -1022,3 +1022,14 @@ stack frame shallower: the run parted from card 4's at its 156th host request, f
 instruction count came out 492,368,697 short. The design's lookup listed the shared structures, the cursor, the table,
 the log; it did not list the C's `return 0` lines. The question for a second path: what does the first refuse, and why.
 
+### 2026-10-31 — Sprint 272: a gate that chooses its tests from a diff must take the diff from what it last judged
+
+**Finding (#111):** the gates chose which tests to run from the paths changed since `git merge-base HEAD
+origin/main`. That was the last judged state while work sat on a branch until it merged. Once all work moved to
+`main` (2026-10-29) and each work commit was pushed before its gates ran, the merge base became the work commit
+itself: the gates saw only the uncommitted bookkeeping, chose the bookkeeping's crate, and passed. `origin/main`'s
+reflog names six passes so made, Sprints 267 to 272. Sprint 272's changed the C compiler and the translator and ran 36
+tests of `signal_report`; the full gates then failed three times, on the batch run's held stop, its call stream and
+its exit ledger, before they passed. Nothing in the gates' output was false, "the change since 05ae6da85: 4 paths",
+and nothing read it. The question for a selective gate: since what, and is that the last thing a gate passed.
+
