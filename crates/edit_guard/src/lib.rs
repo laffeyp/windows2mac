@@ -4,7 +4,10 @@
 //! file before it lands (WORKING_AGREEMENT; the Drift watchlist). Sprints 189, 191 and 194 each made one with the
 //! shell instead, a third within three sprints, so the rule became this check (Sprint 195): `refusal` names a Bash
 //! command that writes a multi-line change to a file outside the temporary directories, by a heredoc redirected or
-//! piped to `tee`, or by `sed -i` with `a\`, `i\` or `c\`, an address range, or a newline in its script.
+//! piped to `tee`, or by `sed -i` with `a\`, `i\` or `c\`, an address range, or a newline in its script. Sprint 267
+//! (reviewer-3's Medium 1 at 266: Python started in Sprints 238, 240, 250 and 266, shell edits in 262, 263 and 266)
+//! adds an in-place `perl` or `awk` edit, and any start of a Python interpreter or installer, the user's Decision "No
+//! Python runs", by a command's program and not by a word that only names it.
 
 /// Paths a command may write freely: the temporary directories and devices.
 const FREE: [&str; 4] = ["/tmp/", "/private/tmp/", "/var/folders/", "/dev/"];
@@ -189,9 +192,104 @@ fn multi_line_script(script: &str) -> Option<&'static str> {
     None
 }
 
+/// A Python interpreter or installer by its program name: `python`, `python2`, `python3`, `python3.<n>`, `pip`, `pip3`
+/// (the user's Decision "No Python runs"; Sprint 267: Sprints 238, 240, 250 and 266 each started one).
+fn python(program: &str) -> bool {
+    let name = program.rsplit('/').next().unwrap_or(program);
+    matches!(name, "python" | "python2" | "python3" | "pip" | "pip3")
+        || name
+            .strip_prefix("python3.")
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// An option word that edits in place for `perl` (`-i`, `-pi`, `-0pi`, `-i.bak`): a cluster of option letters holding
+/// `i`, not `-I`, which names an include directory, and not a long `--` option.
+fn perl_in_place(word: &str) -> bool {
+    let Some(cluster) = word.strip_prefix('-') else {
+        return false;
+    };
+    !cluster.starts_with('-')
+        && cluster
+            .split('.')
+            .next()
+            .is_some_and(|letters| letters.contains('i') && letters.bytes().all(|b| b.is_ascii_alphanumeric()))
+}
+
+/// Why the simple command `span` (its words, its program first) is refused for its program: a Python start, directly or
+/// by `uv run` or `uvx`, or an in-place `perl` or `awk` edit, which is a multi-line edit made outside the Edit tool.
+fn program_refusal(span: &[String]) -> Option<String> {
+    // `NAME=value` words before the program are the environment's; a command substitution's program follows its `$(`
+    // or backtick (`x=$(python3 -c 1)`)
+    let assignment = |w: &str| {
+        w.split_once('=')
+            .is_some_and(|(n, _)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'))
+            && !w.contains("$(")
+            && !w.contains('`')
+    };
+    let span = &span[span.iter().position(|w| !assignment(w))?..];
+    let first = span.first()?.as_str();
+    let program = first
+        .rsplit_once("$(")
+        .map(|(_, p)| p)
+        .or_else(|| first.rsplit_once('`').map(|(_, p)| p))
+        .unwrap_or(first)
+        .trim_start_matches('(');
+    let name = program.rsplit('/').next().unwrap_or(program);
+    // the program after uv's options, skipping the value of each that takes one (`uv run --with x python3`)
+    let after_options = |rest: &[String]| {
+        let mut words = rest.iter();
+        while let Some(w) = words.next() {
+            if matches!(
+                w.as_str(),
+                "--with" | "--python" | "-p" | "--from" | "--project" | "--directory" | "--with-requirements"
+            ) {
+                words.next();
+            } else if !w.starts_with('-') {
+                return Some(w.clone());
+            }
+        }
+        None
+    };
+    let run = match name {
+        "uv" if span.get(1).is_some_and(|w| w == "run") => after_options(&span[2..]),
+        "uvx" => after_options(&span[1..]),
+        _ => Some(program.to_string()),
+    };
+    if let Some(p) = run
+        && python(&p)
+    {
+        return Some(format!(
+            "{p} starts Python, and no Python runs in w2m (the Decision \"No Python runs\")"
+        ));
+    }
+    let args = &span[1..];
+    if name == "perl" && args.iter().any(|a| perl_in_place(a)) {
+        return Some("perl editing in place: a multi-line edit goes through the Edit tool".to_string());
+    }
+    let awk_in_place = args.windows(2).any(|p| p[0] == "-i" && p[1] == "inplace")
+        || args.iter().any(|a| a == "-iinplace" || a == "--inplace");
+    if matches!(name, "awk" | "gawk") && awk_in_place {
+        return Some("awk editing in place: a multi-line edit goes through the Edit tool".to_string());
+    }
+    None
+}
+
 /// Why `command` is refused, or None.
 pub fn refusal(command: &str) -> Option<String> {
     let w = words(&without_heredoc_bodies(command));
+    // each simple command's program, the first word after a start or a `;`, `&&`, `||`, `&`, `|` or newline
+    for (k, _) in w.iter().enumerate() {
+        if k > 0 && !(ends_command(&w[k - 1]) || w[k - 1] == "|") {
+            continue;
+        }
+        let end = w[k..]
+            .iter()
+            .position(|x| ends_command(x) || x == "|")
+            .map_or(w.len(), |e| k + e);
+        if let Some(why) = program_refusal(&w[k..end]) {
+            return Some(why);
+        }
+    }
     for (k, word) in w.iter().enumerate() {
         // a heredoc whose text goes to a file: a redirection in the same simple command, or `tee FILE` in its pipe
         if word.starts_with("<<") && !word.starts_with("<<<") {
@@ -322,5 +420,59 @@ mod tests {
         assert!(refusal("sed -i '' '/^pub const A: u64 = 1;$/d; /^pub const B: u64 = 2;$/d' p.rs").is_none());
         assert!(refusal("sed -n 1,40p f.rs").is_none());
         assert!(refusal("sed -n '/a/,/b/p' f.rs").is_none());
+    }
+
+    /// Sprint 267 (reviewer-3's Medium 1 at 266): a Python start, by any route, is refused; Sprint 266's own,
+    /// `python3 -` at a command's head, among them.
+    #[test]
+    fn a_python_start_is_refused() {
+        for command in [
+            "python3 - 2>/dev/null; perl -0pi -e 's/a/b/' f.rs",
+            "python3 -c 1",
+            "uv run python -c 1",
+            "uv run --with x python3 tool.py",
+            "uvx python -V",
+            "cd /x && python script.py",
+            "ls | python3 -c 'import sys'",
+            "/usr/bin/python3.12 -V",
+            "pip3 install x",
+            "x=$(python3 -c 1)",
+        ] {
+            let why = refusal(command).unwrap_or_else(|| panic!("{command:?} allowed"));
+            assert!(why.contains("starts Python"), "{command:?}: {why}");
+        }
+    }
+
+    /// Sprint 267: an in-place `perl` or `awk` edit is refused; Sprint 266's `perl -0pi` among them.
+    #[test]
+    fn an_in_place_perl_or_awk_edit_is_refused() {
+        for command in [
+            "perl -0pi -e 's/(a\\n)/$1b/' crates/w2m_vm/src/run.rs",
+            "perl -i -pe 's/a/b/' f.rs",
+            "perl -pi.bak -e 's/a/b/' f.rs",
+            "gawk -i inplace '{print}' f.rs",
+            "awk --inplace '{print}' f.rs",
+        ] {
+            let why = refusal(command).unwrap_or_else(|| panic!("{command:?} allowed"));
+            assert!(why.contains("editing in place"), "{command:?}: {why}");
+        }
+    }
+
+    /// Sprint 267: a word naming Python that starts nothing, and a `perl` or `awk` that only reads, are allowed, as is
+    /// the record script's `uv run substrate`.
+    #[test]
+    fn python_named_but_not_started_and_reading_scripts_are_allowed() {
+        for command in [
+            "grep -n python BLACKBOARD.md",
+            "git commit -m 'no python3 runs'",
+            "git commit -F - <<'EOF'\npython3 -c 1\nEOF",
+            "uv run substrate run --file f.toml --root r --strict",
+            "perl -ne 'print if /x/' f.rs",
+            "perl -I lib -e 'print 1'",
+            "awk '{print $1}' f.tsv",
+            "rg python3 docs",
+        ] {
+            assert_eq!(refusal(command), None, "{command:?}");
+        }
     }
 }
