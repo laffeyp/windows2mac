@@ -29,9 +29,13 @@ pub fn crates_tree(root: &Path) -> Result<String, String> {
 }
 
 /// The work tree's tree id of `inputs`, paths from the root, through a temporary index (Sprint 265: the translation
-/// cache's key takes it of its own inputs, `cache_file::KEY_INPUTS`).
+/// cache's key takes it of its own inputs, `cache_file::KEY_INPUTS`). Each call's index is its own, by the process and
+/// a count (Sprint 288: a test binary's tests, threads of one process under `cargo test`, call it at once through
+/// `fresh`, and one index named by the process alone was removed and rewritten under another call).
 pub fn tree_of(root: &Path, inputs: &[&str]) -> Result<String, String> {
-    let index = std::env::temp_dir().join(format!("w2m-built-from-{}", std::process::id()));
+    static CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let call = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let index = std::env::temp_dir().join(format!("w2m-built-from-{}-{call}", std::process::id()));
     let _ = std::fs::remove_file(&index);
     let git = |args: &[&str]| -> Result<String, String> {
         let out = Command::new("git")
@@ -124,6 +128,24 @@ mod tests {
     use super::{INPUTS, RUN_INPUTS, crates_tree, stale, stamp, tree_of};
     use std::path::Path;
     use std::process::Command;
+
+    /// Threads of one process taking the same tree at once each get it whole (Sprint 288: under `cargo test` the
+    /// readers' tests call `fresh` together).
+    #[test]
+    fn threads_taking_a_tree_at_once_agree() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let once = tree_of(&root, &RUN_INPUTS).unwrap();
+        let trees: Vec<Result<String, String>> = std::thread::scope(|s| {
+            let calls: Vec<_> = (0..16)
+                .map(|_| s.spawn(|| (0..4).map(|_| tree_of(&root, &RUN_INPUTS)).collect::<Vec<_>>()))
+                .collect();
+            calls.into_iter().flat_map(|c| c.join().unwrap()).collect()
+        });
+        assert_eq!(trees.len(), 64);
+        for tree in trees {
+            assert_eq!(tree, Ok(once.clone()));
+        }
+    }
 
     /// A directory stamped with a repository's trees is fresh, and stale once a file under `tools/` changes or the stamp
     /// is gone, the reason naming the directory (Sprint 288: Sprint 286's record, made before a C change, was judged).
