@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 280
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -80,3 +80,17 @@ The host's request service reaches guest memory only through the view, and the c
 - [x] One concept: one module's access moved.
 
 ## result
+
+- **The access** (e91524683): `host_request.rs`'s `read_u64` and a new `bytes` take the view; `KernelMemory`'s
+  `read` and `write` copy through `Guest::memory_view`; the transport page's answers by `write` at `TRANSPORT + 48`
+  and `+ 56` (seven sites); the copies into guest buffers by `write` (four, the XMM capture's 256 bytes among them,
+  16 registers of 16 bytes, so the length the old slice checked holds); the copies out by `bytes` (five, the
+  environment block among them).
+- **The count:** `host_request.rs` 2, both in its tests; 106 slice calls in `crates/w2m_vm/src/`, from 126;
+  `tests/slice_calls.rs` and census D7 lowered together.
+- **Expected values:** the module's 4 tests and the count tests pass; the `w2m_vm` tests before the commit, 156 passed; a local that shadowed `bytes` renamed `written` after them, with the lint, the Linux check, the module's and the bridge tests run again.
+- **The gates:** `scripts/gates.sh` exit 0 in 671 s, kept in `store/gates/passes.tsv` as sprint 280 at e91524683 with root=bdff9b308 and "rust=crates python=0 samples=0", rdeps(w2m_vm), 156 tests, base=fe8a9942c, Sprint 279's close; multi-vCPU: not run (Python gates not run)
+- **Plant 1,** restored by `cp` and checked by `cmp`: `KernelMemory::write` writing one byte past its address; the
+  file-view test failed, "a file view of descriptor 18446744073709551614, which is not open".
+- **Plant 2,** restored by `cp` and checked by `cmp`: one `as_slice()` added outside the tests; the count test failed,
+  "host_request.rs: 3 slice calls, census D7 allows 2".
