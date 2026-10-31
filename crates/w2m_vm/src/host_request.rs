@@ -601,9 +601,11 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         }
         HOST_EXCEPTION if a0 == EXCEPTION_STUBS => guest.guest_stubs()?,
         HOST_EXCEPTION if a0 == EXCEPTION_CAPTURE_XMM => {
-            let mut bytes = Vec::with_capacity(256);
-            for n in 0..16 {
-                bytes.extend(vcpu.simd(n)?.to_le_bytes());
+            // the 16 XMM registers, 16 bytes each: a fixed size in the type, as the slice's length checked it before
+            // the view (Sprint 281, reviewer-3's Low 2 at 280)
+            let mut bytes = [0u8; 256];
+            for (n, register) in bytes.chunks_exact_mut(16).enumerate() {
+                register.copy_from_slice(&vcpu.simd(n as u8)?.to_le_bytes());
             }
             let at = guest
                 .layout

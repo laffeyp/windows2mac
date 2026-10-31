@@ -804,6 +804,7 @@ impl Guest {
             }
             None => hypervisor::GuestMemory::new(layout.size as usize).map_err(GuestError::Memory)?,
         };
+        // load time, no vCPU yet: a slice is sound (the design's choice 1)
         let mem = memory.as_mut_slice();
         for &(i, off) in &layout.placed {
             let r = &loaded.memory.regions[i];
@@ -966,6 +967,7 @@ impl Guest {
                 .flatten()
                 .ok_or_else(|| GuestError::Layout(format!("the trace opens at {from}, which is not exported")))?;
             self.trace_from = at;
+            // load time (`Guest::new` calls `with_trace`), no vCPU yet: a slice is sound
             let mem = self.memory.as_mut_slice();
             mem[(MONITOR_SIZE + TRACE_OFF) as usize..(MONITOR_SIZE + TRACE_OFF + 8) as usize].fill(0);
         }
@@ -985,6 +987,7 @@ impl Guest {
         } else {
             0
         };
+        // load time, no vCPU yet: a slice is sound
         let mem = self.memory.as_mut_slice();
         write_u64(mem, VM_COMPILER + monitor_code::VMC_INSTALLER, installer);
         write_u64(mem, VM_COMPILER + VMC_EXIT, dispatch_va);
@@ -1004,6 +1007,7 @@ impl Guest {
             let all = if dxgi { &DXGI_OBJECT[..] } else { &[][..] }.iter().chain(methods);
             for (i, method) in all.enumerate() {
                 let thunk = self.import_thunk(&format!("{dll}!{prefix}{method}"))?;
+                // load time (`with_trace` calls `com_vtables`), no vCPU yet: a slice is sound
                 write_u64(self.memory.as_mut_slice(), at + 8 * i as u64, thunk);
             }
         }
@@ -1024,6 +1028,7 @@ impl Guest {
             ));
         }
         let s = crate::cache_file::sections(bytes)?;
+        // load time (`w2m-vm` places the file before the run loop starts), no vCPU yet: a slice is sound
         let mem = self.memory.as_mut_slice();
         mem[off as usize..off as usize + bytes.len()].copy_from_slice(bytes);
         // where the installer finds the file's tables (Sprint 263)
@@ -1044,11 +1049,11 @@ impl Guest {
     /// block over it split into the next level's 512 descriptors with the block's attributes; 0 when nothing maps it.
     /// One vCPU: no private regions.
     pub fn page_descriptor(&mut self, va: u64) -> Result<u64, String> {
-        let mem = self.memory.as_mut_slice();
+        let mem = memory_view(&self.memory);
         let mut off = TRANSLATION_TABLES;
         for (level, shift) in [(0u32, 39u32), (1, 30), (2, 21)] {
             let at = off + 8 * ((va >> shift) & 0x1FF);
-            let mut desc = read_u64(mem, at);
+            let mut desc = mem.read_u64(at);
             if desc & 1 == 0 {
                 return Ok(0);
             }
@@ -1064,10 +1069,13 @@ impl Guest {
                 self.next_table += PAGE;
                 let low = if level == 2 { 0x3 } else { 0x1 }; // pages at level 3, blocks at level 2
                 for i in 0..512u64 {
-                    write_u64(mem, new + 8 * i, (base + i * (size >> 9)) | attributes | low);
+                    mem.write_u64(new + 8 * i, (base + i * (size >> 9)) | attributes | low);
                 }
+                // the table's descriptors before the entry that points at them, for a walker on another vCPU (Sprint
+                // 281); the block-to-table change itself needs break-before-make while another vCPU runs (the design's
+                // table, a precondition of the second vCPU)
                 desc = (IPA_BASE + new) | 0x3;
-                write_u64(mem, at, desc);
+                mem.atomic_u64(at).store(desc, std::sync::atomic::Ordering::Release);
             }
             off = (desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE;
         }
@@ -1081,9 +1089,14 @@ impl Guest {
         while page < end {
             let at = self.page_descriptor(page)?;
             if at != 0 {
-                let mem = self.memory.as_mut_slice();
-                let desc = read_u64(mem, at);
-                write_u64(mem, at, if valid { desc | 1 } else { desc & !1 });
+                // one atomic store: a walker on another vCPU reads the whole descriptor; the runtime then invalidates
+                // the TLB on every vCPU (`runtime.h` 331-335)
+                let word = memory_view(&self.memory).atomic_u64(at);
+                let desc = word.load(std::sync::atomic::Ordering::Relaxed);
+                word.store(
+                    if valid { desc | 1 } else { desc & !1 },
+                    std::sync::atomic::Ordering::Release,
+                );
             }
             page += PAGE;
         }
@@ -1103,18 +1116,23 @@ impl Guest {
     /// through a register or a jump into a thunk gives no name (reviewer-3's Low 3 of its review of Sprint 211), and
     /// `record::RunEnd::of` trusts a name only when the stopping thread has that call in flight.
     pub fn called_service(&self) -> Option<(u64, Option<String>)> {
-        let mem = self.memory.as_slice();
-        let word = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
-        let rsp = word((MONITOR_SIZE + STATE_OFF + 8 * 4) as usize);
-        let ret = word(self.layout.offset(rsp)? as usize);
+        let mem = self.memory_view();
+        let word = |at: u64| mem.read_u64(at);
+        let rsp = word(MONITOR_SIZE + STATE_OFF + 8 * 4);
+        let ret = word(self.layout.offset(rsp)?);
         let name = (|| {
-            let at = self.layout.offset(ret.checked_sub(6)?)? as usize;
-            if mem.get(at..at + 2)? != [0xff, 0x15] {
+            let at = self.layout.offset(ret.checked_sub(6)?)?;
+            if at + 6 > mem.len() as u64 {
                 return None;
             }
-            let disp = i32::from_le_bytes(mem[at + 2..at + 6].try_into().unwrap());
+            let mut call = [0u8; 6];
+            mem.read(at, &mut call);
+            if call[..2] != [0xff, 0x15] {
+                return None;
+            }
+            let disp = i32::from_le_bytes(call[2..6].try_into().unwrap());
             let slot = ret.wrapping_add_signed(i64::from(disp));
-            let thunk = word(self.layout.offset(slot)? as usize);
+            let thunk = word(self.layout.offset(slot)?);
             self.thunks.get(&thunk).cloned()
         })();
         Some((ret, name))
@@ -1163,7 +1181,8 @@ impl Guest {
         use guest_runtime::layout::{TRACE_OFF, TRACE_OWNER_OFF, TRACE_THUNKS};
         let index = (thunk - THUNK_BASE) / 16;
         if index < TRACE_THUNKS {
-            self.memory.as_mut_slice()[(MONITOR_SIZE + TRACE_OFF + TRACE_OWNER_OFF + index) as usize] = owner;
+            self.memory_view()
+                .write(MONITOR_SIZE + TRACE_OFF + TRACE_OWNER_OFF + index, &[owner]);
         }
     }
 
@@ -1182,10 +1201,10 @@ impl Guest {
                 continue;
             };
             let (base, end) = (image.base, image.base + u64::from(image.pe.size_of_image));
-            let at = (MONITOR_SIZE + TRACE_OFF + 40 + 16 * i as u64) as usize;
-            let mem = self.memory.as_mut_slice();
-            mem[at..at + 8].copy_from_slice(&base.to_le_bytes());
-            mem[at + 8..at + 16].copy_from_slice(&end.to_le_bytes());
+            let at = MONITOR_SIZE + TRACE_OFF + 40 + 16 * i as u64;
+            let mem = self.memory_view();
+            mem.write_u64(at, base);
+            mem.write_u64(at + 8, end);
             if self.trace_bound.contains(&name.to_lowercase()) {
                 continue;
             }
@@ -1195,14 +1214,13 @@ impl Guest {
                 let off = self
                     .layout
                     .offset(va)
-                    .ok_or_else(|| GuestError::Layout(format!("{name}'s import slot 0x{va:x} is not mapped")))?
-                    as usize;
-                let held = u64::from_le_bytes(self.memory.as_slice()[off..off + 8].try_into().unwrap());
+                    .ok_or_else(|| GuestError::Layout(format!("{name}'s import slot 0x{va:x} is not mapped")))?;
+                let held = self.memory_view().read_u64(off);
                 let Some(key) = self.thunks.get(&held).cloned() else {
                     continue;
                 };
                 let own = self.make_thunk(&key)?;
-                self.memory.as_mut_slice()[off..off + 8].copy_from_slice(&own.to_le_bytes());
+                self.memory_view().write_u64(off, own);
                 self.trace_owner(own, i as u8 + 1);
             }
         }
@@ -1220,14 +1238,14 @@ impl Guest {
         let Some(key) = self.thunks.get(&va).cloned() else {
             return Ok(va);
         };
-        let t = (MONITOR_SIZE + TRACE_OFF) as usize;
-        let word = |mem: &[u8], at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
-        if word(self.memory.as_slice(), t) != 0 {
-            let mem = self.memory.as_slice();
-            let rsp = word(mem, (MONITOR_SIZE + STATE_OFF + 8 * 4) as usize);
+        let t = MONITOR_SIZE + TRACE_OFF;
+        let word = |mem: ConcurrentGuestMemory<'_>, at: u64| mem.read_u64(at);
+        if word(self.memory_view(), t) != 0 {
+            let mem = self.memory_view();
+            let rsp = word(mem, MONITOR_SIZE + STATE_OFF + 8 * 4);
             // the Python's `self.mem.read(rsp, 8)` raises on an unmapped RSP (Sprint 194; reviewer-2's Low 1)
             let caller = match self.layout.offset(rsp) {
-                Some(off) => word(mem, off as usize),
+                Some(off) => word(mem, off),
                 None => {
                     return Err(GuestError::Layout(format!(
                         "GetProcAddress's saved RSP {rsp:#x} is not mapped"
@@ -1278,18 +1296,20 @@ impl Guest {
     /// them (SetThreadDescription).
     fn traced_strings(&self) -> Result<String, String> {
         use guest_runtime::layout::{TRACE_OFF, TRACE_STRING, TRACE_STRINGS, TRACE_STRINGS_OFF};
-        let mem = self.memory.as_slice();
-        let t = (MONITOR_SIZE + TRACE_OFF + TRACE_STRINGS_OFF) as usize;
-        let word = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
+        let mem = self.memory_view();
+        let t = MONITOR_SIZE + TRACE_OFF + TRACE_STRINGS_OFF;
+        let word = |at: u64| mem.read_u64(at);
         let count = word(t);
         if count > TRACE_STRINGS {
             return Err(format!("the trace holds {count} strings, past its {TRACE_STRINGS}"));
         }
         let mut out = String::new();
-        for k in 0..count as usize {
-            let at = t + 16 + TRACE_STRING as usize * k;
+        for k in 0..count {
+            let at = t + 16 + TRACE_STRING * k;
             let (seq, arg) = (word(at), word(at + 8));
-            let text: String = mem[at + 16..at + 16 + 120]
+            let mut units = [0u8; 120];
+            mem.read(at + 16, &mut units);
+            let text: String = units
                 .as_chunks::<2>()
                 .0
                 .iter()
@@ -1343,11 +1363,11 @@ impl Guest {
     /// guest's memory is an error, not a read past it.
     pub fn trace_count(&self) -> Result<(u64, u64), String> {
         use guest_runtime::layout::{TRACE_OFF, TRACE_RECORD, TRACE_RECORDS_OFF};
-        let mem = self.memory.as_slice();
-        let t = (MONITOR_SIZE + TRACE_OFF) as usize;
-        let word = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
+        let mem = self.memory_view();
+        let t = MONITOR_SIZE + TRACE_OFF;
+        let word = |at: u64| mem.read_u64(at);
         let (count, capacity, dropped) = (word(t + 16), word(t + 24), word(t + 32));
-        let end = t as u64 + TRACE_RECORDS_OFF + TRACE_RECORD * count;
+        let end = t + TRACE_RECORDS_OFF + TRACE_RECORD * count;
         if count > capacity || end > mem.len() as u64 {
             return Err(format!(
                 "the trace holds {count} records, past its capacity {capacity} or the guest's memory"
@@ -1365,11 +1385,9 @@ impl Guest {
         if k >= count {
             return Err(format!("trace record {k}: the trace holds {count}"));
         }
-        let mem = self.memory.as_slice();
-        let r = (MONITOR_SIZE + TRACE_OFF + TRACE_RECORDS_OFF + TRACE_RECORD * k) as usize;
-        let f: Vec<u64> = (0..15)
-            .map(|i| u64::from_le_bytes(mem[r + 8 * i..r + 8 * i + 8].try_into().unwrap()))
-            .collect();
+        let mem = self.memory_view();
+        let r = MONITOR_SIZE + TRACE_OFF + TRACE_RECORDS_OFF + TRACE_RECORD * k;
+        let f: Vec<u64> = (0..15).map(|i| mem.read_u64(r + 8 * i)).collect();
         let thunk = THUNK_BASE + 16 * f[4];
         let (dll, function) = self.thunks.get(&thunk).and_then(|n| n.split_once('!')).ok_or_else(|| {
             format!(
@@ -1430,7 +1448,7 @@ impl Guest {
                 .skip(1)
                 .any(|d| d.name.eq_ignore_ascii_case(n) && d.base == base)
         });
-        let open = read_u64(self.memory.as_slice(), Self::process_off(TRACE_OFF) as u64) == 1;
+        let open = self.memory_view().read_u64(Self::process_off(TRACE_OFF) as u64) == 1;
         let trace = (traced && open).then_some(PROCESS_VA + TRACE_OFF);
         let failed = self.make_thunk(pe_loader::DLL_INIT_FAILED)?;
         self.code_page(&init_stub_code(base, entry, failed, trace))
@@ -1448,11 +1466,16 @@ impl Guest {
 
     /// `exception` (4173-4195): the last unhandled exception the guest runtime recorded, or None.
     pub fn exception(&self) -> Option<Exception> {
-        let mem = self.memory.as_slice();
+        let mem = self.memory_view();
         let e = Self::process_off(guest_runtime::layout::EXCEPTION_OFF);
-        let q = |at: usize| u64::from_le_bytes(mem[at..at + 8].try_into().unwrap());
-        let d = |at: usize| u32::from_le_bytes(mem[at..at + 4].try_into().unwrap());
-        let h = |at: usize| u16::from_le_bytes(mem[at..at + 2].try_into().unwrap());
+        let bytes = |at: usize, out: &mut [u8]| mem.read(at as u64, out);
+        let q = |at: usize| mem.read_u64(at as u64);
+        let d = |at: usize| mem.read_u32(at as u64);
+        let h = |at: usize| {
+            let mut b = [0u8; 2];
+            bytes(at, &mut b);
+            u16::from_le_bytes(b)
+        };
         if q(e) != EXCEPTION_MAGIC {
             return None;
         }
@@ -1472,8 +1495,9 @@ impl Guest {
             fltsave_control_word: h(c + 256),
             fltsave_mxcsr: d(c + 256 + 24),
             xmm: std::array::from_fn(|i| {
-                let at = c + 256 + 160 + 16 * i;
-                u128::from_le_bytes(mem[at..at + 16].try_into().unwrap())
+                let mut b = [0u8; 16];
+                bytes(c + 256 + 160 + 16 * i, &mut b);
+                u128::from_le_bytes(b)
             }),
         })
     }
@@ -1481,7 +1505,7 @@ impl Guest {
     /// `clear_exception` (4197-4200): forget the last unhandled exception.
     pub fn clear_exception(&mut self) {
         let at = Self::process_off(guest_runtime::layout::EXCEPTION_OFF);
-        self.memory.as_mut_slice()[at..at + 8].fill(0);
+        self.memory_view().write_u64(at as u64, 0);
     }
 }
 

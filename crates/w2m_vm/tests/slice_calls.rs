@@ -20,7 +20,7 @@ const SLICES: [(&str, usize); 18] = [
     ("cache_file.rs", 1),
     ("cases.rs", 15),
     ("compile.rs", 12),
-    ("guest.rs", 20),
+    ("guest.rs", 5),
     ("host_request.rs", 2),
     ("kernel.rs", 1),
     ("model_step.rs", 4),
