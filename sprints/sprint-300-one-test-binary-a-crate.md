@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 300
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -86,13 +86,13 @@ Each of the two crates links one test binary; every test runs as before; the tim
   crate's, which its `use virtual_memory::…` means. `common` is declared once in the root, its two users reading
   `use crate::common;`. The gates' timing step (`scripts/gates.sh` 210) runs `--test all -E "test(/^exit_time::/)"`
   for the removed `--test exit_time`.
-- **The change** (WORK-COMMIT): the two roots, each with `every_file_is_a_module`; the two manifests; the two
+- **The change** (84fd8c7d3): the two roots, each with `every_file_is_a_module`; the two manifests; the two
   `common` lines; the gates' line.
 - **Expected values:** `nextest list` with every ignored test: 79 in `w2m_vm::all` and 8 in `hypervisor::all`, equal to
   the `#[test]` functions in the two crates' test files, the roots' one each included; no warning in the build; the
   binaries 31 test files' worth down to 2; the gates' wall time against Sprint 298's 1,106 s, all Rust tests both,
-  GATES-WALL.
-- **The gates:** GATES-LINE
+  947 s whole and nextest 536.2 s at load 3.35, against Sprint 298's 1,106 s and 471.6 s at load 3.77, this run adding the substrate samples: the whole 159 s less, the test step 65 s more, one run each, the cause of either not measured.
+- **The gates:** `scripts/gates.sh` exit 0 in 947 s, kept in `store/gates/passes.tsv` as sprint 300 at 84fd8c7d3 with root=ee3e1bec0 and "rust=all python=0 samples=1", `--all` (the gates' script changed), 330 tests, base=c9f542504, Sprint 299's close; multi-vCPU: not run (Python gates not run)
 - **Plant 1,** restored by `cp` and checked by `cmp`: `mod ledger;` commented out in `w2m_vm`'s root;
   `every_file_is_a_module` failed, "files under tests/ no module declares: [\"ledger.rs\"]".
 
