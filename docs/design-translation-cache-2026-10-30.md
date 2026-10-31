@@ -171,7 +171,13 @@ words in the real run; the VM's follows once the host's conforms.
    unchanged, and the run's compile time falling below Sprint 248's 1,351 to 1,362 ms and its most in a 60 Hz frame
    below 248's 10.9 to 12.0 ms, on timed records run alone, without the judge or the exit ledger (Sprint 262); its
    `ledger_parting` check on separate untimed runs that write the ledger. Step 5 is met at this card's close.
-   *(Amended 2026-10-30, Sprint 258.)* A cached run is another schedule of the same guest, conforming:
+   *(Amended 2026-10-30, Sprint 258.)* The most in a frame is read in the guest's instructions, not in the virtual
+   counter's ticks, which run while the host holds the vCPU off-core (Sprint 263's uncached runs 14.79 to 14.85 ms at
+   load 3.3 to 4.2, Sprint 264's 11.86 ms at load near 2; reviewer-3's Medium at 264): the most compiles inside any
+   window of 53,500,000 instructions retired, a 60 Hz frame at 3.21 billion instructions a second, the fastest rate
+   recorded (Sprint 263, the installer), so no frame the runs have held is wider; installs counted apart. The cached
+   run's figure falls below the uncached run's, each from one untimed run, the instructions at each compile
+   deterministic; the timed figure kept beside it. *(Amended 2026-10-30, Sprint 266, before any record.)* A cached run is another schedule of the same guest, conforming:
    a time slice ends at a block's stop
    (`threads.c` 17-18), each block charged whole on entry, and the cache cuts blocks where the in-VM compiler does not
    (a page boundary among them), so the same 14 switches fall at other instructions and the threads interleave
