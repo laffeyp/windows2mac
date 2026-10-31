@@ -604,8 +604,8 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
             // the 16 XMM registers, 16 bytes each: a fixed size in the type, as the slice's length checked it before
             // the view (Sprint 281, reviewer-3's Low 2 at 280)
             let mut bytes = [0u8; 256];
-            for (n, register) in bytes.chunks_exact_mut(16).enumerate() {
-                register.copy_from_slice(&vcpu.simd(n as u8)?.to_le_bytes());
+            for (n, register) in bytes.as_chunks_mut::<16>().0.iter_mut().enumerate() {
+                *register = vcpu.simd(n as u8)?.to_le_bytes();
             }
             let at = guest
                 .layout
