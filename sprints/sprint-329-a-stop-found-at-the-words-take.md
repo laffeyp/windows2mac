@@ -82,3 +82,40 @@ No service reads the word's state once its run has stopped: `take_word` finds th
 
 ## result
 
+- **The take** (`crates/w2m_vm/src/run.rs`): `take_word(mem, monitor, outside, stopping: &RunStop) -> Option<bool>`,
+  the old take renamed `take_word_unchecked` and called first, then `stopping.stopped()` read: None when the run has
+  stopped, the word given back when the host took it, a hold of this vCPU's guest left as it was.
+- **The takes it serves:** the card counted ten `take_word` calls in `vcpu_loop` and `take_a_thread`; there were nine
+  there, eight in `vcpu_loop` and one in `take_a_thread`, and a tenth in `turn`. The nine and the after-exit take,
+  which called `host_take_runtime_word` directly, now go through `take_word`, ten in all, each returning on None
+  before its service reads: `vcpu_loop` with `Ok(None)`, `take_a_thread` with `Taken::Ended`. `turn`'s, the Machine's
+  wait on one vCPU, calls `take_word_unchecked`. The after-exit take now counts holds found outside the word as the
+  others do, which on one vCPU stays 0. `host_take_runtime_word` and `take_word_unchecked` are named in `run.rs` only
+  by `take_word_unchecked` itself, `turn`, and the lock's and this card's unit tests (a search; no type holds it).
+- **The test** `run::tests::a_stopped_runs_take_of_the_word_ends_its_service`: a running run's take `Some(true)`, the
+  word the host's; a stopped run's take of a free word None, the word 0 after; a stopped run's take of a word this
+  vCPU's guest holds None, the hold kept; passing, with the lock's test beside it. It first failed to compile, `RUN_TABLE`
+  out of the test module's scope, and names it by its path.
+- **Plant 1,** `run.rs` copied aside and restored by `cp`, checked by `cmp`: `if false && stopping.stopped()`; the test
+  failed, "assertion `left == right` failed: a stopped run's take", left `Some(true)`.
+- **Plant 2,** restored likewise: the give-back made `let _ = mem;`; the test failed, "assertion `left == right` failed:
+  the word given back", left 4294967295, `HOST_OWNER`.
+- **Beyond the card, from reviewer-3's Medium 1 at 329** (the review in Surfaced): `run_on_vcpu` let go its guest's
+  hold of the word only on its `Ok` path, after `vcpu_loop(...)?`; a thread that ended by an error or a panic kept
+  it, and a peer in `host_take_runtime_word`'s spin, which reads no flag and returns to no check, waited for ever.
+  `HaltAtEnd` carries the guest memory and the vCPU's owner, and its `Drop` halts the run, then lets go the guest's
+  word (`release_ended_vcpus_word`), on every path out of the thread; the flag stored first, so a take that then gets
+  the word finds the stop. The `Ok` path's own release is gone. The same concern as the card's, the run's stop and
+  the word, so in this sprint.
+- **One owner function:** `owner_of(k)`, `k + 1`, written into `LOCK_OWNER` at the set-up and held by `HaltAtEnd`, so
+  the two cannot drift; the two-vCPU test's read of vCPU 1's `LOCK_OWNER` as 2 holds both.
+- **The test** `run::tests::a_thread_that_ends_by_a_panic_lets_go_its_guests_word`: vCPU 1's guest, owner 2, holding
+  the word, a `HaltAtEnd` dropped through a panic; the word 0 and the run halted after; passing. A `Drop` runs alike on
+  an error's return, so the panic holds both paths; the review's run-level form, a thread made to fail while another
+  waits in a take, is not built, the window not reachable on demand.
+- **Plant 3,** restored likewise: the `Drop`'s release made `let _ = (self.mem, self.own);`; the test failed,
+  "assertion `left == right` failed: the guest's word let go".
+- **Every run as held:** `cargo nextest run -E 'rdeps(w2m_vm)'`, 202 tests passed in 433 s, the two-vCPU runs among
+  them; `cargo clippy` with the gates' flags clean.
+- **The gates:** GATES-LINE
+
