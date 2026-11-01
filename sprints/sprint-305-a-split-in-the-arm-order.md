@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 305
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -94,7 +94,7 @@ A block becomes a table only after it was invalid and every vCPU's TLB was flush
 
 ## result
 
-- **The change** (WORK-COMMIT): `guest::Flush`, a `&mut dyn FnMut() -> Result<(), String>`; `page_descriptor` making
+- **The change** (80970c399): `guest::Flush`, a `&mut dyn FnMut() -> Result<(), String>`; `page_descriptor` making
   the block invalid (a Release store), calling `flush`, then storing the table's descriptor, the table's 512 entries
   written before; `map_pages`, `threads::stack_grow` and `create_thread`, and `HostCompiler::compile`, `install`,
   `install_block`, `protect_code`, `code_written` and `stop_cache` passing it down; `use_cache`, at load, a flush that
@@ -114,7 +114,7 @@ A block becomes a table only after it was invalid and every vCPU's TLB was flush
   restores 31 general registers, PSTATE and the PC, and the sleeper's 3 and the batch run's 35 nested flushes leave the
   runs as held, which a register lost would not; a cancel during a split needs a second thread to cancel within the
   stub's five instructions, a race this card did not build. Both stand as Deferred (Sprint 305).
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 725 s, kept in `store/gates/passes.tsv` as sprint 305 at 80970c399 with root=f3c7c7eaa and "rust=crates python=0 samples=0", rdeps(w2m_vm), 181 tests, base=c1a84179a, Sprint 304's close, the batch run's held `hvc 15` 35 among them; multi-vCPU: not run (Python gates not run)
 - **Plant 1,** restored by `cp` and checked by `cmp`: the table's descriptor stored where the block is made invalid,
   Sprint 304's order, after a first try whose `sed` matched nothing, `cargo fmt` having wrapped the line; the order test
   failed, "at the flush the block is invalid, its other bits kept: 0x19970003".
