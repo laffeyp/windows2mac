@@ -252,7 +252,11 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, and a 
    measured, the link being out of `Guest` while another vCPU's turn waits.)* *(4c2 split at Sprint 312's card, for
    precondition 9: 4c2, each vCPU's own pages, a design: the per-vCPU state the Rust host reaches today, by word and
    address, the process-wide words among it, and the form, Sprint 103's B carried or replaced, with the cards it
-   shapes; 4c3, the threads as 4c2 was written above.)*
+   shapes; 4c3, the threads as 4c2 was written above.)* *(4c3 split at Sprint 316's card: 4c3a, the host's thread
+   switch on any vCPU, the loaded thread's `vcpu` word the vCPU's own `LOCK_OWNER` and a thread another vCPU holds
+   skipped, as the C runtime's `held_elsewhere` does (`threads.c` 65-68, 293-294), where the host's `switch` writes 1
+   and stops at such a thread (`threads.rs` 859-878); 4c3b, the threads, the stop, the kick, the merged outcome and the
+   stop flag, inside `std::thread::scope`.)*
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 
