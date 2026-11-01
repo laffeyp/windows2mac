@@ -206,7 +206,14 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    test of the guest-memory design's choice 6, a vCPU holding the word across a host request while the other misses, a
    step bound failing a hang, with its plant, `served` held across the take; a misaligned XCHG raced against an aligned
    one through the run loop, the sum of the exchanged values conserved, with its plant, a step without the stop; a stop
-   while a guest holds the word, the run ending within its bound.
+   while a guest holds the word, the run ending within its bound. *(Split by rule 6 at Sprint 307's close, each its
+   own card, in this order, with the judges above shared out: 4a, the refusals on one vCPU: a vCPU count, 1 by default,
+   refused above 1 without FEAT_LSE2, with a diagnostic, or in a child process, each by name; 4b, `served` a lock taken
+   once per served exit, its guard checking the word, card 2's plant, Deferred (Sprint 298)'s clause checked; 4c, a
+   thread per vCPU, the stop, the kick, the merged outcome and the stop flag, `qpc` and `sleeper` on two vCPUs ending as
+   on one, a stop while a guest holds the word; 4d, every other vCPU stopped for a locked model step and for a block
+   split, the misaligned XCHG race and its plant, a cancel from another thread mid-split (Deferred, Sprint 305); 4e, the
+   race test of the guest-memory design's choice 6 and its step bound.)*
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 
