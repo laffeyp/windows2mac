@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 321
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -94,5 +94,5 @@ On several vCPUs a running thread's slice ends only for a ready thread no runnin
   same test, so its gates were stopped by `TaskStop`, no row written; the second commit keeps the lower bounds alone,
   and `cargo test -p hypervisor --test no_wall_clock_bound` passes on it. No other elapsed time is held under an upper
   bound in the tree.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 757 s, kept in `store/gates/passes.tsv` as sprint 321 at a6f395456 with root=2bd8bc7ae and "rust=crates python=0 samples=0", 192 tests, 651 ns an exit at load 2.80, base=101ce0f55, Sprint 320's close, the run on 936e57d77 stopped for the bounds; multi-vCPU: not run (Python gates not run)
 
