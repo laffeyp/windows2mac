@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 306
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -75,7 +75,7 @@ file's against another's; `bridges.rs`, `cpuid_in_vm.rs`, `dispatch_hash_planted
 
 ## result
 
-- **The change** (WORK-COMMIT): `tests/all.rs` `ONE_VM` and `one_vm()`, macOS-only like `common`, the poisoned lock taken
+- **The change** (d0464e0c2): `tests/all.rs` `ONE_VM` and `one_vm()`, macOS-only like `common`, the poisoned lock taken
   regardless; `run_loop.rs` and `litmus.rs` import it in place of their own; `bridges`, `cpuid_in_vm`,
   `dispatch_hash_planted`, `first_decline`, `monitor_code_in_vm` and `unmapped_image_faults` take it first; and the case
   runner's test, which the card's list lacked; WORKING_AGREEMENT 142.
@@ -88,7 +88,7 @@ file's against another's; `bridges.rs`, `cpuid_in_vm.rs`, `dispatch_hash_planted
   which the library's unit tests call, maps memory and makes no VM. The two runs left of that three were stopped, their
   answer known.
 - **Expected values:** `cargo test -q -p w2m_vm --test all`, three runs: exit 0, 81 passed, in 199, 186 and 186 s.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 724 s, kept in `store/gates/passes.tsv` as sprint 306 at d0464e0c2 with root=ba1804f74 and "rust=crates python=0 samples=0", rdeps(w2m_vm), 181 tests, base=8c18c4e00, Sprint 305's close; multi-vCPU: not run (Python gates not run)
 - **Plant 1,** restored by `cp` and checked by `cmp`: the card named `unmapped_image_faults`' lock, a short test whose
   collision is chance; the plant took the case runner's off instead, a 170 s test any other VM test overlaps; the first of up to three runs failed, 80 passed and 1 failed, `unmapped_image_faults` at "HvError { call: \"hv_vm_create\", code: -85377016 }".
 
