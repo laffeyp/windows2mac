@@ -323,6 +323,15 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, and a 
    *(Sprint 326's card: 4c3b2b's making of the vCPU on a thread of its own built first, one vCPU, the run taking the
    `Vm` and the time limit from its three callers; 4c3b2b keeps the second vCPU, its park, the stop of every other
    vCPU, the merged outcome and the stop flag.)*
+   *(Sprint 327, closed partial: 4c3b2b built. `run` makes `guest.start.vcpus` threads; vCPU `k` on its private chain
+   with `LOCK_OWNER` `k + 1` and no thread, `take_a_thread` parking on `Sched` and taking one; the stop as `RunStop`,
+   the first `Stop` the run's, every vCPU stopped through its handle and the scheduler notified, `HaltAtEnd` halting the
+   run when a vCPU's thread ends by any path; in place of a stop flag in the word's spin, an ended vCPU lets go its
+   guest's hold of the word (`release_ended_vcpus_word`), and card 329 makes `take_word` find the stop after its take
+   (reviewer-3's Low 2 at 327); the merged outcome with `runs_by_vcpu`; `add_thread` and `threads::save` notifying a
+   ready thread. Each vCPU's step limit is its own. `qpc`, `sleeper`, `twoready` and five more guests end on two vCPUs
+   as on one, seven that start a child are refused by name; `statsize` prints "sizes differ", the host reaching the
+   requesting vCPU's stack through vCPU 0's mapping: card 328.)*
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 

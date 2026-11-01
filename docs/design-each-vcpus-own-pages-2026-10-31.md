@@ -29,14 +29,19 @@ code, and decides.
 | monitor data | `MONITOR_VA + MONITOR_DATA`, one page | the count and limit (0x00, 0x08), the lazy-flag and spill words, `PAUSE_COUNT`, `LOCK_OWNER`, `SLICE_UNTIL`, `RUN_END`, `CURRENT`, `CURRENT_ENTRY`, `SLICE_COUNT`, `SLICE_PAUSES`, `SAVE_AREA`, `SAVE_VECTORS`, `NATIVE_OPERANDS`, the per-thread words `PER_THREAD_MONITOR` saves at a switch | the vCPU, and its running thread | generated code through x28; the monitor code (`monitor_code.rs`, 5 absolute addresses); the C runtime (`W2M_MONITOR_DATA_VA`, 12); the host by offset (97 reads: `threads.rs` 29, `run.rs` 20, `cases.rs` 19, `model_step.rs` 15, `process.rs` 7, `monitor_code.rs` 6, `guest.rs` 1) |
 | monitor data, set once | the same page: `CLOCK_MODE` 0x60, `START_MODE` 0x68, `FOREGROUND_MODE` 0x80, `CLOCK_RATE` 0x90, `CLOCK_EPOCH` 0xA0 | the start's choices | the process, written once at load (`process.rs` 283-290) | the C runtime (`process.c`, `threads.c`, `console.c`, `windows.c`, `time_and_error_mode.c`); the host (`threads.rs`) |
 | state block | `PROCESS_VA + STATE_OFF`, one page | the guest's registers at a call or fault, rflags, x87 | the running thread, so the vCPU | the translator's lowering (`lower.rs`, 7); the monitor code (4); the C runtime (`W2M_STATE_VA`, 9); the host by offset (26 with the transport page, in 10 files) |
-| runtime stack | `MONITOR_VA + RUNTIME_STACK`, 16 pages | the runtime's C frames | the vCPU in the runtime | the C runtime, through SP |
+| runtime stack | `MONITOR_VA + RUNTIME_STACK`, 16 pages | the runtime's C frames | the vCPU in the runtime | the C runtime, through SP; the host, a request's buffer in a C frame by guest address (`Layout::offset`; Sprint 327's `statsize`) |
 | transport page | `PROCESS_VA + TRANSPORT_OFF` | a host request | the vCPU holding the runtime word | `runtime.c` 27; the host at `hvc #8` |
 | exception area | `PROCESS_VA + EXCEPTION_OFF` | a dispatch's records | the vCPU holding the runtime word | `runtime.c` 266, `exceptions.c` 322 |
 | run table, compiler log, dispatch and reconstruction tables | the monitor area | threads, the turn, compiles | the process, shared, under the word or atomics | unchanged |
 
 The transport page and the exception area are written only inside the runtime word, so one copy serves every vCPU,
 as it did at Sprint 106. The private set is the Python host's: the monitor data page, the state block and the
-runtime stack, 18 pages a vCPU.
+runtime stack, 18 pages a vCPU. *(Amended 2026-11-01, Sprint 328's card: the table missed the host as a writer and a
+reader of the runtime stack. The C runtime passes the host pointers into its own frames, `GetFileAttributesExW`'s
+`u64 st[4]` the host writes a stat into and `FindFirstFileExW`'s `u16 full[FULL]` path; the host resolves a guest
+address by the layout's maps, which are vCPU 0's, so on vCPU 1 the stat landed in vCPU 0's stack (`statsize` on two
+vCPUs, Sprint 327). Card 328 makes the translation take the served vCPU's pages, as Sprint 313 made the host's reads by
+offset.)*
 
 ## The forms
 
