@@ -79,3 +79,32 @@ The host reads each vCPU's own state through that vCPU's base, so a second vCPU'
 
 ## result
 
+- **The base:** `w2m_vm::VcpuPages { monitor, state }` (`lib.rs`, `guest` re-exporting it), `VcpuPages::FIRST`
+  vCPU 0's (`MONITOR_DATA`, `MONITOR_SIZE + STATE_OFF`); `Served.vcpu`, the served exit's vCPU, set by `GuestLock::serve(pages)` once the lock
+  is taken and read back by `turn` across its wait; the run loop's own `pages` and `md` for its reads outside a service
+  (`run.rs`, one vCPU, the first). `served.vcpu` is a Served row of the run-loop design's table, 24 now, which
+  `the_served_part_is_the_designs` holds.
+- **The reads re-addressed:** `threads.rs` 28 lines and the scheduler's word assertion; `run.rs`: `take_word` and
+  `exit_count` given the page, `give_back`, the `hvc #12` state read, every `serve`; `cases.rs` 3 functions' monitor and
+  state reads and 3 `exit_count` calls; `model_step.rs` its monitor and state bases; `guest.rs` the two RSP reads;
+  `monitor_code::vcpu_owner(mem, monitor)` and its callers; the load-time writes of vCPU 0's page (`process.rs`, the
+  monitor code's header) through `VcpuPages::FIRST`. The guest addresses, x28 and `PROCESS_VA + STATE_OFF` in
+  generated code, are unchanged; the transport page and the run table stay at their one offset; the process area's
+  thread-start defaults (`process.rs` 385) are written into vCPU 0's state block at load, inside the area's own buffer.
+- **The source test** `vcpu_pages::no_vcpu_page_is_read_at_a_fixed_offset` (`tests/vcpu_pages.rs`, a module of
+  `tests/all.rs`): no line under `src/` uses `MONITOR_DATA` as a value except after `MONITOR_VA +`, or
+  `MONITOR_SIZE + STATE_OFF`, a name with its `guest_runtime::layout::` path counted as bare, save
+  `VcpuPages::FIRST`'s; `the_rule_names_each_form` holds the rule on seven lines.
+- **Plant 1,** restored by `cp` and checked by `cmp`: the run's base one page off (`monitor: FIRST.monitor + 0x1000`);
+  `run_loop::sleeper_creates_and_ends_its_thread_as_the_python_host` failed, "panicked at
+  crates/w2m_vm/tests/run_loop.rs:180:5: assertion `left == right` failed: the translations in compile order (start,
+  end, discovery)", the drain reading the wrong page, before the first exit's count the card named.
+- **Plant 2,** restored likewise: `vcpu_owner`'s read put back at `MONITOR_DATA + LOCK_OWNER`; the source test failed,
+  "a vCPU's page read at a fixed offset: [\"monitor_code.rs:173\"]".
+- **The Linux check:** `VcpuPages` first sat in `guest.rs`, a macOS-only module; `scripts/pre-commit.sh`'s Linux check
+  failed, E0433 "cannot find `guest` in the crate root" at `monitor_code.rs` 22 and `process.rs` 275, which build on
+  Linux; it moved to the crate root.
+- **Changed from the card:** the files named in context plus the design's table row and count and
+  `guest_parts.rs`' count; `host_request.rs`, `compile.rs` and `block_judge.rs` held no fixed-offset read.
+- **The gates:** GATES-LINE
+

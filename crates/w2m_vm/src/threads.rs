@@ -9,9 +9,9 @@
 //! hand-over `hvc #12` makes (`_schedule`, `_switch`, `_save_thread`, `_load_thread`, 3463-3580).
 
 use guest_runtime::layout::{
-    CURRENT, CURRENT_ENTRY, E_MONITOR, E_MONITOR_AT, E_STATE, E_X, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, PAGE,
-    PAUSE_COUNT, PEB_OFF, PROCESS_VA, RT_ENTRIES, RUN_ENTRY, RUN_TABLE, RUN_THREADS, SLICE_COUNT, SLICE_PAUSES,
-    STATE_OFF, STATE_SIZE, TIME_SLICE, VECTOR_SLOT, VECTOR_SLOTS,
+    CURRENT, CURRENT_ENTRY, E_MONITOR, E_MONITOR_AT, E_STATE, E_X, MONITOR_DATA, MONITOR_VA, PAGE, PAUSE_COUNT,
+    PEB_OFF, PROCESS_VA, RT_ENTRIES, RUN_ENTRY, RUN_TABLE, RUN_THREADS, SLICE_COUNT, SLICE_PAUSES, STATE_SIZE,
+    TIME_SLICE, VECTOR_SLOT, VECTOR_SLOTS,
 };
 use pe_loader::TLS_SLOTS;
 use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE, STACK_GUARD_PAGES};
@@ -171,8 +171,8 @@ pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
     write_u64(mem, at + E_VSLOT, VECTOR_SLOTS + VECTOR_SLOT * n);
     if n == 0 {
         // `set_current` (3323-3326) for vCPU 0
-        write_u64(mem, MONITOR_DATA + CURRENT, 0);
-        write_u64(mem, MONITOR_DATA + CURRENT_ENTRY, MONITOR_VA + at);
+        write_u64(mem, guest.served.vcpu.monitor + CURRENT, 0);
+        write_u64(mem, guest.served.vcpu.monitor + CURRENT_ENTRY, MONITOR_VA + at);
         write_u64(mem, at + E_VCPU, 1);
     }
     guest.served.threads.insert(thread.tid, Thread { index: n, ..thread });
@@ -187,7 +187,7 @@ pub fn current_tid(guest: &Guest) -> u64 {
         // `_first_tid` (vm_backend 2497): the start's thread id, a child's from the Machine (Sprint 206: it was 4)
         return guest.start.tid;
     }
-    let at = read_u64(mem, MONITOR_DATA + CURRENT_ENTRY) - MONITOR_VA;
+    let at = read_u64(mem, guest.served.vcpu.monitor + CURRENT_ENTRY) - MONITOR_VA;
     read_u64(mem, at + E_TID)
 }
 
@@ -559,9 +559,9 @@ unsafe extern "C" {
 /// `mach_absolute_time` on macOS, the counter the guest reads as CNTVCT_EL0).
 pub fn counter_now(guest: &Guest) -> u64 {
     let mem = crate::guest::memory_view(&guest.memory);
-    if read_u64(mem, MONITOR_DATA + CLOCK_MODE) == 2 {
-        let executed = u128::from(read_u64(mem, MONITOR_DATA));
-        let rate = u128::from(read_u64(mem, MONITOR_DATA + CLOCK_RATE));
+    if read_u64(mem, guest.served.vcpu.monitor + CLOCK_MODE) == 2 {
+        let executed = u128::from(read_u64(mem, guest.served.vcpu.monitor));
+        let rate = u128::from(read_u64(mem, guest.served.vcpu.monitor + CLOCK_RATE));
         let warp = u128::from(read_u64(mem, RUN_TABLE + CLOCK_WARP));
         return (executed / rate * 10_000_000 + executed % rate * 10_000_000 / rate + warp) as u64;
     }
@@ -577,7 +577,11 @@ pub fn counter_now(guest: &Guest) -> u64 {
 /// machine's clock `machine` is moved to it by its warp, as time passed for it while it waited; at its start too
 /// (`VM.steps`, 5055-5080; Sprint 199, reviewer-2's High 1 of its review of 196-198).
 pub fn catch_up(guest: &mut Guest, machine: u64, processes: usize) {
-    if read_u64(crate::guest::memory_view(&guest.memory), MONITOR_DATA + CLOCK_MODE) != 2 {
+    if read_u64(
+        crate::guest::memory_view(&guest.memory),
+        guest.served.vcpu.monitor + CLOCK_MODE,
+    ) != 2
+    {
         return;
     }
     let lag = crate::machine::catch_up(counter_now(guest), machine, processes);
@@ -636,7 +640,7 @@ pub fn turn_state(guest: &Guest) -> crate::turns::State {
 /// when no thread waits with a deadline or the clock is another.
 pub fn warp_to_deadline(guest: &mut Guest) -> bool {
     let mem = crate::guest::memory_view(&guest.memory);
-    if read_u64(mem, MONITOR_DATA + CLOCK_MODE) != 2 {
+    if read_u64(mem, guest.served.vcpu.monitor + CLOCK_MODE) != 2 {
         return false;
     }
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
@@ -707,7 +711,7 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
     assert!(
         crate::monitor_code::runtime_word_held(
             guest.memory_view(),
-            crate::monitor_code::vcpu_owner(guest.memory_view())
+            crate::monitor_code::vcpu_owner(guest.memory_view(), guest.served.vcpu.monitor)
         ),
         "the scheduler entered without the runtime word"
     );
@@ -754,7 +758,7 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
 fn timed_waiter(guest: &mut Guest, timed: &[Thread], pause: std::time::Duration) -> Thread {
     let mem = crate::guest::memory_view(&guest.memory);
     let deadline = |t: &Thread| read_u64(mem, entry(t.index) + E_DEADLINE);
-    let chosen = if read_u64(mem, MONITOR_DATA + CLOCK_MODE) == 2 {
+    let chosen = if read_u64(mem, guest.served.vcpu.monitor + CLOCK_MODE) == 2 {
         let first = timed.iter().min_by_key(|t| (deadline(t), t.tid)).unwrap().clone();
         let (at, now) = (deadline(&first), counter_now(guest));
         if at > now {
@@ -822,10 +826,13 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     // `_save_thread` (3467-3479)
     let mem = crate::guest::memory_view(&guest.memory);
     let (from, to) = (entry(cur.index), entry(next.index));
-    let (executed, pauses) = (read_u64(mem, MONITOR_DATA), read_u64(mem, MONITOR_DATA + PAUSE_COUNT));
+    let (executed, pauses) = (
+        read_u64(mem, guest.served.vcpu.monitor),
+        read_u64(mem, guest.served.vcpu.monitor + PAUSE_COUNT),
+    );
     let (begun, begun_pauses) = (
-        read_u64(mem, MONITOR_DATA + SLICE_COUNT),
-        read_u64(mem, MONITOR_DATA + SLICE_PAUSES),
+        read_u64(mem, guest.served.vcpu.monitor + SLICE_COUNT),
+        read_u64(mem, guest.served.vcpu.monitor + SLICE_PAUSES),
     );
     write_u64(
         mem,
@@ -837,22 +844,22 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
         from + E_PAUSES,
         read_u64(mem, from + E_PAUSES) + pauses - begun_pauses,
     );
-    write_u64(mem, MONITOR_DATA + SLICE_COUNT, executed);
-    write_u64(mem, MONITOR_DATA + SLICE_PAUSES, pauses);
+    write_u64(mem, guest.served.vcpu.monitor + SLICE_COUNT, executed);
+    write_u64(mem, guest.served.vcpu.monitor + SLICE_PAUSES, pauses);
     for (i, r) in x.iter().enumerate() {
         write_u64(mem, from + E_X + 8 * i as u64, *r);
     }
-    let state = MONITOR_SIZE + STATE_OFF;
+    let state = guest.served.vcpu.state;
     for (p, (a, b)) in E_MONITOR_AT.iter().zip(PER_THREAD_MONITOR) {
-        let data = bytes(mem, MONITOR_DATA + a, b - a);
+        let data = bytes(mem, guest.served.vcpu.monitor + a, b - a);
         put(mem, from + E_MONITOR + p, &data);
     }
     let data = bytes(mem, state, STATE_SIZE);
     put(mem, from + E_STATE, &data);
     write_u64(mem, from + E_VCPU, 0);
     // `set_current` (3323-3326)
-    write_u64(mem, MONITOR_DATA + CURRENT, next.index);
-    write_u64(mem, MONITOR_DATA + CURRENT_ENTRY, MONITOR_VA + to);
+    write_u64(mem, guest.served.vcpu.monitor + CURRENT, next.index);
+    write_u64(mem, guest.served.vcpu.monitor + CURRENT_ENTRY, MONITOR_VA + to);
     // `_load_thread` (3487-3498)
     if !matches!(read_u64(mem, to + E_VCPU), 0 | 1) {
         return Err(format!(
@@ -862,12 +869,12 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     }
     for (p, (a, b)) in E_MONITOR_AT.iter().zip(PER_THREAD_MONITOR) {
         let data = bytes(mem, to + E_MONITOR + p, b - a);
-        put(mem, MONITOR_DATA + a, &data);
+        put(mem, guest.served.vcpu.monitor + a, &data);
     }
     let data = bytes(mem, to + E_STATE, STATE_SIZE);
     put(mem, state, &data);
-    write_u64(mem, MONITOR_DATA + SLICE_COUNT, executed);
-    write_u64(mem, MONITOR_DATA + SLICE_PAUSES, pauses);
+    write_u64(mem, guest.served.vcpu.monitor + SLICE_COUNT, executed);
+    write_u64(mem, guest.served.vcpu.monitor + SLICE_PAUSES, pauses);
     write_u64(mem, to + E_VCPU, 1);
     for (i, r) in x.iter_mut().enumerate() {
         *r = read_u64(mem, to + E_X + 8 * i as u64);
@@ -1085,13 +1092,16 @@ pub fn set_budget(guest: &mut Guest) {
     // a process of a machine shares the vCPU's time with the others too (Sprint 197)
     let shared = guest.served.threads.len() > 1 || guest.served.link.is_some();
     let mem = crate::guest::memory_view(&guest.memory);
-    let (executed, max_steps) = (read_u64(mem, MONITOR_DATA), read_u64(mem, MONITOR_DATA + RUN_END));
+    let (executed, max_steps) = (
+        read_u64(mem, guest.served.vcpu.monitor),
+        read_u64(mem, guest.served.vcpu.monitor + RUN_END),
+    );
     let limit = if shared {
         max_steps.min(executed + TIME_SLICE)
     } else {
         max_steps
     };
-    write_u64(mem, MONITOR_DATA + 8, limit);
+    write_u64(mem, guest.served.vcpu.monitor + 8, limit);
 }
 
 /// `_slice_until` (2756-2780) for one vCPU, one process, no lockstep, forced stop or pending wake: 0 when the current
@@ -1133,11 +1143,11 @@ pub fn slice_until(guest: &Guest) -> u64 {
     let Some(deadline) = deadline else {
         return u64::MAX;
     };
-    if read_u64(mem, MONITOR_DATA + CLOCK_MODE) != 2 {
+    if read_u64(mem, guest.served.vcpu.monitor + CLOCK_MODE) != 2 {
         return 0;
     }
     let (rate, warp) = (
-        read_u64(mem, MONITOR_DATA + CLOCK_RATE),
+        read_u64(mem, guest.served.vcpu.monitor + CLOCK_RATE),
         read_u64(mem, RUN_TABLE + CLOCK_WARP),
     );
     // the count whose clock reaches the deadline, rounded down
@@ -1215,7 +1225,7 @@ pub(crate) mod tests {
     #[test]
     fn a_timed_waiter_is_readied_as_the_frozen_host_readies_one() {
         use super::{BLOCKED, CLOCK_MODE, CLOCK_RATE, CLOCK_WARP, E_DEADLINE, E_STATUS, READY, entry, timed_waiter};
-        use super::{MONITOR_DATA, RUN_TABLE, read_u64, write_u64};
+        use super::{RUN_TABLE, read_u64, write_u64};
         use std::time::Duration;
 
         let (mut g, _) = guest_with_a_thread();
@@ -1229,9 +1239,9 @@ pub(crate) mod tests {
                 write_u64(g.memory_view(), entry(t.index) + E_DEADLINE, d);
             }
             let mem = g.memory_view();
-            write_u64(mem, MONITOR_DATA + CLOCK_MODE, 2);
-            write_u64(mem, MONITOR_DATA + CLOCK_RATE, 1_400_000_000);
-            write_u64(mem, MONITOR_DATA, 1_400_000_000); // one second: the clock reads 10,000,000
+            write_u64(mem, g.served.vcpu.monitor + CLOCK_MODE, 2);
+            write_u64(mem, g.served.vcpu.monitor + CLOCK_RATE, 1_400_000_000);
+            write_u64(mem, g.served.vcpu.monitor, 1_400_000_000); // one second: the clock reads 10,000,000
             write_u64(mem, RUN_TABLE + CLOCK_WARP, 0);
         };
         let status = |g: &crate::guest::Guest, t: &super::Thread| read_u64(g.memory_view(), entry(t.index) + E_STATUS);
@@ -1258,7 +1268,7 @@ pub(crate) mod tests {
         assert_eq!(warp(&g), 0, "a deadline already passed moves no clock");
 
         set(&mut g, 30_000_000, 20_000_000);
-        write_u64(g.memory_view(), MONITOR_DATA + CLOCK_MODE, 0);
+        write_u64(g.memory_view(), g.served.vcpu.monitor + CLOCK_MODE, 0);
         assert_eq!(
             timed_waiter(&mut g, &both, Duration::ZERO).tid,
             a.tid,
@@ -1274,12 +1284,12 @@ pub(crate) mod tests {
     #[test]
     fn requests_three_and_four_answer_as_the_frozen_host() {
         use crate::host_request::{HostError, unimplemented};
-        use guest_runtime::layout::{HEAP_VA, MONITOR_SIZE, STATE_OFF};
+        use guest_runtime::layout::HEAP_VA;
 
         let (mut g, _) = guest_with_a_thread();
         let names = guest_runtime::services::api_names(&g.services).unwrap();
         let at = g.layout.offset(HEAP_VA).unwrap() as usize;
-        let slot = (MONITOR_SIZE + STATE_OFF + 8 * 4) as usize;
+        let slot = (g.served.vcpu.state + 8 * 4) as usize;
         let mem = g.memory.as_mut_slice();
         mem[slot..slot + 8].copy_from_slice(&HEAP_VA.to_le_bytes());
         mem[at..at + 8].copy_from_slice(&0x1_4000_1234u64.to_le_bytes());

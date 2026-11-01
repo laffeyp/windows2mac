@@ -5,7 +5,7 @@
 //! The case runner and the run loop call the same function, so the case runner's judged cases judge what the run loop
 //! runs.
 
-use guest_runtime::layout::{MONITOR_DATA, MONITOR_SIZE, SAVE_AREA, STATE_OFF};
+use guest_runtime::layout::SAVE_AREA;
 use hypervisor::{HvError, Reg, Vcpu};
 
 use crate::cases::{AF_OPERANDS, DF_BYTE, FLAG_BIT, FLAG_REG, PF_RESULT, X87_ST_OFF, X87_SW_OFF, YMM_HI_OFF};
@@ -88,7 +88,7 @@ pub fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> 
     if ins.ops.iter().any(|op| matches!(op, translator::lift::Op::Cpuid)) {
         return Ok(ModelStep::Refused);
     }
-    let md = MONITOR_DATA;
+    let md = guest.served.vcpu.monitor;
     let mut x = [0u64; 31];
     for (k, v) in x.iter_mut().enumerate() {
         *v = vcpu.reg(Reg::X(k as u8))?;
@@ -135,7 +135,7 @@ pub fn model_step(guest: &mut Guest, vcpu: &Vcpu<'_>, code: &[u8], rip: u64) -> 
     }
     // the x87 state as `_slow_sse` reads it (4293-4298): FSW and the abridged tags from the state block, ST(i) in FXSAVE
     // order, physical register (TOP + i) & 7
-    let st = MONITOR_SIZE + STATE_OFF;
+    let st = guest.served.vcpu.state;
     th.x87_sw = u16::from_le_bytes(array(mem, st + X87_SW_OFF));
     th.x87_tags = array::<1>(mem, st + X87_SW_OFF + 2)[0];
     let top = usize::from(th.x87_sw >> 11 & 7);

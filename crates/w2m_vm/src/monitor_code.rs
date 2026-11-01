@@ -17,6 +17,9 @@ use guest_runtime::layout::{
 
 use crate::assembler::{Assembler, Target};
 use crate::concurrent_memory::ConcurrentGuestMemory;
+
+/// vCPU 0's monitor data page, which the monitor area is written with at load (Sprint 313)
+const FIRST: u64 = crate::VcpuPages::FIRST.monitor;
 use crate::{CPSR_EL1H, DISPATCHER, VECTORS};
 
 /// VM_COMPILER + this (Sprint 247): the virtual counter's ticks the miss stub spent calling `w2m_vm_compile`, summed
@@ -164,10 +167,10 @@ pub fn host_take_runtime_word_waiting(
     }
 }
 
-/// The exiting vCPU's owner in the runtime word, its `LOCK_OWNER` word in its monitor data (Sprint 296: the one read of
-/// it, the run loop's and the scheduler's).
-pub fn vcpu_owner(mem: ConcurrentGuestMemory<'_>) -> u32 {
-    u32::try_from(mem.read_u64(MONITOR_DATA + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0)
+/// The exiting vCPU's owner in the runtime word, its `LOCK_OWNER` word in its monitor data page at `monitor` (Sprint
+/// 296: the one read of it, the run loop's and the scheduler's; Sprint 313: the vCPU's own page).
+pub fn vcpu_owner(mem: ConcurrentGuestMemory<'_>, monitor: u64) -> u32 {
+    u32::try_from(mem.read_u64(monitor + LOCK_OWNER) & 0xFFFF_FFFF).unwrap_or(0)
 }
 
 /// Whether the runtime word is held by the host or by the vCPU whose owner is `own` (Sprint 294): what a service that
@@ -903,7 +906,7 @@ pub fn write(mem: &mut [u8], symbols: &BTreeMap<String, u64>, options: Options) 
         .iter()
         .flat_map(|q| q.to_le_bytes())
         .collect();
-    mem[MONITOR_DATA as usize..MONITOR_DATA as usize + 24].copy_from_slice(&header);
+    mem[FIRST as usize..FIRST as usize + 24].copy_from_slice(&header);
     write_words(mem, VECTORS, &vectors());
     let (d, miss_va) = dispatcher(symbols, options);
     write_words(mem, DISPATCHER, &d);
@@ -1139,13 +1142,13 @@ mod tests {
     /// monitor data, and not the words beside it.
     #[test]
     fn the_owner_is_the_monitor_datas_lock_owner_word() {
-        use super::{LOCK_OWNER, MONITOR_DATA, vcpu_owner};
-        let mut page = vec![0u64; ((MONITOR_DATA + LOCK_OWNER) / 8 + 2) as usize];
-        let at = ((MONITOR_DATA + LOCK_OWNER) / 8) as usize;
+        use super::{FIRST, LOCK_OWNER, vcpu_owner};
+        let mut page = vec![0u64; ((FIRST + LOCK_OWNER) / 8 + 2) as usize];
+        let at = ((FIRST + LOCK_OWNER) / 8) as usize;
         page[at - 1] = 7;
         page[at] = 0xFFFF_FFFF_0000_0003;
         page[at + 1] = 9;
-        assert_eq!(vcpu_owner(view(&mut page)), 3);
+        assert_eq!(vcpu_owner(view(&mut page), FIRST), 3);
     }
 
     /// Sprint 275: the take does not wait for the vCPU whose exit it serves, which holds the word across a host

@@ -9,9 +9,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use guest_runtime::layout::{
     COMMAND_LINE_OFF, CURRENT_DIRECTORY_OFF, ENVIRONMENT_OFF, ENVIRONMENT_SIZE, HEAP_VA, INHERIT_OFF,
-    KERNEL32_IMAGE_OFF, KERNELBASE_IMAGE_OFF, LOADER_DATA_OFF, LOADER_DATA_SIZE, MONITOR_DATA, NTDLL_IMAGE_OFF,
-    PEB_OFF, PROCESS_VA, RING_OFF, RING_SIZE, STATE_OFF, SYSTEM_IMAGES, SYSTEM_IMAGES_OFF, TEB_OFF, TRACE_OFF,
-    TRACE_RECORD, TRACE_RECORDS_OFF,
+    KERNEL32_IMAGE_OFF, KERNELBASE_IMAGE_OFF, LOADER_DATA_OFF, LOADER_DATA_SIZE, NTDLL_IMAGE_OFF, PEB_OFF, PROCESS_VA,
+    RING_OFF, RING_SIZE, STATE_OFF, SYSTEM_IMAGES, SYSTEM_IMAGES_OFF, TEB_OFF, TRACE_OFF, TRACE_RECORD,
+    TRACE_RECORDS_OFF,
 };
 use pe_loader::Loaded;
 
@@ -272,7 +272,7 @@ pub fn write(
     system_modules: &BTreeSet<String>,
 ) -> Result<ProcessArea, ProcessError> {
     let err = |m: String| Err(ProcessError(m));
-    let md = MONITOR_DATA;
+    let md = crate::VcpuPages::FIRST.monitor; // vCPU 0's page; card 4c2b copies the set-once words
     let mode = if start.clock_from_host {
         1
     } else if start.instruction_clock.is_some() {

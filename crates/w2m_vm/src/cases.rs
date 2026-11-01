@@ -16,7 +16,7 @@ use cpu_cases::{
 };
 use guest_runtime::layout::{
     DISPATCH_ENTRIES, DISPATCH_TABLE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE,
-    STATE_OFF, TRANSPORT_OFF, VECTOR_SLOTS, VM_COMPILER,
+    TRANSPORT_OFF, VECTOR_SLOTS, VM_COMPILER,
 };
 use hypervisor::{Exit, HvError, Reg, Vcpu};
 use pe_loader::{Loaded, Memory};
@@ -233,7 +233,7 @@ fn vm_ymm_hi(guest: &Guest) -> [u128; 16] {
     let mem = guest.memory_view();
     std::array::from_fn(|i| {
         let mut b = [0u8; 16];
-        mem.read(MONITOR_DATA + YMM_HI_OFF + 16 * i as u64, &mut b);
+        mem.read(guest.served.vcpu.monitor + YMM_HI_OFF + 16 * i as u64, &mut b);
         u128::from_le_bytes(b)
     })
 }
@@ -242,8 +242,8 @@ fn vm_ymm_hi(guest: &Guest) -> [u128; 16] {
 /// (Sprint 065).
 fn vm_x87(guest: &Guest) -> X87State {
     let mem = guest.memory_view();
-    let md = MONITOR_DATA + FCW_OFF;
-    let st = MONITOR_SIZE + STATE_OFF;
+    let md = guest.served.vcpu.monitor + FCW_OFF;
+    let st = guest.served.vcpu.state;
     let sw = bytes(mem, st + X87_SW_OFF, 3);
     X87State {
         cw: u16::from_le_bytes(bytes(mem, md, 2).try_into().unwrap()),
@@ -379,7 +379,7 @@ pub fn run_cases(
     compile: Compile<'_>,
 ) -> Result<Tally, HvError> {
     let started = Instant::now();
-    let md = MONITOR_DATA;
+    let (md, st) = (guest.served.vcpu.monitor, guest.served.vcpu.state);
     let mut tally = Tally::default();
     {
         let mem = crate::guest::memory_view(&guest.memory);
@@ -535,14 +535,11 @@ pub fn run_cases(
             // set_x87 (2060-2065): FCW in the monitor data, the status word, tags and ST0-ST7 in the state block
             if let Some(x) = c.x87 {
                 mem.write(md + FCW_OFF, &x.cw.to_le_bytes());
-                let sw = MONITOR_SIZE + STATE_OFF + X87_SW_OFF;
+                let sw = st + X87_SW_OFF;
                 mem.write(sw, &x.sw.to_le_bytes());
                 mem.write(sw + 2, &[x.tags]);
                 for (k, r) in x.st.iter().enumerate() {
-                    mem.write(
-                        MONITOR_SIZE + STATE_OFF + X87_ST_OFF + 16 * k as u64,
-                        &r.to_le_bytes()[..10],
-                    );
+                    mem.write(st + X87_ST_OFF + 16 * k as u64, &r.to_le_bytes()[..10]);
                 }
             }
         }
@@ -575,7 +572,13 @@ pub fn run_cases(
             if e.hvc_immediate() == Some(HVC_FAULT_GIVE_BACK as u16) {
                 // a guest fault left its block (5205-5208, 5294-5296): the faulting instruction and those after it go
                 // back to the budget and the count is written, then on to w2m_exception
-                exit_count(vcpu, guest.memory_view(), &tails, GiveBack::Fault)?;
+                exit_count(
+                    vcpu,
+                    guest.memory_view(),
+                    guest.served.vcpu.monitor,
+                    &tails,
+                    GiveBack::Fault,
+                )?;
                 *tally.host_requests.entry(HOST_GIVE_BACK).or_default() += 1;
                 continue;
             }
@@ -583,7 +586,13 @@ pub fn run_cases(
                 // the model (Sprint 173; `_slow_sse`, vm_backend 5203-5210 and 5270-5271): the exit's give-back and
                 // count, then one step; a step the slice refuses is counted below, not judged
                 let pc = vcpu.reg(Reg::Pc)?;
-                exit_count(vcpu, guest.memory_view(), &tails, GiveBack::Model { pc })?;
+                exit_count(
+                    vcpu,
+                    guest.memory_view(),
+                    guest.served.vcpu.monitor,
+                    &tails,
+                    GiveBack::Model { pc },
+                )?;
                 given_back = true;
                 match model_step(guest, vcpu, &c.code, CODE_VA)? {
                     ModelStep::Resumed | ModelStep::Raised => {
@@ -657,7 +666,13 @@ pub fn run_cases(
                 // a model step this slice refuses (SSE, MMX, x87, VEX: the next slices): counted, not judged; its
                 // exit's give-back and count as the run loop's
                 if !given_back {
-                    exit_count(vcpu, guest.memory_view(), &tails, GiveBack::Model { pc })?;
+                    exit_count(
+                        vcpu,
+                        guest.memory_view(),
+                        guest.served.vcpu.monitor,
+                        &tails,
+                        GiveBack::Model { pc },
+                    )?;
                 }
                 tally.model += 1;
                 *tally.model_by_class.entry(iclass.to_string()).or_default() += 1;

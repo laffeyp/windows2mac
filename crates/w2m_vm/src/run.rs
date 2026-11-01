@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use guest_runtime::layout::{
     CODE_CACHE, CODE_CACHE_SIZE, DISPATCH_TABLE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, PROCESS_VA, RUN_ENTRY,
-    RUN_TABLE, RUNTIME_IMAGE, RUNTIME_IMAGE_SIZE, SLICE_UNTIL, STATE_OFF, TEB_OFF, TRANSPORT_OFF, VM_COMPILER, VMC_LOG,
+    RUN_TABLE, RUNTIME_IMAGE, RUNTIME_IMAGE_SIZE, SLICE_UNTIL, TEB_OFF, TRANSPORT_OFF, VM_COMPILER, VMC_LOG,
     VMC_LOG_ENTRY,
 };
 use hypervisor::{Exit, HvError, Reg, Vcpu};
@@ -19,7 +19,9 @@ use pe_loader::Loaded;
 use crate::CPSR_EL1H;
 use crate::compile::HostCompiler;
 use crate::concurrent_memory::ConcurrentGuestMemory;
-use crate::guest::{Guest, HVC_SCHEDULE, RT_IN_VM, STATE_SCHEDULE, VMC_COUNT_NAMES, VMC_COUNTS, VMC_ENABLED};
+use crate::guest::{
+    Guest, HVC_SCHEDULE, RT_IN_VM, STATE_SCHEDULE, VMC_COUNT_NAMES, VMC_COUNTS, VMC_ENABLED, VcpuPages,
+};
 use crate::host_request::{HOST_THREAD, THREAD_END, THREAD_EXIT_CODE, THREAD_EXIT_STUB};
 use crate::monitor::set_system_registers;
 use crate::monitor_code::{
@@ -85,14 +87,14 @@ pub enum GiveBack {
 }
 
 /// An exit outside the runtime (5198-5208): the budget left in x23, with the exit's give-back, then the count (limit -
-/// left) written to the monitor data.
+/// left) written to the vCPU's monitor data page at `md` (Sprint 313).
 pub fn exit_count(
     vcpu: &Vcpu<'_>,
     mem: ConcurrentGuestMemory<'_>,
+    md: u64,
     tails: &Tails,
     give_back: GiveBack,
 ) -> Result<(), HvError> {
-    let md = MONITOR_DATA;
     let limit = mem.read_u64(md + 8);
     let mut left = vcpu.reg(Reg::X(REG_BUDGET as u8))?;
     match give_back {
@@ -517,8 +519,8 @@ fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
             "the word before the block's body at 0x{body:x} is 0x{subs:08x}, not its SUBS"
         ));
     }
-    let count = mem.read_u64(MONITOR_DATA);
-    mem.write_u64(MONITOR_DATA, count - u64::from(subs >> 10 & 0xFFF));
+    let count = mem.read_u64(guest.served.vcpu.monitor);
+    mem.write_u64(guest.served.vcpu.monitor, count - u64::from(subs >> 10 & 0xFFF));
     Ok(())
 }
 
@@ -589,8 +591,10 @@ pub fn flush_through_stub(vcpu: &Vcpu, counts: &FlushCounts) -> Result<(), Strin
     Ok(())
 }
 
-fn take_word(mem: ConcurrentGuestMemory<'_>, outside: &mut u64) -> bool {
-    let own = crate::monitor_code::vcpu_owner(mem);
+/// The runtime word taken for the host, by the vCPU whose monitor data page is at `monitor`, a hold found outside the
+/// word counted in `outside`; true when the host took it.
+fn take_word(mem: ConcurrentGuestMemory<'_>, monitor: u64, outside: &mut u64) -> bool {
+    let own = crate::monitor_code::vcpu_owner(mem, monitor);
     let took = crate::monitor_code::host_take_runtime_word(mem, own);
     let holder = mem
         .atomic_u32(RUN_TABLE + crate::monitor_code::RUNTIME_LOCK)
@@ -658,16 +662,19 @@ impl<'a> GuestLock<'a> {
         self.mapping
     }
 
-    /// The shared state for a served exit: the runtime word asserted held, by the host or by this vCPU, before the lock
-    /// is taken (the guest-memory design's choice 6: the word outermost). A lock its holder left poisoned by a panic is
-    /// taken as that holder left it, the panic reported where it happened.
-    pub fn serve(&self) -> std::sync::MutexGuard<'_, Shared<'a>> {
+    /// The shared state for a served exit of the vCPU whose pages are `pages`: the runtime word asserted held, by the
+    /// host or by that vCPU, before the lock is taken (the guest-memory design's choice 6: the word outermost); then
+    /// the guest's `served.vcpu` set to `pages`, so the service reads that vCPU's own words (Sprint 313). A lock its
+    /// holder left poisoned by a panic is taken as that holder left it, the panic reported where it happened.
+    pub fn serve(&self, pages: VcpuPages) -> std::sync::MutexGuard<'_, Shared<'a>> {
         let mem = self.view();
         assert!(
-            crate::monitor_code::runtime_word_held(mem, crate::monitor_code::vcpu_owner(mem)),
+            crate::monitor_code::runtime_word_held(mem, crate::monitor_code::vcpu_owner(mem, pages.monitor)),
             "a served exit's lock taken without the runtime word"
         );
-        self.shared.lock().unwrap_or_else(|e| e.into_inner())
+        let mut held = self.shared.lock().unwrap_or_else(|e| e.into_inner());
+        held.guest.served.vcpu = pages;
+        held
     }
 
     /// The shared state outside a served exit, no other thread able to hold the lock (one vCPU, or the threads joined).
@@ -698,6 +705,7 @@ fn turn<'l, 'a>(
     state.clock = crate::threads::counter_now(held.guest);
     let mut link = held.guest.served.link.take();
     let mut objects = std::mem::take(&mut held.guest.served.kernel);
+    let pages = held.guest.served.vcpu;
     drop(held);
     if took {
         crate::monitor_code::host_release_runtime_word(lock.view());
@@ -714,9 +722,9 @@ fn turn<'l, 'a>(
         None => Ok((false, 0, 1)),
     };
     if took {
-        take_word(lock.view(), outside);
+        take_word(lock.view(), pages.monitor, outside);
     }
-    let mut held = lock.serve();
+    let mut held = lock.serve(pages);
     held.guest.served.kernel = objects;
     held.guest.served.link = link;
     let handed = back.map(|(wake, machine, processes)| {
@@ -745,7 +753,7 @@ fn run(
     max_steps: u64,
     mut host: Option<&mut HostCompiler>,
 ) -> Result<Outcome, HvError> {
-    let md = MONITOR_DATA;
+    let (pages, md) = (VcpuPages::FIRST, VcpuPages::FIRST.monitor); // one vCPU, the first (Sprint 313)
     let first = Thread {
         // the start's thread id, a child's from the Machine (`_first_tid`, vm_backend 2497; Sprint 206: it was 4)
         tid: guest.start.tid,
@@ -915,9 +923,9 @@ fn run(
         let pc = vcpu.reg(Reg::Pc)?;
         // the in-VM compiler's log drained, and the exit counted with the tails the drain notes, under the runtime word
         // and the lock (Sprints 275 and 311): another vCPU's compile appends to the log and the tails under the word
-        let took = crate::monitor_code::host_take_runtime_word(mem, crate::monitor_code::vcpu_owner(mem));
+        let took = crate::monitor_code::host_take_runtime_word(mem, crate::monitor_code::vcpu_owner(mem, md));
         let counted = {
-            let mut held = lock.serve();
+            let mut held = lock.serve(pages);
             let s = &mut *held;
             vm_compiled(mem, &mut s.records, s.host.as_deref_mut());
             if runtime.contains(&pc) {
@@ -932,7 +940,7 @@ fn run(
                 };
                 let none = Tails::default();
                 let tails = s.host.as_deref().map_or(&none, |h| &h.tails);
-                exit_count(vcpu, mem, tails, give_back)
+                exit_count(vcpu, mem, md, tails, give_back)
             }
         };
         if took {
@@ -982,9 +990,9 @@ fn run(
             // a write faulted: behind translated code? (5297-5299) Under the runtime word (Sprint 294): it changes the host
             // compiler's tables, and whether this vCPU holds the word here is not established
             let address = vcpu.reg(Reg::X(17))?;
-            let took = take_word(lock.view(), &mut out.served_outside_word);
+            let took = take_word(lock.view(), md, &mut out.served_outside_word);
             let written = {
-                let mut held = lock.serve();
+                let mut held = lock.serve(pages);
                 let s = &mut *held;
                 let Some(h) = s.host.as_deref_mut() else {
                     unreachable!("a run compiling holds the host's compiler")
@@ -1008,7 +1016,7 @@ fn run(
             }
             // the requests the Rust host serves (`_host_request`, 5244-5256): on at the hvc's return, or the end; the
             // guest's own hold of the word
-            let mut held = lock.serve();
+            let mut held = lock.serve(pages);
             let Shared { guest, records, .. } = &mut *held;
             let guest: &mut Guest = guest;
             let threads = guest.served.threads.len();
@@ -1082,7 +1090,7 @@ fn run(
             // a service handed the vCPU over, and threads.c `w2m_switch` left it to the host (5300-5303): `_schedule`,
             // then the next thread's registers at the dispatcher (5077-5094), its vectors swapped as the monitor's
             // `vswap` swaps them
-            let at = MONITOR_SIZE + STATE_OFF + u64::from(STATE_SCHEDULE);
+            let at = pages.state + u64::from(STATE_SCHEDULE);
             let bits = mem.read_u32(at);
             mem.write_u32(at, 0);
             let mut x = [0u64; 31];
@@ -1091,8 +1099,8 @@ fn run(
             }
             // under the runtime word (Sprint 294): the switch stub released it before `hvc #12`, and the scheduler
             // changes the threads and the turn, which another vCPU's services change under it
-            let took = take_word(lock.view(), &mut out.served_outside_word);
-            let mut held = lock.serve();
+            let took = take_word(lock.view(), md, &mut out.served_outside_word);
+            let mut held = lock.serve(pages);
             let from = crate::threads::current_tid(held.guest);
             let mut switched = crate::threads::schedule(held.guest, &mut x, bits);
             // no thread ready in a process of a machine: the turn goes to the others until one is (Sprint 197)
@@ -1185,8 +1193,8 @@ fn run(
             }
             // under the runtime word (Sprint 294): a slice's end comes from a translated block, which holds nothing,
             // and the budget, the wakes and the scheduler change the threads and the turn; released once, after
-            let took = take_word(lock.view(), &mut out.served_outside_word);
-            let mut held = lock.serve();
+            let took = take_word(lock.view(), md, &mut out.served_outside_word);
+            let mut held = lock.serve(pages);
             let switched: Result<Option<Switch>, Stop> = 'slice: {
                 crate::threads::set_budget(held.guest);
                 crate::threads::wake_expired(held.guest);
@@ -1260,9 +1268,9 @@ fn run(
             let thunk = vcpu.reg(Reg::X(17))?;
             let rsp = vcpu.reg(Reg::X(4))?;
             // the record written under the word and the lock (Sprint 311), the run stopping after
-            let took = take_word(lock.view(), &mut out.served_outside_word);
+            let took = take_word(lock.view(), md, &mut out.served_outside_word);
             let stop = {
-                let mut held = lock.serve();
+                let mut held = lock.serve(pages);
                 let guest = &mut *held.guest;
                 let name = guest
                     .served
@@ -1290,8 +1298,8 @@ fn run(
         // the install or compile and the dispatch insert under the runtime word (Sprint 286): they write the code cursor,
         // the reconstruction table and the dispatch table, which the in-VM compiler and the installer write holding the
         // word, and the miss stub released it before `hvc 1`; released on every path before the loop goes on or stops
-        let took = take_word(lock.view(), &mut out.served_outside_word);
-        let mut held = lock.serve();
+        let took = take_word(lock.view(), md, &mut out.served_outside_word);
+        let mut held = lock.serve(pages);
         let Shared { guest, host, records } = &mut *held;
         let guest: &mut Guest = guest;
         let served: Result<u64, Stop> = 'serve: {
@@ -1477,7 +1485,9 @@ mod tests {
         let (mut g, tid) = crate::threads::tests::guest_with_a_thread();
         let lock = super::GuestLock::new(&mut g, None);
         host_release_runtime_word(lock.view());
-        let free = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(lock.serve())));
+        let free = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            drop(lock.serve(crate::guest::VcpuPages::FIRST))
+        }));
         let why = free.expect_err("a served exit with the word free");
         assert_eq!(
             why.downcast_ref::<&str>(),
@@ -1485,6 +1495,12 @@ mod tests {
         );
         assert!(lock.shared.try_lock().is_ok(), "the lock left taken by a refused serve");
         assert!(host_take_runtime_word(lock.view(), 0));
-        assert!(lock.serve().guest.served.threads.contains_key(&tid));
+        assert!(
+            lock.serve(crate::guest::VcpuPages::FIRST)
+                .guest
+                .served
+                .threads
+                .contains_key(&tid)
+        );
     }
 }

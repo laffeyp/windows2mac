@@ -47,6 +47,7 @@ mod run_loop;
 mod skeleton_gate;
 mod slice_calls;
 mod unmapped_image_faults;
+mod vcpu_pages;
 // the `virtual_memory` crate's name, which `use virtual_memory::…` in the file means
 #[path = "virtual_memory.rs"]
 mod virtual_memory_arena;

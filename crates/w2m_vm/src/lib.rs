@@ -76,6 +76,22 @@ pub const FLUSH_STUB: u64 = 0x02010;
 pub const FLUSH_STUB_END: u64 = FLUSH_STUB + 4 * 5;
 /// The native helper operands (vm_backend 126): 32 bytes the skeleton's calls write their results to.
 pub const NATIVE_OPERANDS: u64 = 0x300;
+
+/// The memory offsets of one vCPU's own pages (`docs/design-each-vcpus-own-pages-2026-10-31.md`; Sprint 313): its
+/// monitor data page and its state block, which every vCPU reaches at the same guest address. The host reads a vCPU's
+/// own words only through these; vCPU 0's are the layout's, and card 4c2b puts each later vCPU's in its slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VcpuPages {
+    pub monitor: u64,
+    pub state: u64,
+}
+
+impl VcpuPages {
+    pub const FIRST: VcpuPages = VcpuPages {
+        monitor: guest_runtime::layout::MONITOR_DATA,
+        state: guest_runtime::layout::MONITOR_SIZE + guest_runtime::layout::STATE_OFF,
+    };
+}
 /// AttrIndx 0 (MAIR byte 0 = 0xFF, Normal write-back), inner shareable, the access flag (vm_backend 352).
 pub const PAGE_ATTRIBUTES: u64 = (3 << 8) | (1 << 10);
 /// FP/SIMD at EL1 and EL0 not trapped (vm_backend 351).

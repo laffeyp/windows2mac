@@ -676,8 +676,8 @@ pub struct Guest {
     pub served: Served,
 }
 
-/// The part of a guest a served exit writes after load: the design's 22 Served fields (Sprint 302), which the run
-/// loop's card 2b puts behind a lock taken only under the runtime word.
+/// The part of a guest a served exit writes after load: the design's 24 Served fields (Sprints 302, 304 and 313),
+/// which the run loop's card 2b puts behind a lock taken only under the runtime word.
 pub struct Served {
     pub process: ProcessArea,
     /// thunk address -> "DLL!Name": the loader's, then those the COM vtables made
@@ -731,7 +731,11 @@ pub struct Served {
     /// the valid blocks `page_descriptor` has made tables (Sprint 304): the run loop resumes the vCPU through
     /// `FLUSH_STUB` while this is ahead of its flushes
     pub splits: u64,
+    /// the pages of the vCPU whose exit is served (Sprint 313): set by the run's lock as each served exit takes it
+    pub vcpu: VcpuPages,
 }
+
+pub use crate::VcpuPages;
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
 /// Through the view (Sprint 278): no reference into guest memory.
@@ -963,6 +967,7 @@ impl Guest {
                 files: None,
                 unimplemented: None,
                 splits: 0,
+                vcpu: VcpuPages::FIRST,
             },
         }
         .with_trace(start)
@@ -1145,7 +1150,7 @@ impl Guest {
     pub fn called_service(&self) -> Option<(u64, Option<String>)> {
         let mem = self.memory_view();
         let word = |at: u64| mem.read_u64(at);
-        let rsp = word(MONITOR_SIZE + STATE_OFF + 8 * 4);
+        let rsp = word(self.served.vcpu.state + 8 * 4);
         let ret = word(self.layout.offset(rsp)?);
         let name = (|| {
             let at = self.layout.offset(ret.checked_sub(6)?)?;
@@ -1270,7 +1275,7 @@ impl Guest {
         let word = |mem: ConcurrentGuestMemory<'_>, at: u64| mem.read_u64(at);
         if word(self.memory_view(), t) != 0 {
             let mem = self.memory_view();
-            let rsp = word(mem, MONITOR_SIZE + STATE_OFF + 8 * 4);
+            let rsp = word(mem, self.served.vcpu.state + 8 * 4);
             // the Python's `self.mem.read(rsp, 8)` raises on an unmapped RSP (Sprint 194; reviewer-2's Low 1)
             let caller = match self.layout.offset(rsp) {
                 Some(off) => word(mem, off),
