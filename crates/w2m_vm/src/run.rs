@@ -755,8 +755,10 @@ fn run(
         let returned = Instant::now();
         // the exit ledger's row for the last exit, the count and warp as this exit finds them, before its own refresh,
         // as the frozen host's fixture reads them at `serve_exit`'s entry: a bridge stores the count into the word as
-        // the guest enters a service, so the word read before the resume lags it (Sprint 207)
-        if let Some(l) = &mut guest.exit_ledger {
+        // the guest enters a service, so the word read before the resume lags it (Sprint 207). The flush stub's exit is
+        // the host's own TLB maintenance, which the frozen host never took, and has no row (Sprint 304)
+        let flushed = exit.hvc_immediate() == Some(HVC_TLB_FLUSHED as u16);
+        if !flushed && let Some(l) = &mut guest.exit_ledger {
             let view = crate::guest::memory_view(&guest.memory);
             let warp = view.read_u64(RUN_TABLE + crate::process::CLOCK_WARP);
             // the ledger hashes the process area from a slice: a diagnostic of one-vCPU runs, where the one vCPU is
@@ -814,7 +816,7 @@ fn run(
             let tails = host.as_deref().map_or(&none, |h| &h.tails);
             exit_count(vcpu, mem, tails, give_back)?;
         }
-        if guest.exit_ledger.is_some() {
+        if !flushed && guest.exit_ledger.is_some() {
             // the row: kind, x86 site (the dispatch target for hvc 1, else the hvc's), and a request's op and arguments
             let site = match exit.hvc_immediate() {
                 Some(1) => vcpu.reg(Reg::X(17))?,

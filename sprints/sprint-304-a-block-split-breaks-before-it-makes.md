@@ -104,6 +104,12 @@ No valid block becomes a table without first being invalid with every vCPU's TLB
   recorded, `w2m-vm` reporting no counter of `Outcome`'s kind; the gates on 07e802849 showed otherwise, failing
   `batch_run.rs` and `batch_record.rs` on the batch run's exits, which the held stop file lists by `hvc` number and
   now holds `hvc 15\t35` (`store/batch_run/first-stop-2026-10-28.tsv`), no other figure moved.
+- **The class the new exit moved, found by two gates runs and closed by one search:** the gates on bdea165fa failed
+  `exit_ledger.rs`: the exit ledger compares the two hosts' exits row by row, and each `hvc #15`, which the frozen
+  host never took, shifted every row after it, 29 held differences becoming 581. The flush stub's exit, the host's own
+  TLB maintenance, has no ledger row now (`run.rs`, its two ledger sites). Each gates run had stopped at its first
+  failures, so the batch-run step and every test depending on `w2m_vm` ran again with `--no-fail-fast`: 180 of 180
+  passed, nothing else in the class moved.
 - **A gap the form leaves, found by the audit after the commit:** the table is written before the flush, so the
   requesting vCPU's own TLB may hold the block for the stub's first two instructions while a speculative walk loads
   the table's entry, an UNPREDICTABLE pair; the Arm order needs the request's page writes after the flush. Stated in
