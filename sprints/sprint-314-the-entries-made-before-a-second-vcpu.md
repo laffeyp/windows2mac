@@ -80,3 +80,23 @@ makes every private table once and refuses a later entry.
 
 ## result
 
+- **The writers read** (the design's new section, "The copied tables after load"): `Guest::page_descriptor` creates no
+  table for an invalid entry and writes an upper table only to split a block; no 1 GB block lies under 0xFE or 0xFF,
+  the monitor and process areas' IPAs not being 1 GB multiples (`tables.rs` 48-56) and the loader's regions mapped a
+  page at a time; `map_pages` writes level-3 descriptors of arena addresses (`VIRTUAL_VA`, level-0 entries 0 and 1);
+  `protect_code` returns at or above `PROCESS_VA` and below it writes tables under level-1 0x1E0, which no private
+  chain copies; the block compiler's `protect` writes level 3 only, below `PROCESS_VA` and outside the monitor area;
+  LoadLibrary's images go into the arena (`modules.rs` 181) and late system images into the process area's
+  `SYSTEM_IMAGES_OFF` pages, mapped at load (`modules.rs` 112, `process.rs` 555).
+- **The list:** no entry needs making at load, 0 tables, so the slot's 32 pages and the shared table area are
+  unaffected. Reviewer-3's case, a late system DLL mapped at `DLL_BASE`, does not arise in this code; the risk it named
+  stays guarded by a refusal in `page_descriptor`, before any write: a split at level 0 or 1 under 0xFE or 0xFF, or a
+  split or leaf inside the monitor area's or the process area's first gigabyte. The design's card 2 names the refusal
+  and its plant.
+- **Expected values:** `design_check` passing, "7 plans and designs state the goal and the systems".
+- **Plant 1,** restored by `cp` and checked by `cmp`: "six threads" struck from the goal section. The first form struck
+  one spelling and `design_check` passed, the section's next sentence opening "Six threads", which the check reads
+  lowercased; struck in both, `design_check` exit 1, "docs/design-each-vcpus-own-pages-2026-10-31.md: \"## Against
+  the goal\" does not state six threads".
+- **The gates:** GATES-LINE
+

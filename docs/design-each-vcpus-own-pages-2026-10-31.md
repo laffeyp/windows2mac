@@ -62,6 +62,40 @@ for the guest's requests, the block compiler's level-3 writes in `block_compiler
 write guest-address tables, shared by every chain; a run-time write into a private chain's range is refused by an
 assertion, which the build card puts in the descriptor writer.
 
+## The copied tables after load
+
+*Amended 2026-10-31 (Sprint 314; reviewer-3's Medium 1 at 312):* a private chain's level-0, level-1 and level-2
+tables, and its three level-3 tables, are copies of the shared tables made at a vCPU's creation; an entry the shared
+tables gain after it never reaches the copy. The tables copied: the level-0 table; the level-1 tables of entries 0xFE
+(`MONITOR_VA`) and 0xFF (`PROCESS_VA`, `DLL_BASE`, `TLS_VA`, `LOADER_STUB`); the level-2 tables of the monitor area's
+first gigabyte and the process area's (level-1 0x1F8); the level-3 tables of the 2 MB ranges holding the monitor data
+page, the runtime stack and the state block. Each run-time writer of a descriptor, read for what it can write in them:
+
+- **`Guest::page_descriptor`** (`guest.rs`) walks from the shared root and creates no table where an entry is invalid
+  (it returns 0); its one upper-table write is a split, a block made a table. Under 0xFE and 0xFF no 1 GB block
+  exists: `tables.rs` 48-56 maps 1 GB blocks only where the address, IPA and size are 1 GB multiples, and the monitor
+  area's IPA (`IPA_BASE`, 0x1000_0000) and the process area's (after it) are not; the loader's regions are mapped a
+  page at a time. So no copied level-1 table is written. A 2 MB split in a copied level-2 table would need a split of
+  the monitor or process area's own blocks, which no writer asks: the next three keep below `PROCESS_VA` and out of
+  the monitor area.
+- **`Guest::map_pages`** (`guest.rs`), the guest's mapping requests, writes level-3 descriptors of the addresses the
+  guest asks for, which the VirtualAlloc arena places at `VIRTUAL_VA` (0x10_0000_0000, level-0 entries 0 and 1),
+  never copied.
+- **`HostCompiler::protect_code`** (`compile.rs`) returns for an address at or above `PROCESS_VA`; below it, a guest
+  code page in a DLL at `DLL_BASE` is a level-3 write, or a 2 MB split, in tables under level-1 0x1E0, which the
+  private level-1 copy points at and does not copy.
+- **The block compiler's `protect`** (`block_compiler.c` 89-115) writes only a level-3 descriptor of a page
+  `guest_page` allows, below `PROCESS_VA` and outside the monitor area, and leaves a block to the host.
+- **A DLL loaded after the start:** LoadLibrary's image goes where the arena places it (`modules.rs` 181), and a system
+  image into `PROCESS_VA + SYSTEM_IMAGES_OFF` (`modules.rs` 112, `process.rs` 555), pages mapped at load; neither
+  writes a table under 0xFF. Reviewer-3's case, a late system DLL mapped at `DLL_BASE`, does not arise in this code.
+
+So no entry needs making at load: after load no writer writes a copied table, and the count of tables made ahead is 0.
+The refusal keeps it so: `page_descriptor` refuses, by name and before any write, a split at level 0 or 1 under 0xFE
+or 0xFF, and a split or a leaf's offset inside the monitor area's or the process area's first gigabyte; `map_pages`
+and `protect_code` reach their writes through it. The build card's plant: a split asked inside the process area's
+gigabyte, which the refusal names.
+
 ## Not decided here
 
 - **The instruction clock on two vCPUs.** `process.c` 45 reads the clock from `monitor_word(0)`, the running vCPU's
@@ -75,11 +109,11 @@ assertion, which the build card puts in the descriptor writer.
    passed to the 123 reads; vCPU 0's today's offsets. Judge: every run as held; a plant that gives the run a base one
    page off, which the qpc run's stop names.
 2. **4c2b, each vCPU's private chain.** At a vCPU's creation past the first: its 8 tables and 18 pages in its slot,
-   the set-once words copied, its `TTBR0_EL1`; the private-range assertion in the descriptor writer; the instruction
-   clock refused on more than one vCPU, by name. Judge: raw AArch64 on two vCPUs reading the monitor data page's
-   first word at one address and seeing each its own (Sprint 104's judge); `TTBR0_EL1.CnP` read 0 on each; a page
-   mapped by the guest on vCPU 1 after vCPU 0 touched its range, read on both. Plant: the second vCPU given vCPU 0's
-   table, the first judge failing.
+   the set-once words copied, its `TTBR0_EL1`; the refusal of "The copied tables after load" in `page_descriptor`;
+   the instruction clock refused on more than one vCPU, by name. Judge: raw AArch64 on two vCPUs reading the monitor
+   data page's first word at one address and seeing each its own (Sprint 104's judge); `TTBR0_EL1.CnP` read 0 on each;
+   a page mapped by the guest on vCPU 1 after vCPU 0 touched its range, read on both. Plants: the second vCPU given
+   vCPU 0's table, the first judge failing; a split asked inside the process area's gigabyte, the refusal naming it.
 3. **4c3, the threads** (the run-loop design's card 4), after both.
 
 ## Against the goal
