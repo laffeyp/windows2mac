@@ -544,35 +544,108 @@ pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
 }
 
 /// What a parked vCPU waits on (the run-loop design's "A vCPU with no thread"; Sprint 319): a count of changes that may
-/// let a vCPU take a thread, which every readying notifies, outside the run's lock so a parked vCPU waits holding none.
+/// let a vCPU take a thread, which every readying notifies, and of the vCPUs parked (Sprint 320), outside the run's lock
+/// so a parked vCPU waits holding none.
 #[derive(Default, Debug)]
 pub struct Sched {
-    changes: std::sync::Mutex<u64>,
+    counts: std::sync::Mutex<Counts>,
     changed: std::sync::Condvar,
 }
 
+#[derive(Default, Debug)]
+struct Counts {
+    changes: u64,
+    parked: u64,
+    /// a deadlock declared by the vCPU whose quiet second ran out, which every parked vCPU then ends on
+    deadlock: bool,
+}
+
+/// How a parked vCPU's wait ended (Sprint 320; the Python host's Sprint 120, `docs/design-several-vcpus-2026-10-17.md`
+/// 176-192).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Woken {
+    /// a change: a thread readied, a wake the guest asked for, or the run's stop
+    Changed,
+    /// the earliest deadline of a blocked thread came: expired waits are made ready before the vCPU takes
+    Deadline,
+    /// every vCPU of the run parked, none with a deadline, and a second with no change
+    Deadlock,
+}
+
 impl Sched {
-    /// A change: a thread readied, or a wake the guest asked for.
+    /// A change: a thread readied, a wake the guest asked for, or the run's stop.
     pub fn notify(&self) {
-        let mut changes = self.changes.lock().unwrap_or_else(|e| e.into_inner());
-        *changes += 1;
+        let mut counts = self.counts.lock().unwrap_or_else(|e| e.into_inner());
+        counts.changes += 1;
         self.changed.notify_all();
     }
 
     /// The count of changes so far, read before a park so a change after it is not missed.
     pub fn changes(&self) -> u64 {
-        *self.changes.lock().unwrap_or_else(|e| e.into_inner())
+        self.counts.lock().unwrap_or_else(|e| e.into_inner()).changes
     }
 
-    /// Waits until the count is past `seen` or `timeout` passes; the count then.
-    pub fn wait_change(&self, seen: u64, timeout: std::time::Duration) -> u64 {
-        let changes = self.changes.lock().unwrap_or_else(|e| e.into_inner());
-        let (changes, _) = self
-            .changed
-            .wait_timeout_while(changes, timeout, |c| *c == seen)
-            .unwrap_or_else(|e| e.into_inner());
-        *changes
+    /// Parks one of the run's `vcpus` vCPUs until a change past `seen`, until `deadline`, or, when every vCPU is
+    /// parked and none has a deadline, for one second with no change. A wait with neither has no timeout of its own:
+    /// the run's stop notifies (the design's card 4c3b2), as the Python host's waiter waited for its run's timeout.
+    pub fn park(&self, seen: u64, deadline: Option<std::time::Instant>, vcpus: u64) -> Woken {
+        const QUIET: std::time::Duration = std::time::Duration::from_secs(1);
+        let mut counts = self.counts.lock().unwrap_or_else(|e| e.into_inner());
+        counts.parked += 1;
+        // the second with no change starts when every vCPU is parked with no deadline; a change ends the park
+        let mut quiet_since: Option<std::time::Instant> = None;
+        let woken = loop {
+            if counts.changes != seen {
+                break Woken::Changed;
+            }
+            if counts.deadlock {
+                break Woken::Deadlock;
+            }
+            let now = std::time::Instant::now();
+            if deadline.is_some_and(|d| now >= d) {
+                break Woken::Deadline;
+            }
+            let all = deadline.is_none() && counts.parked == vcpus;
+            if !all {
+                quiet_since = None;
+            }
+            let since = all.then(|| *quiet_since.get_or_insert(now));
+            if since.is_some_and(|s| now >= s + QUIET) {
+                // the whole run's deadlock: every parked vCPU, some waiting with no timeout, ends on it
+                counts.deadlock = true;
+                self.changed.notify_all();
+                break Woken::Deadlock;
+            }
+            counts = match deadline.or(since.map(|s| s + QUIET)) {
+                Some(until) => {
+                    let wait = until.saturating_duration_since(now);
+                    self.changed
+                        .wait_timeout(counts, wait)
+                        .unwrap_or_else(|e| e.into_inner())
+                        .0
+                }
+                None => self.changed.wait(counts).unwrap_or_else(|e| e.into_inner()),
+            };
+        };
+        counts.parked -= 1;
+        woken
     }
+}
+
+/// The earliest deadline of a blocked, unsuspended thread, as an `Instant` on the host's clock (Sprint 320), the
+/// guest's counter in 100 ns units (`counter_now`); none when no blocked thread has one.
+pub fn park_deadline(guest: &Guest) -> Option<std::time::Instant> {
+    let mem = crate::guest::memory_view(&guest.memory);
+    let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
+    let earliest = guest
+        .served
+        .threads
+        .values()
+        .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
+        .map(|t| word(t, E_DEADLINE))
+        .min()?;
+    let ahead = earliest.saturating_sub(counter_now(guest));
+    Some(std::time::Instant::now() + std::time::Duration::from_nanos(ahead.saturating_mul(100)))
 }
 
 /// What a hand-over leaves to run.
@@ -1421,7 +1494,8 @@ pub(crate) mod tests {
         let guest = std::sync::Mutex::new(g);
         let (woken, taken) = std::thread::scope(|s| {
             let parked = s.spawn(|| {
-                let woken = sched.wait_change(seen, Duration::from_secs(5)) != seen;
+                let woken = sched.park(seen, Some(std::time::Instant::now() + Duration::from_secs(5)), 2)
+                    == super::Woken::Changed;
                 let mut g = guest.lock().unwrap();
                 g.served.vcpu = second;
                 (woken, take(&mut g, &mut [0u64; 31]).unwrap())
@@ -1447,6 +1521,81 @@ pub(crate) mod tests {
             (read_u64(mem, entry(ts[1].index) + E_VCPU), waiting(mem)),
             (2, 0),
             "the taken thread claimed by owner 2, the vCPU no longer waiting"
+        );
+    }
+
+    /// A parked vCPU's wait ends three ways (Sprint 320; the Python host's Sprint 120): at its deadline; at a change,
+    /// one of two vCPUs parked with no deadline waiting past the deadlock's second; and as a deadlock only when every
+    /// vCPU of the run is parked with no deadline, after one second with no change.
+    #[test]
+    fn a_parked_wait_ends_at_its_deadline_at_a_change_or_in_a_deadlock_of_every_vcpu() {
+        use super::{Sched, Woken};
+        use std::time::{Duration, Instant};
+
+        let sched = Sched::default();
+        let started = Instant::now();
+        let woken = sched.park(sched.changes(), Some(started + Duration::from_millis(50)), 2);
+        let took = started.elapsed();
+        assert_eq!(woken, Woken::Deadline);
+        assert!(
+            took >= Duration::from_millis(50) && took < Duration::from_secs(2),
+            "the deadline's wait took {took:?}"
+        );
+
+        // one of two parked, no deadline: no deadlock, though its second passes; a change ends it
+        let (alone, seen) = (Sched::default(), 0);
+        let woken = std::thread::scope(|s| {
+            let parked = s.spawn(|| alone.park(seen, None, 2));
+            std::thread::sleep(Duration::from_millis(1300));
+            alone.notify();
+            parked.join().unwrap()
+        });
+        assert_eq!(
+            woken,
+            Woken::Changed,
+            "one of two vCPUs parked with no deadline ended its wait"
+        );
+
+        // both of two parked, no deadline, no change: a deadlock after one second
+        let both = Sched::default();
+        let started = Instant::now();
+        let ends = std::thread::scope(|s| {
+            let a = s.spawn(|| both.park(0, None, 2));
+            let b = s.spawn(|| both.park(0, None, 2));
+            (a.join().unwrap(), b.join().unwrap())
+        });
+        let took = started.elapsed();
+        assert_eq!(ends, (Woken::Deadlock, Woken::Deadlock));
+        assert!(
+            took >= Duration::from_secs(1) && took < Duration::from_secs(3),
+            "the deadlock took {took:?}"
+        );
+    }
+
+    /// The park's deadline is the earliest of the blocked threads' (Sprint 320): of two, one 50 ms ahead on the host's
+    /// clock and one 10 s ahead, the earlier, as an `Instant` within its 50 ms.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn the_parks_deadline_is_the_earliest_blocked_threads() {
+        use super::{BLOCKED, E_DEADLINE, counter_now, entry, park_deadline, set_status, write_u64};
+        use std::time::{Duration, Instant};
+
+        let (mut g, _) = guest_with_a_thread();
+        let start = g.served.threads.values().next().unwrap().start;
+        super::create_thread(&mut g, start, 0, 0, 0, &mut || Ok(())).unwrap();
+        let ts: Vec<super::Thread> = g.served.threads.values().cloned().collect();
+        assert_eq!(park_deadline(&g), None, "no blocked thread, no deadline");
+        let now = counter_now(&g);
+        for (t, ahead) in [(&ts[1], 500_000u64), (&ts[2], 100_000_000)] {
+            set_status(&mut g, t.index, BLOCKED);
+            write_u64(g.memory_view(), entry(t.index) + E_DEADLINE, now + ahead);
+        }
+        let before = Instant::now();
+        let at = park_deadline(&g).expect("a deadline");
+        assert!(
+            at > before && at <= before + Duration::from_millis(60),
+            "the park's deadline {:?} ahead, not the earliest's 50 ms",
+            at - before
         );
     }
 

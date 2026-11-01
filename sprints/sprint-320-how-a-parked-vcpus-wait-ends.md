@@ -21,8 +21,8 @@ no deadline and no notify.
   waiting until a change, the deadline (an `Instant`, fixed, so a spurious wakeup does not re-arm it), or, with every
   vCPU parked and no deadline, one second with no change, and saying which (`Woken::Changed`, `Woken::Deadline`,
   `Woken::Deadlock`); a wait with neither has no timeout of its own, the run's stop notifying `Sched` (written into
-  card 4c3b2's scope in the design, with this card's commit); `threads::park_deadline(guest)`, the earliest deadline of a
-  blocked, unsuspended thread as an `Instant` on the host's clock (the guest's counter in 100 ns units, `counter_now`),
+  card 4c3b2's scope in the design, with this card's commit); `threads::park_deadline(guest)`, the earliest deadline of
+  a blocked, unsuspended thread as an `Instant` on the host's clock (the guest's counter in 100 ns units, `counter_now`),
   none without one; a vCPU woken by its deadline making expired waits ready (`wake_expired`) before it takes. One vCPU
   never parks.
 - **Not here:** `slice_until` past the waiting vCPUs (card 321); the run loop's park (4c3b2).
@@ -50,7 +50,8 @@ no deadline and no notify.
 
 ### Files modified
 
-- `crates/w2m_vm/src/threads.rs`; unit tests of the wait's three ends; the run-loop design's card 4c3b2 (the stop notifies `Sched`)
+- `crates/w2m_vm/src/threads.rs`; unit tests of the wait's three ends; the run-loop design's card 4c3b2 (the stop
+  notifies `Sched`)
 
 ### Command exit codes
 
@@ -79,4 +80,25 @@ A parked vCPU's wait ends by a change, by the earliest deadline, or by a deadloc
 - [x] One concept: one wait and its ends.
 
 ## result
+
+- **The wait** (`threads.rs`): `Sched`'s counts, the changes, the vCPUs parked and a declared deadlock, under one
+  mutex; `Woken` (566), `Changed`, `Deadline` or `Deadlock`; `Sched::park(seen, deadline, vcpus)` (591), its deadline
+  a fixed `Instant`, its quiet second started when every vCPU is parked with no deadline, a wait with neither taking no
+  timeout of its own; `park_deadline` (637), the earliest deadline of a blocked, unsuspended thread on the host's clock
+  from the guest's 100 ns counter. Sprint 319's `wait_change` removed, its test moved to `park`: one way to wait.
+- **Found by the test, a deadlock only one vCPU saw:** the first form ended the park of the vCPU whose second ran out
+  and told no other; the first of two to park, alone then and waiting with no timeout, waited on, and the test run hung
+  past its 600 s bound (stopped by `TaskStop`, no process left). The deadlock is now set in the counts and broadcast
+  (615), and every parked vCPU ends on it, the whole run's deadlock as the Python host's rule has it.
+- **Not built here, moved:** a vCPU woken by its deadline making expired waits ready before it takes is the run loop's
+  park sequence, card 4c3b2's; `wake_expired` exists and is called there.
+- **The unit tests:** `a_parked_wait_ends_at_its_deadline_at_a_change_or_in_a_deadlock_of_every_vcpu` (1531): a park
+  50 ms ahead ends `Deadline` within its bound; one of two parked with no deadline waits past 1.3 s and ends `Changed`
+  at a notify; two of two end `Deadlock` after one second; `the_parks_deadline_is_the_earliest_blocked_threads`
+  (1579): of 50 ms and 10 s ahead, the deadline within 60 ms. With Sprint 319's, ten `threads` tests pass in 2.38 s.
+- **Plant 1,** restored by `cp` and checked by `cmp`: every parked count taken as the whole run (`parked >= 1`); the
+  test failed, "one of two vCPUs parked with no deadline ended its wait", left Deadlock, right Changed.
+- **Plant 2,** restored likewise: the latest deadline (`max`); the test failed, "the park's deadline 9.999999092s
+  ahead, not the earliest's 50 ms".
+- **The gates:** GATES-LINE
 
