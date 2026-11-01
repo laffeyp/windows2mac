@@ -11,3 +11,8 @@ binary_id(w2m_vm::all) & test(/^layout_constants::/)
 binary_id(signal_report::no_python)
 # every crate's tests: each that reads beyond its crate is on this list (Sprint 322)
 binary_id(signal_report::tree_tests)
+# the repository's documents from its root, which `scripts/gates.sh` maps to no crate (Sprint 323): the run-loop design
+binary_id(hypervisor::id_registers)
+binary_id(w2m_vm::all) & test(/^guest_parts::/)
+# the step-5 close, the step-6 census and BLACKBOARD's Deferred
+binary_id(signal_report::census)

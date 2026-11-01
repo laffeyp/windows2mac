@@ -71,7 +71,9 @@ elif touched '^(Cargo\.(toml|lock)|\.cargo/|rust-toolchain\.toml|scripts/sign_an
   # the cargo runner, the toolchain and corpus/ (read by crates/pe_image/tests/llvm_objdump.rs 266) are inputs of every
   # test binary (Sprint 171; reviewer-2's Medium 1: Sprint 168 changed the runner and ran no Rust test)
   rust=all; why="an input outside one crate changed"
-elif [ -n "$crates" ]; then
+# a document three tests read from the repository's root (Sprint 323): a change to it alone runs the list in
+# `scripts/tree-tests.txt`, which holds them, through `scripts/test-filter.sh` with no crate named
+elif [ -n "$crates" ] || touched '^(docs/|BLACKBOARD\.md$)'; then
   rust=crates
 fi
 # the untracked inputs under build/ (the Windows results the case runner judges against; the Python words fixture until

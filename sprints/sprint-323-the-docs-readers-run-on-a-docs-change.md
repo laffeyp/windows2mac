@@ -76,3 +76,20 @@ A change to a document a test reads runs that test in the gates.
 
 ## result
 
+- **The list** (`scripts/tree-tests.txt`): three lines more, `hypervisor::id_registers`, `w2m_vm::all`'s `guest_parts`
+  module and `signal_report::census`; `cargo nextest list -E "$(scripts/test-filter.sh)"` lists their four tests,
+  `the_vcpu_reports_its_bbm_level`, `the_served_part_is_the_designs` and `census`' two.
+- **The test** `tree_tests.rs`: `reaches_beyond` reads a third form, `join("../..")` with a quoted `"docs/` or
+  `"BLACKBOARD.md"`; `the_forms_are_read_and_a_merged_module_is_selected` holds both documents matched and a
+  `temp_dir()` fixture not. Before the list's three lines, `every_tree_test_runs_on_every_change` failed naming exactly
+  the three, `id_registers.rs`, `census.rs` and `guest_parts.rs`; `planted.rs` and `check.rs` not.
+- **The gates** (`scripts/gates.sh` 74-76, `dash -n` passing): a change to `docs/` or `BLACKBOARD.md` takes the
+  `crates` branch with no crate, so `scripts/test-filter.sh` gives the list alone and no doc test runs. With
+  `GATES_CHANGED` the run-loop design alone, `--plan` printed "Rust tests: (binary_id(hypervisor::no_wall_clock_bound))
+  | …", and the same for `BLACKBOARD.md` alone.
+- **Plant 1,** restored by `cp` and checked by `cmp`, the line's number checked non-empty first: `guest_parts`' line
+  struck; the test failed, "tests that read beyond their crate and are not in scripts/tree-tests.txt:
+  [\"crates/w2m_vm/tests/guest_parts.rs\"]".
+- **Plant 2,** restored likewise: the clause `|| touched '^(docs/|BLACKBOARD\.md$)'` taken out; `--plan` for the
+  run-loop design alone printed "Rust tests: none (no crate changed)".
+- **The gates:** GATES-LINE

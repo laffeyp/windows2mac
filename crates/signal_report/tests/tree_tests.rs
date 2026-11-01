@@ -4,8 +4,9 @@
 //! select tests by the crates a change reaches (`rdeps()`), which skips a test of another crate that reads the changed
 //! one's source: Sprint 320's two upper time bounds in `w2m_vm` passed its gates and failed CI on `hypervisor`'s
 //! `no_wall_clock_bound`. `scripts/tree-tests.txt` lists such tests and `scripts/test-filter.sh` adds them to every
-//! selection; this test finds each test file that reaches the crates directory (`join("..")` on its crate's own) or the
-//! whole repository (`git ls-files`), and fails naming any the list does not select.
+//! selection; this test finds each test file that reaches the crates directory (`join("..")` on its crate's own), the
+//! whole repository (`git ls-files`) or a document of the repository's root (`docs/`, `BLACKBOARD.md`; Sprint 323, which
+//! `scripts/gates.sh` maps to no crate), and fails naming any the list does not select.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -28,11 +29,16 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Whether a test file's text reads beyond its crate: the crates directory, or every tracked file.
+/// Whether a test file's text reads beyond its crate: the crates directory, every tracked file, or a document from the
+/// repository's root. A file that writes `docs/` under a scratch directory joins no root and is not one.
 fn reaches_beyond(text: &str) -> bool {
     let crates_dir = ["join(", "\"..\")"].concat();
     let tracked = ["\"ls-files", "\""].concat();
-    text.contains(&crates_dir) || text.contains(&tracked)
+    let repo_root = ["join(", "\"../..\")"].concat();
+    let documents = [["\"docs", "/"].concat(), ["\"BLACKBOARD", ".md\""].concat()];
+    text.contains(&crates_dir)
+        || text.contains(&tracked)
+        || (text.contains(&repo_root) && documents.iter().any(|d| text.contains(d.as_str())))
 }
 
 /// The list's filter lines, comments and blanks left out.
@@ -91,6 +97,10 @@ fn the_forms_are_read_and_a_merged_module_is_selected() {
     assert!(reaches_beyond(&["let c = here.", "join(", "\"..\");"].concat()));
     assert!(reaches_beyond(&["git(root, &[", "\"ls-files", "\", \"--\"])"].concat()));
     assert!(!reaches_beyond("let r = here.join(\"../..\").join(\"store\");"));
+    let root = ["let r = here.", "join(", "\"../..\");"].concat();
+    assert!(reaches_beyond(&[root.as_str(), "\"docs", "/d.md\""].concat()));
+    assert!(reaches_beyond(&[root.as_str(), "\"BLACKBOARD", ".md\""].concat()));
+    assert!(!reaches_beyond(&["let r = temp_dir();", "\"docs", "/d.md\""].concat()));
     let lines = vec!["binary_id(w2m_vm::all) & test(/^layout_constants::/)".to_string()];
     assert!(selected(&lines, "w2m_vm", "layout_constants"));
     assert!(!selected(&lines, "w2m_vm", "vcpu_pages"));
