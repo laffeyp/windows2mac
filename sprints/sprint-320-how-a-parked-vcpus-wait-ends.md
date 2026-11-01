@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 320
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -111,5 +111,5 @@ A parked vCPU's wait ends by a change, by the earliest deadline, or by a deadloc
 - **Plant 3,** restored by `cp` and checked by `cmp`: the old rule put back (`deadline.is_none()` for `timed == 0`); the
   test failed, "a deadlock declared while another parked vCPU's deadline stood", left (Deadlock, Deadlock), right
   (Changed, Deadline).
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 744 s, kept in `store/gates/passes.tsv` as sprint 320 at 86dcbf605 with root=7775b1174 and "rust=crates python=0 samples=0", 191 tests, 658 ns an exit at load 2.87, base=dbe5e7da4, Sprint 319's close, the run on 52387e735 stopped by the audit; multi-vCPU: not run (Python gates not run)
 
