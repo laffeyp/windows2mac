@@ -533,18 +533,11 @@ mod run {
         let vm = Vm::new(40).map_err(|e| format!("{e:?}"))?;
         vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
             .map_err(|e| format!("{e:?}"))?;
-        let vcpu = Vcpu::new(&vm).map_err(|e| format!("{e:?}"))?;
         // a guest's run stops at GUEST_SECONDS, as family_run.py's `run_in_vm` stops a probe at 60 s (`timeout_ms`), so
         // a guest that spins fails by name rather than hanging the gates (Sprint 197); the batch run at GAME_SECONDS,
-        // the bound its record states (Sprint 210)
-        if let Some(seconds) = seconds {
-            let handle = vcpu.handle();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(seconds));
-                let _ = handle.stop();
-            });
-        }
-        let out = run_compiling(guest, loaded, &vcpu, max_steps, host).map_err(|e| format!("{e:?}"))?;
+        // the bound its record states (Sprint 210); the run makes its vCPU and the limit's timer (Sprint 326)
+        let limit = seconds.map(std::time::Duration::from_secs);
+        let out = run_compiling(guest, loaded, &vm, limit, max_steps, host).map_err(|e| format!("{e:?}"))?;
         // the turn's start against an exit's service, the run-loop design's measure of its first form (Sprint 324)
         let at = |ns: &[u64], part: usize| {
             let mut v = ns.to_vec();

@@ -10,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use guest_runtime::layout::{IPA_BASE, RUNTIME_IMAGE_VA, runtime_defines};
-use hypervisor::{Vcpu, Vm, memory};
+use hypervisor::{Vm, memory};
 use pe_loader::load;
 use w2m_vm::guest::{Guest, vm_compiler_symbols};
 use w2m_vm::process::Start;
@@ -49,8 +49,7 @@ fn qpc_runs_to_its_first_declined_block() {
     let vm = Vm::new(40).unwrap();
     vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
         .unwrap();
-    let vcpu = Vcpu::new(&vm).unwrap();
-    let out = run_to_first_decline(&mut guest, &loaded, &vcpu, 1 << 40).unwrap();
+    let out = run_to_first_decline(&mut guest, &loaded, &vm, None, 1 << 40).unwrap();
 
     let text = loaded
         .image

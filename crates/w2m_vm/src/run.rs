@@ -6,14 +6,14 @@
 //! the lines it carries.
 
 use std::collections::BTreeMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use guest_runtime::layout::{
     CODE_CACHE, CODE_CACHE_SIZE, DISPATCH_TABLE, MONITOR_DATA, MONITOR_SIZE, MONITOR_VA, PROCESS_VA, RUN_ENTRY,
     RUN_TABLE, RUNTIME_IMAGE, RUNTIME_IMAGE_SIZE, SLICE_UNTIL, TEB_OFF, TRANSPORT_OFF, VM_COMPILER, VMC_LOG,
     VMC_LOG_ENTRY,
 };
-use hypervisor::{Exit, HvError, Reg, Vcpu};
+use hypervisor::{Exit, HvError, Reg, Vcpu, Vm};
 use pe_loader::Loaded;
 
 use crate::CPSR_EL1H;
@@ -499,10 +499,11 @@ fn vm_compiled(mem: ConcurrentGuestMemory<'_>, records: &mut Records, mut host: 
 pub fn run_to_first_decline(
     guest: &mut Guest,
     loaded: &Loaded,
-    vcpu: &Vcpu<'_>,
+    vm: &Vm,
+    limit: Option<Duration>,
     max_steps: u64,
 ) -> Result<Outcome, HvError> {
-    run(guest, loaded, vcpu, max_steps, None)
+    run(guest, loaded, vm, limit, max_steps, None)
 }
 
 /// As `run_to_first_decline`, with the host compiling the blocks the VM's C declines (Sprint 155: `serve_exit`'s
@@ -754,14 +755,48 @@ fn turn<'l, 'a>(
 pub fn run_compiling(
     guest: &mut Guest,
     loaded: &Loaded,
-    vcpu: &Vcpu<'_>,
+    vm: &Vm,
+    limit: Option<Duration>,
     max_steps: u64,
     host: &mut HostCompiler,
 ) -> Result<Outcome, HvError> {
-    run(guest, loaded, vcpu, max_steps, Some(host))
+    run(guest, loaded, vm, limit, max_steps, Some(host))
 }
 
+/// The run on a thread of its own, inside a scope (Sprint 326; the run-loop design's "The threads"): the thread makes
+/// the vCPU on `vm`, which stays on it (`Vcpu` is neither `Send` nor `Sync`), and runs it; 4c3b2b makes one a vCPU.
+/// With a `limit`, a second thread stops the vCPU through its handle when the limit passes, as `hv_vcpus_exit` from
+/// w2m-vm's GUEST_SECONDS or GAME_SECONDS did (Sprint 197); it waits on a channel the run's thread closes when it ends,
+/// so it leaves at the run's end, and no stop outlives the run to reach a later vCPU given the same id.
 fn run(
+    guest: &mut Guest,
+    loaded: &Loaded,
+    vm: &Vm,
+    limit: Option<Duration>,
+    max_steps: u64,
+    host: Option<&mut HostCompiler>,
+) -> Result<Outcome, HvError> {
+    std::thread::scope(|scope| {
+        let ran = scope.spawn(|| {
+            let vcpu = Vcpu::new(vm)?;
+            // dropped when this thread's run ends, which wakes the timer
+            let (_ended, end) = std::sync::mpsc::channel::<()>();
+            if let Some(limit) = limit {
+                let handle = vcpu.handle();
+                scope.spawn(move || {
+                    if end.recv_timeout(limit) == Err(std::sync::mpsc::RecvTimeoutError::Timeout) {
+                        let _ = handle.stop();
+                    }
+                });
+            }
+            run_on_vcpu(guest, loaded, &vcpu, max_steps, host)
+        });
+        ran.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    })
+}
+
+/// The run's set-up on `vcpu`, its loop, and the outcome gathered at the stop.
+fn run_on_vcpu(
     guest: &mut Guest,
     loaded: &Loaded,
     vcpu: &Vcpu<'_>,

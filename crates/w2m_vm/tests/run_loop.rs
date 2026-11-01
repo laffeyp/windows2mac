@@ -14,6 +14,7 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use cpu_cases::sha256;
 use guest_runtime::layout::{
@@ -137,11 +138,30 @@ fn recon_marks(guest: &Guest) -> Vec<(u64, u64)> {
 
 /// The run, in a VM of its own, with the host compiling.
 fn run(guest: &mut Guest, loaded: &Loaded, host: &mut HostCompiler) -> Outcome {
+    run_limited(guest, loaded, host, None)
+}
+
+/// `run`, stopped at `limit` (Sprint 326: the run makes its vCPU and the limit's timer).
+fn run_limited(guest: &mut Guest, loaded: &Loaded, host: &mut HostCompiler, limit: Option<Duration>) -> Outcome {
     let vm = Vm::new(40).unwrap();
     vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
         .unwrap();
-    let vcpu = Vcpu::new(&vm).unwrap();
-    run_compiling(guest, loaded, &vcpu, 1 << 40, host).unwrap()
+    run_compiling(guest, loaded, &vm, limit, 1 << 40, host).unwrap()
+}
+
+/// Sprint 326: the run's time limit stops its vCPU, the timer started by the run itself; a limit of 0 s stops `qpc`
+/// before it ends (a cancel before the vCPU's first run returns at once, `hv_vcpu.h`), and no limit lets it end. No
+/// upper bound on the wall clock is held (`no_wall_clock_bound`).
+#[test]
+fn the_runs_time_limit_stops_its_vcpu() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let (loaded, mut guest) = guest_for(&root, "qpc");
+    let out = run_limited(&mut guest, &loaded, &mut HostCompiler::default(), Some(Duration::ZERO));
+    assert_eq!(out.stop, Stop::TimeLimit, "qpc with a limit of 0 s");
+    let (loaded, mut guest) = guest_for(&root, "qpc");
+    let out = run_limited(&mut guest, &loaded, &mut HostCompiler::default(), None);
+    assert_eq!(out.stop, Stop::ExitProcess { code: 0 }, "qpc with no limit");
 }
 
 /// The Python host's compiles, (start, end) in order.

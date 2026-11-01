@@ -82,3 +82,24 @@ The run makes and runs its vCPU on a thread of its own, its callers handing it t
 
 ## result
 
+- **The run** (`crates/w2m_vm/src/run.rs`): `run_compiling` and `run_to_first_decline` take `vm: &Vm` and
+  `limit: Option<Duration>` in place of `vcpu: &Vcpu`; `run` opens a `std::thread::scope`, whose thread makes the vCPU
+  (`Vcpu::new(vm)`) and calls `run_on_vcpu`, the set-up, the loop and the outcome as before; a panic on it is resumed
+  on the caller's. With a limit, a second scoped thread waits on a channel with `recv_timeout(limit)` and, on the
+  timeout, stops the vCPU through its handle; the run's thread drops the channel's sender at its end, so the timer
+  leaves then and no stop outlives the run (`on_one_vcpu`'s timer slept the whole limit, detached).
+- **The callers:** `w2m-vm.rs` `on_one_vcpu` hands the `Vm` and `seconds` as a `Duration`; `tests/run_loop.rs`' `run`
+  calls the new `run_limited` with no limit; `tests/first_decline.rs` hands the `Vm`. The two other vCPUs the crate
+  makes (`w2m-vm.rs` 101, the WFE probe; `run_loop.rs` 435, the installer's direct run) do not run the loop and stay.
+- **The test** `run_loop::the_runs_time_limit_stops_its_vcpu`: `qpc` with a limit of 0 s stops as `Stop::TimeLimit`,
+  and with none ends `ExitProcess { code: 0 }`; no upper bound on the wall clock. `run_loop_lock.rs` reads
+  `run_on_vcpu` where it read `run`, the call to `vcpu_loop(&lock, …)` now there.
+- **Every run as held:** `cargo nextest run -E 'rdeps(w2m_vm)'`, 196 tests passed in 410 s; `cargo clippy` with the
+  gates' flags clean.
+- **Plant 1,** `run.rs` copied aside and restored by `cp`, checked by `cmp`: the timer's `let _ = handle.stop();` made
+  `let _ = &handle;`; the test failed, "assertion `left == right` failed: qpc with a limit of 0 s", left
+  `ExitProcess { code: 0 }`.
+- **Plant 2,** restored likewise: `let vcpu = Vcpu::new(vm)?;` moved before `scope.spawn(move || …)`; `cargo check`
+  (its own target directory, `build/target-plant`, beside a test run) failed, "error[E0277]: `*const
+  hypervisor::ffi::HvVcpuExit` cannot be sent between threads safely".
+- **The gates:** GATES-LINE
