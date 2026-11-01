@@ -232,7 +232,13 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    thread per vCPU, the stop, the kick, the merged outcome and the stop flag, `qpc` and `sleeper` on two vCPUs ending as
    on one, a stop while a guest holds the word; 4d, every other vCPU stopped for a locked model step and for a block
    split, the misaligned XCHG race and its plant, a cancel from another thread mid-split (Deferred, Sprint 305); 4e, the
-   race test of the guest-memory design's choice 6 and its step bound.)*
+   race test of the guest-memory design's choice 6 and its step bound.)* *(4c split by rule 6 at Sprint 311's card:
+   4c1, the run's Served state behind `GuestLock` with the guest, `HostCompiler` and the records a served exit or the
+   in-VM compiler's drain writes into `Outcome` (the drain and the exit's count of `tails`, at every exit, missed by
+   Sprint 309's reading), and `turn` letting the guard go, then the word, around the link's wait (Sprint 310's Observation 2,
+   the inversion choice 6 forbids); 4c2, the threads inside `std::thread::scope`, so none outlives the borrows the lock
+   holds (reviewer-3 at 310), the stop, the kick, the merged outcome, the stop flag, and the turn's start's reads
+   measured, the link being out of `Guest` while another vCPU's turn waits.)*
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 
