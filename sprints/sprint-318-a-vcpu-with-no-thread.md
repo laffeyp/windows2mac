@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 318
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -94,6 +94,10 @@ the Python host's built form and the code as it is, before any second thread run
 - **Found, for the plan:** the game starts UnityCrashHandler64.exe, a child, at every batch and play run, so the batch
   run on two vCPUs (G3) waits on card 4f, the Machine on its own thread; the Python host met the same refusal at its
   Sprint 120 and lifted it at 122.
-- **Expected values:** `design_check` passing, "7 plans and designs state the goal and the systems".
-- **The gates:** GATES-LINE
+- **Expected values:** `design_check` passing, "7 plans and designs state the goal and the systems"; the record check
+  passing over the Decision "Architecture: a vCPU with no thread", written at the close.
+- **Plant 1,** restored by `cp` and checked by `cmp`: the Decision's revisit clause struck; the record check failed,
+  "the Decision of 2026-10-31 \"Architecture: a vCPU with no thread (`docs/design-run-loop-o\" holds 1 decision
+  clauses and 0 revisit clauses, not one each".
+- **The gates:** `scripts/gates.sh` exit 0 in 18 s, kept in `store/gates/passes.tsv` as sprint 318 at 8572350ce with root=0ad222f36 and "rust=none python=0 samples=0", no crate changed, base=4db29fa4b, Sprint 317's close; multi-vCPU: not run (Python gates not run)
 
