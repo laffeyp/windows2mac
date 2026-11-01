@@ -1,0 +1,13 @@
+# The tests that read beyond their own crate (Sprint 322; Deferred, Sprint 321): every gates run that runs Rust tests
+# runs these, whatever crate the change reaches, by `scripts/test-filter.sh`. One nextest filter expression a line;
+# `signal_report`'s `every_tree_test_runs_on_every_change` fails naming a test file that reads beyond its crate and is
+# not selected here.
+#
+# every crate's source: no elapsed time held under an upper bound (Sprint 224)
+binary_id(hypervisor::no_wall_clock_bound)
+# every crate's `pub const`, one definition a fact (Sprints 296-297)
+binary_id(w2m_vm::all) & test(/^layout_constants::/)
+# the repository: no Python file, no Python run (Decision "No Python runs")
+binary_id(signal_report::no_python)
+# every crate's tests: each that reads beyond its crate is on this list (Sprint 322)
+binary_id(signal_report::tree_tests)

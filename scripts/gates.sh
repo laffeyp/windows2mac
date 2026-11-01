@@ -94,7 +94,8 @@ records=$(printf '%s\n' "$changed" | sed -n 's|^\(store/runs/[^/]*\)/.*|\1|p' | 
 python=0
 case $rust in
   all) said "Rust tests: all ($why)" ;;
-  crates) said "Rust tests: $(for c in $crates; do printf 'rdeps(%s) | ' "$c"; done | sed 's/ | $//')" ;;
+  # shellcheck disable=SC2086
+  crates) said "Rust tests: $(scripts/test-filter.sh $crates)" ;;
   none) said "Rust tests: none (no crate changed)" ;;
 esac
 [ $samples = 1 ] && said "substrate samples and their plants" || said "substrate samples: not run (no vocabulary, harness or event crate changed)"
@@ -193,7 +194,9 @@ if [ $rust = all ]; then
   W2M_REQUIRE_CASE_RUNS=1 cargo nextest run --cargo-quiet --status-level fail
   cargo test --quiet --doc
 elif [ $rust = crates ]; then
-  filter=$(for c in $crates; do printf 'rdeps(%s) | ' "$c"; done | sed 's/ | $//')
+  # the changed crates' dependents and the tests that read beyond their crate (Sprint 322), one place for both
+  # shellcheck disable=SC2086
+  filter=$(scripts/test-filter.sh $crates)
   W2M_REQUIRE_CASE_RUNS=1 cargo nextest run --cargo-quiet --status-level fail -E "$filter"
   docs=$(for c in $crates; do [ -f "crates/$c/src/lib.rs" ] && printf -- '-p %s ' "$c"; done; true)
   # nextest does not run doc tests (a compile_fail doc test holds Vcpu to !Send, Sprint 157)

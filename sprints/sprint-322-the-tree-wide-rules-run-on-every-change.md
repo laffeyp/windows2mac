@@ -82,3 +82,26 @@ A rule that reads the whole tree runs in every gates run that runs Rust tests, w
 
 ## result
 
+- **The list** (`scripts/tree-tests.txt`): four nextest filter expressions, `hypervisor::no_wall_clock_bound`,
+  `w2m_vm::all`'s `layout_constants` module, `signal_report::no_python`, and `signal_report::tree_tests`, this card's
+  test, itself a reader of every crate's tests; each line's selection checked by `cargo nextest list`: 3, 4 and 5
+  tests for the first three.
+- **The filter** (`scripts/test-filter.sh`, `dash -n` passing): each named crate's `rdeps()` and every list line, the
+  one place the gates' filter is built; `scripts/gates.sh` calls it where it names the selection and where it runs it.
+  For a change to `design_check` alone, `rdeps(design_check)` selects none of the tree tests and the filter all 12 of
+  the first three; `design_check` one of five crates no tree test's crate depends on (`call_compare`, `design_check`,
+  `session_events`, `vocabulary_generator`, `vocabulary_samples`, from `cargo tree`). `pe_image`, the card's example,
+  was the wrong one: `w2m_vm` depends on it, so `rdeps(pe_image)` already reached `layout_constants`.
+- **The test** `signal_report`'s `every_tree_test_runs_on_every_change`: every test file under `crates/*/tests` that
+  joins `".."` onto its crate's directory or reads `git ls-files` must be selected by the list, its own binary or its
+  module in a merged `tests/all.rs`; `the_forms_are_read_and_a_merged_module_is_selected` holds the two forms and the
+  merged selection. A walk from the repository root into `store/` or `probes/` is data, whose changes the gates
+  already widen on (`scripts/gates.sh` 66), and is not this class.
+- **Plant 1,** restored by `cp` and checked by `cmp`: `layout_constants`'s line struck; the test failed, "tests that
+  read beyond their crate and are not in scripts/tree-tests.txt: [\"crates/w2m_vm/tests/layout_constants.rs\"]". Its
+  first run struck every line instead, the `grep` that gave the line's number matching nothing and `sed` with an empty
+  address rewriting the whole file, and named all three; rerun with `grep -F` and the number checked non-empty first.
+- **Plant 2,** restored likewise, its number checked the same way: `no_wall_clock_bound`'s line struck; the listing for
+  a `design_check` change held 0 of it, `layout_constants` still 4.
+- **The gates:** GATES-LINE
+
