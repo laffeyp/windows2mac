@@ -573,7 +573,10 @@ fn qpc_runs_with_its_blocks_installed_inside_the_vm() {
     let (_, mut guest, mut host) = cached_guest(&root, "qpc", true);
     let file = host.cache.as_ref().unwrap().file.clone();
     let start = file.base + u64::from(file.blocks[0].start);
-    assert!(host.code_written(&mut guest, start).unwrap(), "the write was not taken");
+    assert!(
+        host.code_written(&mut guest, start, &mut || Ok(())).unwrap(),
+        "the write was not taken"
+    );
     assert_eq!(
         call_installer(&mut guest, start),
         0,
@@ -589,7 +592,7 @@ fn a_write_to_the_image_code_stops_the_cache() {
     let (loaded, mut guest, mut host) = cached_guest(&root, "qpc", false);
     let entry = loaded.image_entry;
     let va = host
-        .install(&mut guest, entry)
+        .install(&mut guest, entry, &mut || Ok(()))
         .expect("the cache holds the entry's block")
         .unwrap();
     assert_eq!(host.blocks.get(&entry), Some(&va));
@@ -616,14 +619,14 @@ fn a_write_to_the_image_code_stops_the_cache() {
         .find(|p| !entry_pages.contains(p));
     let written = written.unwrap_or_else(|| *entry_pages.iter().next().unwrap()) + 8;
     assert!(
-        host.code_written(&mut guest, written).unwrap(),
+        host.code_written(&mut guest, written, &mut || Ok(())).unwrap(),
         "the write to 0x{written:x} was not taken"
     );
     let cache = host.cache.as_ref().unwrap();
     assert_eq!(cache.stopped_at, Some(written), "the cache did not stop");
     assert!(!host.blocks.contains_key(&entry), "the installed block was not dropped");
     assert!(
-        host.install(&mut guest, other).is_none(),
+        host.install(&mut guest, other, &mut || Ok(())).is_none(),
         "the cache installed after the write"
     );
     let at = page_descriptor(guest.memory.as_slice(), written & !(PAGE - 1)).unwrap();
@@ -670,6 +673,67 @@ fn model_steps_runs_through_the_model_as_the_python_host() {
             "hvc #{number}'s count differs from the Python host's"
         );
     }
+}
+
+/// A block split in the Arm order (Sprint 305; the vCPU reports BBM 0, Sprint 303): when its flush runs, the block's
+/// descriptor is already invalid and not yet the table; after it, the table. The flush here reads the descriptor
+/// through guest memory's address, taken before `page_descriptor` borrows the guest.
+#[test]
+fn a_split_makes_the_block_invalid_before_its_flush_and_the_table_after() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let (_, mut guest) = guest_for(&root, "sleeper");
+    // the first valid 2 MB block the tables hold, found by walking them (levels 0 and 1 tables, level 2 a block)
+    let mem = guest.memory.as_slice();
+    let read = |off: u64| u64::from_le_bytes(mem[off as usize..off as usize + 8].try_into().unwrap());
+    let next = |desc: u64| (desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE;
+    let mut found = None;
+    'walk: for i0 in 0..512u64 {
+        let d0 = read(guest_runtime::layout::TRANSLATION_TABLES + 8 * i0);
+        if d0 & 3 != 3 {
+            continue;
+        }
+        for i1 in 0..512u64 {
+            let d1 = read(next(d0) + 8 * i1);
+            if d1 & 3 != 3 {
+                continue;
+            }
+            for i2 in 0..512u64 {
+                if read(next(d1) + 8 * i2) & 3 == 1 {
+                    found = Some((i0 << 39) | (i1 << 30) | (i2 << 21));
+                    break 'walk;
+                }
+            }
+        }
+    }
+    let va = found.expect("a valid 2 MB block in the tables");
+    let at = block_descriptor(mem, va).expect("its level-2 descriptor");
+    let before = u64::from_le_bytes(
+        guest.memory.as_slice()[at as usize..at as usize + 8]
+            .try_into()
+            .unwrap(),
+    );
+    let base = guest.memory.as_slice().as_ptr() as usize;
+    let mut seen = Vec::new();
+    let mut flush = || {
+        // SAFETY: the mapping outlives the call, and the host alone writes it, with no vCPU running
+        seen.push(unsafe { std::ptr::read_volatile((base + at as usize) as *const u64) });
+        Ok(())
+    };
+    guest.page_descriptor(va, &mut flush).unwrap();
+    let after = u64::from_le_bytes(
+        guest.memory.as_slice()[at as usize..at as usize + 8]
+            .try_into()
+            .unwrap(),
+    );
+    assert_eq!(seen.len(), 1, "one flush a split");
+    assert_eq!(
+        seen[0],
+        before & !1,
+        "at the flush the block is invalid, its other bits kept: 0x{:x}",
+        seen[0]
+    );
+    assert_eq!(after & 3, 3, "after the flush, a table: 0x{after:x}");
 }
 
 #[test]

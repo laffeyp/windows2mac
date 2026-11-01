@@ -561,6 +561,46 @@ fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
 /// `docs/design-run-loop-on-several-vcpus-2026-10-31.md`, "The exits"): whether the host took it, and so must release
 /// it; a vCPU that holds it already (a miss inside the runtime) keeps it. A service found outside it after the take,
 /// the word held neither by the host nor by this vCPU, is counted in `outside`.
+/// What the flush stub's nested runs saw inside a split, which the run loop folds into its outcome (Sprint 305).
+#[derive(Default)]
+pub struct FlushCounts {
+    pub flushes: std::cell::Cell<u64>,
+    pub cancelled: std::cell::Cell<bool>,
+}
+
+/// A block split's flush (Sprint 305; the design's precondition 4): the requesting vCPU, exited for the request, run by
+/// the host from inside the split at `FLUSH_STUB` until its `hvc #15`, which invalidates every vCPU's TLB before the
+/// table is written, then given back its PC, PSTATE and general registers as they were. A second, smaller run loop
+/// (reviewer-3, by message at 304): a vtimer exit runs the stub again with the timer masked, as the run loop masks it; a
+/// cancel, which `hv_vcpus_exit` leaves pending for the next run when the vCPU is out ("it will return immediately
+/// without entering the guest", `hv_vcpu.h` 377-378), runs it again too, noted in `counts` and reported after the split,
+/// so no block is left invalid; any other exit fails the split. x23, the budget, is not touched.
+pub fn flush_through_stub(vcpu: &Vcpu, counts: &FlushCounts) -> Result<(), String> {
+    let e = |e: HvError| format!("the flush stub: {e:?}");
+    let pc = vcpu.reg(Reg::Pc).map_err(e)?;
+    let cpsr = vcpu.reg(Reg::Cpsr).map_err(e)?;
+    let mut x = [0u64; 31];
+    for (i, v) in x.iter_mut().enumerate() {
+        *v = vcpu.reg(Reg::X(i as u8)).map_err(e)?;
+    }
+    vcpu.set_reg(Reg::Pc, MONITOR_VA + crate::FLUSH_STUB).map_err(e)?;
+    loop {
+        match vcpu.run().map_err(e)? {
+            exit if exit.hvc_immediate() == Some(HVC_TLB_FLUSHED as u16) => break,
+            Exit::VtimerActivated => vcpu.set_vtimer_mask(true).map_err(e)?,
+            Exit::Canceled => counts.cancelled.set(true),
+            other => return Err(format!("the flush stub left by {other:?}, not hvc #15")),
+        }
+    }
+    vcpu.set_reg(Reg::Pc, pc).map_err(e)?;
+    vcpu.set_reg(Reg::Cpsr, cpsr).map_err(e)?;
+    for (i, v) in x.iter().enumerate() {
+        vcpu.set_reg(Reg::X(i as u8), *v).map_err(e)?;
+    }
+    counts.flushes.set(counts.flushes.get() + 1);
+    Ok(())
+}
+
 fn take_word(guest: &Guest, outside: &mut u64) -> bool {
     let own = crate::monitor_code::vcpu_owner(guest.memory_view());
     let took = crate::monitor_code::host_take_runtime_word(guest.memory_view(), own);
@@ -704,15 +744,17 @@ fn run(
     let mut marked = None::<Instant>;
     let mut kind = String::new(); // the last exit's kind, whose service `marked` times
     let mut judge_ns = 0u64; // the whole-block judge's part of that service
-    // the PC a vCPU resumed through the flush stub goes back to at `hvc #15` (Sprint 304)
-    let mut flush_return: Option<u64> = None;
-    let flush_stub = MONITOR_VA + crate::FLUSH_STUB..=MONITOR_VA + crate::FLUSH_STUB_END; // its end: the PC after its hvc
+    // what the flush stub's nested runs inside a split saw, folded into the outcome at each turn (Sprint 305)
+    let counts = FlushCounts::default();
     let stop = loop {
-        // a request split a block: the vCPU resumes through the flush stub, which invalidates every vCPU's TLB before
-        // it touches memory again (Sprint 304; the design's precondition 4)
-        if flush_return.is_none() && guest.served.splits > out.flushes {
-            flush_return = Some(vcpu.reg(Reg::Pc)?);
-            vcpu.set_reg(Reg::Pc, *flush_stub.start())?;
+        let flushed = counts.flushes.take();
+        out.flushes += flushed;
+        if flushed > 0 {
+            *out.exits.entry(HVC_TLB_FLUSHED as u16).or_default() += flushed;
+        }
+        // a cancel that came while a split's flush ran, reported once the split was done (Sprint 305)
+        if counts.cancelled.take() {
+            break Stop::TimeLimit;
         }
         // `_before_run` (5129-5141): one vCPU, no other process: the slice's end (`_slice_until`), the VM may switch
         // threads itself; x23 the budget left, outside the runtime's C and the flush stub
@@ -732,7 +774,7 @@ fn run(
             guest
                 .memory_view()
                 .write_u64(RUN_TABLE + u64::from(RT_IN_VM), u64::from(!others_due));
-            if !runtime.contains(&pc) && !flush_stub.contains(&pc) {
+            if !runtime.contains(&pc) {
                 vcpu.set_reg(Reg::X(REG_BUDGET as u8), limit.wrapping_sub(count))?;
             }
         }
@@ -755,10 +797,9 @@ fn run(
         let returned = Instant::now();
         // the exit ledger's row for the last exit, the count and warp as this exit finds them, before its own refresh,
         // as the frozen host's fixture reads them at `serve_exit`'s entry: a bridge stores the count into the word as
-        // the guest enters a service, so the word read before the resume lags it (Sprint 207). The flush stub's exit is
-        // the host's own TLB maintenance, which the frozen host never took, and has no row (Sprint 304)
-        let flushed = exit.hvc_immediate() == Some(HVC_TLB_FLUSHED as u16);
-        if !flushed && let Some(l) = &mut guest.exit_ledger {
+        // the guest enters a service, so the word read before the resume lags it (Sprint 207). A split's flush runs
+        // nested inside its service and never reaches this loop, so it has no row, the frozen host never taking it
+        if let Some(l) = &mut guest.exit_ledger {
             let view = crate::guest::memory_view(&guest.memory);
             let warp = view.read_u64(RUN_TABLE + crate::process::CLOCK_WARP);
             // the ledger hashes the process area from a slice: a diagnostic of one-vCPU runs, where the one vCPU is
@@ -804,7 +845,7 @@ fn run(
         );
         let mem = crate::guest::memory_view(&guest.memory);
         let pc = vcpu.reg(Reg::Pc)?;
-        if !runtime.contains(&pc) && !flush_stub.contains(&pc) {
+        if !runtime.contains(&pc) {
             // the count, from x23, with a fault's give-back (5199-5208); the VM's own blocks' tails this loop does not
             // note yet (2570), the host's compiles' it does
             let give_back = match exit.hvc_immediate().map(u32::from) {
@@ -816,7 +857,7 @@ fn run(
             let tails = host.as_deref().map_or(&none, |h| &h.tails);
             exit_count(vcpu, mem, tails, give_back)?;
         }
-        if !flushed && guest.exit_ledger.is_some() {
+        if guest.exit_ledger.is_some() {
             // the row: kind, x86 site (the dispatch target for hvc 1, else the hvc's), and a request's op and arguments
             let site = match exit.hvc_immediate() {
                 Some(1) => vcpu.reg(Reg::X(17))?,
@@ -855,15 +896,6 @@ fn run(
         if u32::from(number) == HVC_FAULT_GIVE_BACK {
             continue;
         }
-        // the flush stub ran: every vCPU's TLB invalidated after a split; back where the vCPU stopped (Sprint 304)
-        if u32::from(number) == HVC_TLB_FLUSHED {
-            let Some(back) = flush_return.take() else {
-                break Stop::Exit(format!("hvc #15 at pc 0x{pc:x} with no split to flush"));
-            };
-            out.flushes += 1;
-            vcpu.set_reg(Reg::Pc, back)?;
-            continue;
-        }
         if number == HVC_CODE_WRITE as u16
             && let Some(h) = host.as_deref_mut()
         {
@@ -871,7 +903,7 @@ fn run(
             // compiler's tables, and whether this vCPU holds the word here is not established
             let address = vcpu.reg(Reg::X(17))?;
             let took = take_word(guest, &mut out.served_outside_word);
-            let written = h.code_written(guest, address);
+            let written = h.code_written(guest, address, &mut || flush_through_stub(vcpu, &counts));
             if took {
                 crate::monitor_code::host_release_runtime_word(guest.memory_view());
             }
@@ -894,7 +926,7 @@ fn run(
                 mem.read_u64(MONITOR_SIZE + TRANSPORT_OFF + 16),
                 crate::threads::current_tid(guest),
             );
-            let served = crate::host_request::serve(guest, vcpu);
+            let served = crate::host_request::serve(guest, vcpu, &counts);
             if let Some(l) = &mut guest.exit_ledger {
                 let (t, mem) = (MONITOR_SIZE + TRANSPORT_OFF, crate::guest::memory_view(&guest.memory));
                 l.answered(mem.read_u64(t + 48), mem.read_u64(t + 56));
@@ -1151,11 +1183,11 @@ fn run(
                 ) {
                     (Some(va), _) => va,
                     (None, None) => break 'serve Err(Stop::Declined { target }),
-                    (None, Some(h)) => match h.install(guest, target) {
+                    (None, Some(h)) => match h.install(guest, target, &mut || flush_through_stub(vcpu, &counts)) {
                         // a cached block installed (Sprint 257): counted apart, not one of the compiles
                         Some(Ok(va)) => va,
                         Some(Err(why)) => break 'serve Err(Stop::Untranslated { target, why }),
-                        None => match h.compile(guest, target) {
+                        None => match h.compile(guest, target, &mut || flush_through_stub(vcpu, &counts)) {
                             Ok(va) => {
                                 let (start, end) = *h.translations.last().unwrap();
                                 out.translations.push(Translation { start, end, code: va });

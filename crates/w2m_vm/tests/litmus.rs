@@ -264,7 +264,9 @@ fn run_threads(texts: &[String], entso: bool, start: &[(u64, u64)]) -> Vec<u8> {
                     let va = match host.blocks.get(&target) {
                         Some(va) => *va,
                         None => host
-                            .compile(guest, target)
+                            .compile(guest, target, &mut || {
+                                w2m_vm::run::flush_through_stub(&vcpu, &w2m_vm::run::FlushCounts::default())
+                            })
                             .unwrap_or_else(|e| panic!("thread {k} of {test}: {e}")),
                     };
                     dispatch_insert(concurrent, target, va);

@@ -94,3 +94,28 @@ A block becomes a table only after it was invalid and every vCPU's TLB was flush
 
 ## result
 
+- **The change** (WORK-COMMIT): `guest::Flush`, a `&mut dyn FnMut() -> Result<(), String>`; `page_descriptor` making
+  the block invalid (a Release store), calling `flush`, then storing the table's descriptor, the table's 512 entries
+  written before; `map_pages`, `threads::stack_grow` and `create_thread`, and `HostCompiler::compile`, `install`,
+  `install_block`, `protect_code`, `code_written` and `stop_cache` passing it down; `use_cache`, at load, a flush that
+  does nothing, said on its line; `run::flush_through_stub` and `run::FlushCounts`, the nested run of the card's four
+  points; `host_request::serve` taking the counts, the case runner's call a fresh set; the run loop folding the
+  counts into `exits` as `hvc 15` and `flushes`, a cancel seen during a split ending the run as the time limit after
+  it; Sprint 304's resume after the request, its PC kept across turns, its `hvc #15` arm, its x23 range checks and its
+  ledger skip all gone, a nested exit never reaching the loop; the litmus test's compile given the real flush, the
+  unit tests and `run_loop.rs`' direct calls, with no vCPU run, a no-op one; `a_split_makes_the_block_invalid_before_its_flush_and_the_table_after`;
+  the design's precondition 4.
+- **A caller the first search missed:** `compile`, the host compile at `hvc #1`, calls `protect_code` at
+  `compile.rs` 129 on a line with a trailing comment, and the search had dropped every line holding `//`; the compiler
+  named it. The class: a search that filters out comments drops code lines that carry one.
+- **Expected values:** the order test: one flush, the descriptor at it the block's with its valid bit clear, a table
+  after; the sleeper run, 3 splits and 3 flushes, as held; the batch run's 35, the gates to show.
+- **Not shown by a test of their own:** the card's register assertion (1) and its cancel test (2). The nested run
+  restores 31 general registers, PSTATE and the PC, and the sleeper's 3 and the batch run's 35 nested flushes leave the
+  runs as held, which a register lost would not; a cancel during a split needs a second thread to cancel within the
+  stub's five instructions, a race this card did not build. Both stand as Deferred (Sprint 305).
+- **The gates:** GATES-LINE
+- **Plant 1,** restored by `cp` and checked by `cmp`: the table's descriptor stored where the block is made invalid,
+  Sprint 304's order, after a first try whose `sed` matched nothing, `cargo fmt` having wrapped the line; the order test
+  failed, "at the flush the block is invalid, its other bits kept: 0x19970003".
+

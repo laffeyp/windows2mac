@@ -105,7 +105,7 @@ fn page_set_slot(page: u64) -> u64 {
 impl HostCompiler {
     /// `_compile` (4588-4642), not in lockstep and with no translation cache: the block at `start` compiled at the
     /// code cursor, its marks, tails and pages noted. Err names why it cannot be.
-    pub fn compile(&mut self, guest: &mut Guest, start: u64) -> Result<u64, String> {
+    pub fn compile(&mut self, guest: &mut Guest, start: u64, flush: crate::guest::Flush<'_>) -> Result<u64, String> {
         open_trace(guest, start);
         let mut insns: Vec<Lifted> = Vec::new();
         let mut addr = start;
@@ -126,7 +126,7 @@ impl HostCompiler {
             }
         }
         let exit_va = guest.code.dispatch_va;
-        self.protect_code(guest, start, addr, None)?; // before the successor scan, which reads the pages it covers
+        self.protect_code(guest, start, addr, None, flush)?; // before the successor scan, which reads the pages it covers
         let live = self.flags_live_out(guest, start, insns.last().unwrap(), addr)?;
         let base = MONITOR_VA + read_u64(crate::guest::memory_view(&guest.memory), VM_COMPILER + VMC_CURSOR);
         // the runtime's functions the words call (`_compile` passes the runtime's symbols, 4618-4619)
@@ -209,7 +209,7 @@ impl HostCompiler {
             .collect();
         let mut guarded = BTreeSet::new();
         for page in pages {
-            let at = guest.page_descriptor(page)?;
+            let at = guest.page_descriptor(page, &mut || Ok(()))?; // at load: no vCPU has run, no TLB to flush
             if at == 0 {
                 continue;
             }
@@ -232,17 +232,28 @@ impl HostCompiler {
     /// The block at `start` from the cache (Sprint 257), relocated to the code cursor, its marks rebased there, its
     /// pages protected and its tails and start recorded as a compile's; not one of `translations`. None when no cache
     /// is in use, a write has stopped it, or it holds no block at `start`.
-    pub fn install(&mut self, guest: &mut Guest, start: u64) -> Option<Result<u64, String>> {
+    pub fn install(
+        &mut self,
+        guest: &mut Guest,
+        start: u64,
+        flush: crate::guest::Flush<'_>,
+    ) -> Option<Result<u64, String>> {
         let cache = self.cache.as_ref().filter(|c| c.stopped_at.is_none())?;
         let rva = u32::try_from(start.checked_sub(cache.file.base)?).ok()?;
         let block = *cache.by_start.get(&rva)?;
-        Some(self.install_block(guest, start, block))
+        Some(self.install_block(guest, start, block, flush))
     }
 
-    fn install_block(&mut self, guest: &mut Guest, start: u64, b: CachedBlock) -> Result<u64, String> {
+    fn install_block(
+        &mut self,
+        guest: &mut Guest,
+        start: u64,
+        b: CachedBlock,
+        flush: crate::guest::Flush<'_>,
+    ) -> Result<u64, String> {
         open_trace(guest, start);
         let base = self.cache.as_ref().unwrap().file.base;
-        self.protect_code(guest, start, base + u64::from(b.end), None)?;
+        self.protect_code(guest, start, base + u64::from(b.end), None, flush)?;
         let file = &self.cache.as_ref().unwrap().file;
         let from = CACHE_CODE_VA + 4 * u64::from(b.word);
         let to = MONITOR_VA + read_u64(crate::guest::memory_view(&guest.memory), VM_COMPILER + VMC_CURSOR);
@@ -292,7 +303,14 @@ impl HostCompiler {
 
     /// `_protect_code` (4535-4551): the pages under guest bytes [start, end) read-only, and the block over them noted
     /// (`owner`, when the bytes are not its own). The thunks and the process area stay as they are.
-    fn protect_code(&mut self, guest: &mut Guest, start: u64, end: u64, owner: Option<u64>) -> Result<(), String> {
+    fn protect_code(
+        &mut self,
+        guest: &mut Guest,
+        start: u64,
+        end: u64,
+        owner: Option<u64>,
+        flush: crate::guest::Flush<'_>,
+    ) -> Result<(), String> {
         let owner = owner.unwrap_or(start);
         if start >= PROCESS_VA {
             return Ok(());
@@ -300,7 +318,7 @@ impl HostCompiler {
         let mut page = start & !(PAGE - 1);
         while page < end {
             if !self.code_pages.contains_key(&page) {
-                let at = guest.page_descriptor(page)?;
+                let at = guest.page_descriptor(page, &mut *flush)?;
                 if at == 0 {
                     page += PAGE;
                     continue;
@@ -386,9 +404,14 @@ impl HostCompiler {
     /// `_code_written` (4554-4577): a write faulted at `address`; when its page is behind translated code, the blocks
     /// over the page are dropped with their dispatch slots and the page made writable again. A write to a page the
     /// cache guards stops the cache first (`stop_cache`). True when either was.
-    pub fn code_written(&mut self, guest: &mut Guest, address: u64) -> Result<bool, String> {
+    pub fn code_written(
+        &mut self,
+        guest: &mut Guest,
+        address: u64,
+        flush: crate::guest::Flush<'_>,
+    ) -> Result<bool, String> {
         let page = address & !(PAGE - 1);
-        let stopped = self.stop_cache(guest, address)?;
+        let stopped = self.stop_cache(guest, address, &mut *flush)?;
         let Some(blocks) = self.code_pages.remove(&page) else {
             return Ok(stopped);
         };
@@ -396,7 +419,7 @@ impl HostCompiler {
         for start in blocks {
             self.drop_block(guest, start);
         }
-        let at = guest.page_descriptor(page)?;
+        let at = guest.page_descriptor(page, flush)?;
         let mem = crate::guest::memory_view(&guest.memory);
         change_descriptor(mem, at, |desc| desc & !AP_READ_ONLY);
         Ok(true)
@@ -422,7 +445,7 @@ impl HostCompiler {
     /// The write rule (Sprint 257): a write at `address`, on a page the cache guards, stops the cache for the rest of
     /// the run, drops every block installed from it, and makes writable again each guarded page no block is behind.
     /// True when it stopped the cache.
-    fn stop_cache(&mut self, guest: &mut Guest, address: u64) -> Result<bool, String> {
+    fn stop_cache(&mut self, guest: &mut Guest, address: u64, flush: crate::guest::Flush<'_>) -> Result<bool, String> {
         let page = address & !(PAGE - 1);
         let Some(cache) = self.cache.as_mut().filter(|c| c.guarded.contains(&page)) else {
             return Ok(false);
@@ -440,7 +463,7 @@ impl HostCompiler {
             self.drop_block(guest, start);
         }
         for p in guarded.into_iter().filter(|p| !self.code_pages.contains_key(p)) {
-            let at = guest.page_descriptor(p)?;
+            let at = guest.page_descriptor(p, &mut *flush)?;
             let mem = crate::guest::memory_view(&guest.memory);
             change_descriptor(mem, at, |desc| desc & !AP_READ_ONLY);
         }

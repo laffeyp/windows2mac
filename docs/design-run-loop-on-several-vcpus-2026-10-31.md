@@ -170,6 +170,10 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    hold the block while a speculative walk, which the architecture allows at any time, loads the table's entry, an
    UNPREDICTABLE pair; the full order, the block invalid, the flush, then the table, needs the request's page writes
    after the flush (`map_pages` writes into the table in the same request). BLACKBOARD Deferred (Sprint 304).)*
+   *(Sprint 305, the Arm order built: the block's descriptor invalid, then the flush, the host running the requesting
+   vCPU from inside the split at `FLUSH_STUB` until `hvc #15` (`run::flush_through_stub`, its PC, PSTATE and general
+   registers kept and given back, a vtimer or a cancel running the stub again, the cancel reported after the split),
+   then the table and its descriptor; the flush passed down to the split's callers. The gap above is closed.)*
 5. Every dispatch writer stores a pair whole: met (Sprint 284).
 6. The host's miss service under the word: met (Sprint 286).
 7. The lock order: the word outermost (the guest-memory design's choice 6); `served` inside it, here.

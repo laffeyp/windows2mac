@@ -627,6 +627,10 @@ pub struct Traced {
     pub strings: String,
 }
 
+/// The flush a block split calls between making the block invalid and writing its table (Sprint 305): the run loop's
+/// run of the requesting vCPU through `FLUSH_STUB`, every vCPU's TLB invalidated; at load, before any vCPU ran, none.
+pub type Flush<'a> = &'a mut dyn FnMut() -> Result<(), String>;
+
 /// A program's guest memory, laid out and written up to its first instruction. Its fields are the Load part, written
 /// while the guest is built and read after; the mapping, `memory`; the diagnostics; and `served`, the part a served exit
 /// writes (`docs/design-run-loop-on-several-vcpus-2026-10-31.md`, "The guest's parts"; Sprint 302).
@@ -1065,7 +1069,7 @@ impl Guest {
     /// `_page_descriptor` (4507-4533): the memory offset of the level-3 descriptor that maps page `va`, a 1 GB or 2 MB
     /// block over it split into the next level's 512 descriptors with the block's attributes; 0 when nothing maps it.
     /// One vCPU: no private regions.
-    pub fn page_descriptor(&mut self, va: u64) -> Result<u64, String> {
+    pub fn page_descriptor(&mut self, va: u64, flush: Flush<'_>) -> Result<u64, String> {
         let mem = memory_view(&self.memory);
         let mut off = TRANSLATION_TABLES;
         for (level, shift) in [(0u32, 39u32), (1, 30), (2, 21)] {
@@ -1088,10 +1092,14 @@ impl Guest {
                 for i in 0..512u64 {
                     mem.write_u64(new + 8 * i, (base + i * (size >> 9)) | attributes | low);
                 }
-                // the table's descriptors before the entry that points at them, for a walker on another vCPU (Sprint
-                // 281). A change of block size needs break-before-make, the vCPU reporting BBM 0 (Sprint 303): it is
-                // made with every other vCPU stopped, and counted, so the run loop resumes this vCPU through the flush
-                // stub, which invalidates every vCPU's TLB before any runs again (Sprint 304; the design's precondition 4)
+                // A change of block size needs break-before-make, the vCPU reporting BBM 0 (Sprint 303), in the Arm
+                // order, with every other vCPU stopped: the block invalid, every vCPU's TLB flushed (`flush`, the run
+                // loop's run of this vCPU through `FLUSH_STUB`), then the table, its descriptors before the entry that
+                // points at them for a walker on another vCPU (Sprint 281), the entry last (Sprint 305; the design's
+                // precondition 4)
+                mem.atomic_u64(at)
+                    .store(desc & !1, std::sync::atomic::Ordering::Release);
+                flush()?;
                 desc = (IPA_BASE + new) | 0x3;
                 mem.atomic_u64(at).store(desc, std::sync::atomic::Ordering::Release);
                 self.served.splits += 1;
@@ -1103,10 +1111,10 @@ impl Guest {
 
     /// `_map_pages` (3152-3159): the pages [start, end) mapped or unmapped in the stage-1 tables (the descriptor's
     /// valid bit). The guest runtime flushes the TLB after the request that changed them.
-    pub fn map_pages(&mut self, start: u64, end: u64, valid: bool) -> Result<(), String> {
+    pub fn map_pages(&mut self, start: u64, end: u64, valid: bool, flush: Flush<'_>) -> Result<(), String> {
         let mut page = start;
         while page < end {
-            let at = self.page_descriptor(page)?;
+            let at = self.page_descriptor(page, &mut *flush)?;
             if at != 0 {
                 // one atomic store: a walker on another vCPU reads the whole descriptor; the runtime then invalidates
                 // the TLB on every vCPU (`runtime.h` 331-335)

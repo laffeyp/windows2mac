@@ -602,7 +602,7 @@ pub fn run_cases(
             }
             let op = read_u64(crate::guest::memory_view(&guest.memory), MONITOR_SIZE + TRANSPORT_OFF);
             *tally.host_requests.entry(op).or_default() += 1;
-            match host_request::serve(guest, vcpu) {
+            match host_request::serve(guest, vcpu, &crate::run::FlushCounts::default()) {
                 Ok(Served::Answered) => {}
                 Ok(Served::Exit(code)) => break Err(Ok(code)),
                 Err(e) => break Err(Err(e.to_string())),

@@ -371,7 +371,7 @@ pub fn unimplemented(guest: &mut Guest, a0: u64, a1: u64) -> HostError {
 /// `_serve_host_request` (3808-3888) for HOST_WRITE, HOST_EXIT, HOST_RUNTIME_FAULT, HOST_MODULE_AT, HOST_EXCEPTION, and
 /// HOST_THREAD's THREAD_CREATE, THREAD_EXIT_STUB, THREAD_END, THREAD_EXIT_CODE and THREAD_STACK_GROW (the main
 /// thread's).
-pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
+pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -> Result<Served, HostError> {
     let (op, a0, a1, a2, a3) = {
         let mem = crate::guest::memory_view(&guest.memory);
         (
@@ -629,12 +629,17 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu) -> Result<Served, HostError> {
         // `threads::stack_grow` (Sprint 213): 1 grown, 0 an access violation
         HOST_THREAD if a0 == THREAD_STACK_GROW => {
             let current = crate::threads::current_tid(guest);
-            crate::threads::stack_grow(guest, current, a1, a2 != 0).map_err(HostError::Failed)?
+            crate::threads::stack_grow(guest, current, a1, a2 != 0, &mut || {
+                crate::run::flush_through_stub(vcpu, counts)
+            })
+            .map_err(HostError::Failed)?
         }
         // `_thread_request` (3190-3192, 3845-3847): the transport's a0 the sub-request, its a1-a3 the request's a0-a2
         HOST_THREAD if a0 == THREAD_CREATE => {
-            crate::threads::create_thread(guest, a1, a2, (a3 & 0xFFFF_FFFF) as u32, a3 >> 32)
-                .map_err(HostError::Failed)?
+            crate::threads::create_thread(guest, a1, a2, (a3 & 0xFFFF_FFFF) as u32, a3 >> 32, &mut || {
+                crate::run::flush_through_stub(vcpu, counts)
+            })
+            .map_err(HostError::Failed)?
         }
         // `_thread_request` (3200-3211, Sprint 157): ExitThread's detach stub, W2mThreadEnd's exit code, a thread's
         // exit code by id

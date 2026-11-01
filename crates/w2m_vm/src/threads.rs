@@ -885,7 +885,13 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
 ///
 /// The frozen host checks the last-page bound inside its loop, so a probe that reaches it commits pages and returns 0
 /// with StackLimit unmoved; here the bound is checked first and nothing changes (the user's rule of 2026-10-29).
-pub fn stack_grow(guest: &mut Guest, tid: u64, address: u64, probe: bool) -> Result<u64, String> {
+pub fn stack_grow(
+    guest: &mut Guest,
+    tid: u64,
+    address: u64,
+    probe: bool,
+    flush: crate::guest::Flush<'_>,
+) -> Result<u64, String> {
     let Some(thread) = guest.served.threads.get(&tid) else {
         return Ok(0);
     };
@@ -916,7 +922,7 @@ pub fn stack_grow(guest: &mut Guest, tid: u64, address: u64, probe: bool) -> Res
             limit - new,
             PAGE_READWRITE,
         );
-        guest.map_pages(new, limit, true)?;
+        guest.map_pages(new, limit, true, flush)?;
         let mut view = GuestView {
             mem: crate::guest::memory_view(&guest.memory),
             layout: &guest.layout,
@@ -945,6 +951,7 @@ pub fn create_thread(
     parameter: u64,
     flags: u32,
     stack_size: u64,
+    flush: crate::guest::Flush<'_>,
 ) -> Result<u64, String> {
     let tid = guest.served.threads.keys().next_back().copied().unwrap_or(0) + 4;
     let program = guest
@@ -994,7 +1001,7 @@ pub fn create_thread(
             PAGE_READWRITE | PAGE_GUARD,
         );
     }
-    guest.map_pages(dealloc, limit, false)?;
+    guest.map_pages(dealloc, limit, false, flush)?;
     let teb = alloc(guest, 0, 0x4000, MEM_COMMIT | MEM_RESERVE, "a thread's TEB")?; // TEB, then TlsExpansionSlots
     let static_tls = thread_static_tls(guest)?;
     let peb = PROCESS_VA + PEB_OFF;
@@ -1173,8 +1180,8 @@ mod tests {
         .unwrap();
         // two threads: the first takes the current thread's id (4) in a guest no run has started, so the second is the
         // one a test reads and changes as another thread
-        super::create_thread(&mut g, loaded.entry, 0, 0, 0).unwrap();
-        let tid = super::create_thread(&mut g, loaded.entry, 0, 0, 0).unwrap();
+        super::create_thread(&mut g, loaded.entry, 0, 0, 0, &mut || Ok(())).unwrap();
+        let tid = super::create_thread(&mut g, loaded.entry, 0, 0, 0, &mut || Ok(())).unwrap();
         (g, tid)
     }
 
@@ -1404,7 +1411,7 @@ mod tests {
         assert_eq!(stack_limit(&g), limit);
         assert_eq!(query(&mut g, limit - PAGE), guarded, "default.query.limit-1");
         // a touch of the first guard page: StackLimit one page down, three guard pages below, reserved below them
-        assert_eq!(stack_grow(&mut g, tid, limit - PAGE + 8, false), Ok(1));
+        assert_eq!(stack_grow(&mut g, tid, limit - PAGE + 8, false, &mut || Ok(())), Ok(1));
         let one = limit - PAGE;
         assert_eq!(stack_limit(&g), one, "default.grow moved_1");
         assert_eq!(g.served.threads[&tid].stack.1, one);
@@ -1414,18 +1421,18 @@ mod tests {
         }
         assert_eq!(query(&mut g, one - 4 * PAGE).0, MEM_RESERVE, "default.grown.limit-4p");
         // a probe two pages below StackLimit: two pages, as two touches would
-        assert_eq!(stack_grow(&mut g, tid, one - 2 * PAGE, true), Ok(1));
+        assert_eq!(stack_grow(&mut g, tid, one - 2 * PAGE, true, &mut || Ok(())), Ok(1));
         let three = one - 2 * PAGE;
         assert_eq!(stack_limit(&g), three, "two pages more");
         // a probe five pages below, past the guard: a probe grows where a touch may not
-        assert_eq!(stack_grow(&mut g, tid, three - 5 * PAGE, true), Ok(1));
+        assert_eq!(stack_grow(&mut g, tid, three - 5 * PAGE, true, &mut || Ok(())), Ok(1));
         let eight = three - 5 * PAGE;
         assert_eq!(stack_limit(&g), eight, "five pages more");
         // a touch below the guard: an access violation, the stack unmoved (row skip)
-        assert_eq!(stack_grow(&mut g, tid, eight - 4 * PAGE, false), Ok(0));
+        assert_eq!(stack_grow(&mut g, tid, eight - 4 * PAGE, false, &mut || Ok(())), Ok(0));
         assert_eq!(stack_limit(&g), eight, "skip: moved 0");
         // a probe that would bring the guard to the reservation's last page: 0 and nothing changed
-        assert_eq!(stack_grow(&mut g, tid, dealloc + PAGE, true), Ok(0));
+        assert_eq!(stack_grow(&mut g, tid, dealloc + PAGE, true, &mut || Ok(())), Ok(0));
         assert_eq!(stack_limit(&g), eight);
         assert_eq!(query(&mut g, eight - 4 * PAGE).0, MEM_RESERVE, "no page committed");
     }
