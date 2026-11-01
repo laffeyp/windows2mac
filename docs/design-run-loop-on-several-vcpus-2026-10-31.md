@@ -208,8 +208,9 @@ the kick, and the Machine refused on several vCPUs until it has its own thread. 
 4c3b1, the park, the wait, the wake and the deadlock (`Switch::Parked`, `Sched`, `RT_WAITING`, `THREAD_WAKE`'s notify,
 `set_status`'s notify, `slice_until` past the waiting), judged by a unit test of two owners and one ready thread, the
 second owner parked and woken by `set_status`; 4c3b2, the vCPU threads in the run loop inside `std::thread::scope`,
-each vCPU past the first with its private chain and `LOCK_OWNER` `k + 1`, the stop, the merged outcome, the stop
-flag, and the Machine refused by name, judged by qpc and sleeper on two vCPUs ending as on one; 4c3b3, the kick, judged
+each vCPU past the first with its private chain and `LOCK_OWNER` `k + 1`, the stop (which notifies `Sched`, so a
+parked vCPU waiting with no deadline ends at the run's stop; Sprint 320), the merged outcome, the stop flag, and the
+Machine refused by name, judged by qpc and sleeper on two vCPUs ending as on one; 4c3b3, the kick, judged
 by the threads family's SuspendThread rows on two vCPUs; 4f, the Machine driven from its own thread (Sprint 122), before
 G3.
 
