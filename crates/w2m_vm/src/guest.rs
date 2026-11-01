@@ -630,16 +630,24 @@ pub struct Traced {
 /// The whole guest behind one lock (Sprint 310; the run-loop design's "How the threads share `Guest`", Sprint 309):
 /// taken once per served exit, inside the runtime word, which `serve` asserts in debug builds before it locks (card 2's
 /// guard). The lock holds the run's borrow of the guest, so `run`'s callers keep theirs and get it back when the lock
-/// is dropped. The word lives in guest memory, so the lock keeps the mapping's pointer, taken once at its creation: the
-/// guest's own `mmap` (`GuestMemory::as_ptr`), not reached through the borrow, live while the borrow is.
+/// is dropped. The word lives in guest memory, so the lock keeps a view of the mapping, made once at its creation from
+/// the guest's own `mmap` (`GuestMemory::as_ptr`), not reached through the borrow; the view is `Sync`, so the vCPU
+/// threads of card 4c can share the lock (`the_lock_is_shared_by_threads` below).
 pub struct GuestLock<'a> {
     guest: std::sync::Mutex<&'a mut Guest>,
-    mapping: (*mut u8, usize),
+    mapping: ConcurrentGuestMemory<'a>,
 }
+
+/// Held at compile time: the lock is `Sync`, the vCPU threads sharing it by `&` (Sprint 310).
+const _: fn() = || {
+    fn the_lock_is_shared_by_threads<T: Sync>() {}
+    the_lock_is_shared_by_threads::<GuestLock<'static>>();
+};
 
 impl<'a> GuestLock<'a> {
     pub fn new(guest: &'a mut Guest) -> GuestLock<'a> {
-        let mapping = (guest.memory.as_ptr(), guest.memory.len());
+        // SAFETY: the guest's own mapping, writable, live while the borrowed guest is, which outlives the lock
+        let mapping = unsafe { ConcurrentGuestMemory::from_raw_parts(guest.memory.as_ptr(), guest.memory.len()) };
         GuestLock {
             guest: std::sync::Mutex::new(guest),
             mapping,
@@ -648,8 +656,7 @@ impl<'a> GuestLock<'a> {
 
     /// The mapping through the view, without the lock.
     pub fn view(&self) -> ConcurrentGuestMemory<'_> {
-        // SAFETY: the guest's own mapping, writable, live while the borrowed guest is, which outlives the lock
-        unsafe { ConcurrentGuestMemory::from_raw_parts(self.mapping.0, self.mapping.1) }
+        self.mapping
     }
 
     /// The guest for a served exit: the runtime word asserted held, by the host or by this vCPU, before the lock is

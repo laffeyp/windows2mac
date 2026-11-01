@@ -78,13 +78,19 @@ without locking, ready for 4c.
 
 ## result
 
-- **The lock** (`guest.rs` 635-671): `GuestLock<'a>`, a `Mutex<&'a mut Guest>` and the mapping's pointer and length,
-  taken from `GuestMemory::as_ptr` at creation; `view()`, the mapping without the lock; `serve()`, which asserts in debug
+- **The lock** (`guest.rs` 636-678): `GuestLock<'a>`, a `Mutex<&'a mut Guest>` and a view of the mapping, made once
+  from `GuestMemory::as_ptr` at creation; `view()`, the mapping without the lock; `serve()`, which asserts in debug
   builds `runtime_word_held(view, vcpu_owner(view))` before it locks and takes a poisoned lock as its holder left it;
   `get_mut()`. **Changed from the scope:** the lock holds the run's borrow, not the guest, and has no `into_inner`:
   `Guest` has no `Default`, so `run` could not move it out of its `&mut Guest` with its callers unchanged; dropping the
-  lock (run.rs 1253) gives the borrow back. A `Mutex<&mut Guest>` is `Sync` where `Guest` is `Send`, which 4c's scoped
-  threads need.
+  lock (run.rs 1253) gives the borrow back. 4c's threads, inside `std::thread::scope` so none outlives the borrow,
+  share the lock by `&`.
+- **The lock made `Sync`, a second work commit:** the first commit (afc8727bc) kept the mapping as `(*mut u8, usize)`,
+  which made `GuestLock` neither `Sync` nor shareable by threads, against the done criteria's "ready for 4c"; a probe
+  crate outside the tree showed `Guest` `Send`, `Mutex<&mut Guest>` `Sync` and `GuestLock` not, for `*mut u8`. The lock
+  now keeps a `ConcurrentGuestMemory<'a>` (`Sync` and `Copy`, `concurrent_memory.rs` 40-50), made once in `new`, so
+  `view()` has no `unsafe`; a compile-time assertion (`the_lock_is_shared_by_threads`, 642-645) holds it `Sync`. The
+  gates of afc8727bc were stopped before their end, no row written.
 - **The run loop** (`run.rs`): the lock made before the loop (773), `get_mut` at its top (775); `take_word` takes the
   lock's view (627), so the word is taken before the lock; `serve()` at `hvc #13` (932, a temporary dropped before the
   word's release), `#8` (950, under the guest's own hold, the loop's `mem` shadowed by the lock's view), `#12` (1033),
@@ -94,14 +100,16 @@ without locking, ready for 4c.
 - **Found for 4c:** `turn` (run.rs 639-648) releases the word for `hand_over`'s wait on the other processes and takes it
   again after, called at `#12` and `#4` with the guard held. With two vCPUs that is a lock-order inversion: a second
   vCPU takes the word in the gap and waits on the lock, while the first holds the lock and waits on the word. On one
-  vCPU no second taker exists. 4c drops the guard across the wait or refuses a machine link on two vCPUs.
+  vCPU no second taker exists. 4c drops the guard across the wait, as choice 6 requires (reviewer-3 at 310).
 - **The unit test** `guest::tests::a_served_exit_takes_the_lock_only_under_the_word`: the word free, `serve()` panics
   "a served exit's lock taken without the runtime word" and leaves the lock free; the host holding it, the guard gives
   the guest, its second thread present.
 - **Plant 1,** restored by `cp` and checked by `cmp`: `hvc #12`'s `serve()` moved before its `take_word`;
   `run_loop::sleeper_creates_and_ends_its_thread_as_the_python_host` failed, panicked at `guest.rs:657:9`, "a served
-  exit's lock taken without the runtime word" (the assertion, 660 once formatted).
+  exit's lock taken without the runtime word" (the assertion, 667 now).
 - **Plant 2,** restored likewise: the assertion removed; the unit test failed, "a served exit with the word free: ()".
+- **Plant 3,** restored likewise: a `PhantomData<*mut u8>` field added to `GuestLock`; the build failed, E0277 at the
+  assertion (644), "`*mut u8` cannot be shared between threads safely".
 - **Deferred (Sprint 298),** read at the start: no change to `struct w2m_state` or a monitor-data slot, G4 not met; the
   three cards stay deferred.
 - **The gates:** GATES-LINE
