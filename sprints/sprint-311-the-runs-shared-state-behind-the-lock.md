@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 311
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -83,10 +83,10 @@ Every part of the run that a served exit writes is behind the one lock, and no w
 
 ## result
 
-
 - **The lock and what it holds** (`run.rs` 605-681): `Records`, the eight records; `Shared`, the guest's borrow, the
   host compiler's borrow and the records; `GuestLock` moved from `guest.rs` to `run.rs`, beside the state it guards,
-  a `Mutex<Shared>` and the mapping's view, `view()` now live as long as the borrow so a view outlives no guard;
+  a `Mutex<Shared>` and the mapping's view, `view()` returning a view as long-lived as the guest's borrow, so a view
+  taken before a guard stays usable after it;
   `into_inner()` hands the records to `Outcome` at the run's end (1342). The compile-time `Sync` assertion holds with
   `HostCompiler` inside.
 - **The run loop:** whether the host compiles read once before the lock (822); the drain and the exit's count take the
@@ -116,4 +116,4 @@ Every part of the run that a served exit writes is behind the one lock, and no w
   `host` as immutable because it is also borrowed as mutable".
 - **Changed from the card:** plant 1's judge is the two-process guest, not a family run, the family test reading stored
   stops; a third file, `threads.rs`, for the scheduler's assertion.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 747 s, kept in `store/gates/passes.tsv` as sprint 311 at 6ed36976a with root=2adcd9e42 and "rust=crates python=0 samples=0", 184 tests, 651 ns an exit at load 4.08 (Sprint 310: 661 ns at load 2.98, the checks run in release with no time a single run shows), base=56ec1421d, Sprint 310's close; multi-vCPU: not run (Python gates not run)
