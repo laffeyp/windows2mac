@@ -135,4 +135,13 @@ A thread suspended while another vCPU runs it stops before SuspendThread returns
   (`RUN_TABLE` at 329, `MONITOR_SIZE` and `TRANSPORT_OFF` here), each mended by a full path; the module now imports
   the three once and the paths are gone, `cargo check -p w2m_vm --tests` exit 0. The import went in by a `sed` whose
   replacement held a newline, against the rule that a multi-line edit goes by the Edit tool; a slip, recorded.
+- **Every run as held:** `cargo nextest run -E 'rdeps(w2m_vm)'`, 205 tests passed in 472 s, on the work before the
+  test module's import and the case runner's refusal below, which the gates run; `cargo clippy` with the gates'
+  flags clean.
+- **Found by the audit after the work commit (d9879467f):** the case runner (`cases.rs`) passed a `Served::Kick` over
+  as an answer; it drives one vCPU, so a kick there is a fault, and the case now fails by name, "a kick of vCPU owner
+  N in the one-vCPU case runner". Unreachable on one vCPU, so no plant. `vcpu_loop` asks the batch run's end only
+  after `Served::Answered`, a kick skipping it; only `--game` sets the batch end, held to one vCPU by
+  `vcpus_allowed`, so no kick reaches it: Deferred (Sprint 330), G3. The card's files listed `threads.rs`, `run.rs`
+  and `run_loop.rs`; the work also changed `host_request.rs`, `monitor_code.rs` and `cases.rs`.
 

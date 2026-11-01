@@ -612,8 +612,12 @@ pub fn run_cases(
             let op = read_u64(crate::guest::memory_view(&guest.memory), MONITOR_SIZE + TRANSPORT_OFF);
             *tally.host_requests.entry(op).or_default() += 1;
             match host_request::serve(guest, vcpu, &crate::run::FlushCounts::default()) {
-                // the case runner drives one vCPU, so no thread is held elsewhere and no kick arises (Sprint 330)
-                Ok(Served::Answered | Served::Kick { .. }) => {}
+                Ok(Served::Answered) => {}
+                // the case runner drives one vCPU, so no thread is held elsewhere; a kick here is a fault, and the
+                // case fails by name rather than run on with the thread unstopped (Sprint 330)
+                Ok(Served::Kick { owner, .. }) => {
+                    break Err(Err(format!("a kick of vCPU owner {owner} in the one-vCPU case runner")));
+                }
                 Ok(Served::Exit(code)) => break Err(Ok(code)),
                 Err(e) => break Err(Err(e.to_string())),
             }
