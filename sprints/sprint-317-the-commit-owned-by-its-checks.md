@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 317
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -90,5 +90,5 @@ No commit is made unless the checks passed on the index committed, whatever sepa
 - **Plant 2,** both files restored and unstaged: a last line of `scripts/pre-commit.sh`, staged so the first refusal
   passed, appending to `lib.rs` and staging it; the checks passed, and the script "commit: the index or the tree changed
   while the checks ran; no commit", exit 1, HEAD unchanged.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 35 s, kept in `store/gates/passes.tsv` as sprint 317 at 187cd026f with root=2ea06809e and "rust=none python=0 samples=0", no crate changed, base=df8520969, Sprint 316's close; multi-vCPU: not run (Python gates not run)
 
