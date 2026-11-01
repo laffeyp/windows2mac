@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 326
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -102,4 +102,4 @@ The run makes and runs its vCPU on a thread of its own, its callers handing it t
 - **Plant 2,** restored likewise: `let vcpu = Vcpu::new(vm)?;` moved before `scope.spawn(move || …)`; `cargo check`
   (its own target directory, `build/target-plant`, beside a test run) failed, "error[E0277]: `*const
   hypervisor::ffi::HvVcpuExit` cannot be sent between threads safely".
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 1203 s, kept in `store/gates/passes.tsv` as sprint 326 at e57889444 with root=6268904bc and "rust=crates python=0 samples=0", 241 tests (the `w2m-vm` binary's change selecting its dependants), 652 ns an exit at load 3.29, base=a4eac33ab, Sprint 325's close; multi-vCPU: not run (Python gates not run)
