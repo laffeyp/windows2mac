@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 319
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -94,5 +94,5 @@ one.
   parked vCPU's wait ran its whole bound, the readying not seen".
 - **Plant 2,** restored likewise: `free_for` struck from `take`'s pick; the test failed on the load's refusal, "thread 4
   loaded on vCPU owner 2 while vCPU owner 1 has it".
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 733 s, kept in `store/gates/passes.tsv` as sprint 319 at 2771b7506 with root=00855b2b8 and "rust=crates python=0 samples=0", 189 tests, 698 ns an exit at load 3.73, base=1a2b37148, Sprint 318's close; multi-vCPU: not run (Python gates not run)
 
