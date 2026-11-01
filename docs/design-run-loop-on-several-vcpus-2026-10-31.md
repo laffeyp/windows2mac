@@ -162,6 +162,56 @@ each served exit, its acquire asserting the word in debug builds, card 2's plant
 - **The diagnostics** (`exit_ledger`, `block_judge`, `batch_stop`) are refused on a run of more than one vCPU, by name:
   each reads every exit in order, which two threads do not have.
 
+### A vCPU with no thread
+
+*Amended 2026-10-31 (Sprint 318):* the Python host built this at Sprints 118 to 122
+(`docs/design-several-vcpus-2026-10-17.md` 160-216) and the C runtime keeps its half; the Rust host carried the half
+of Sprint 118 alone (the run entry's `vcpu` word, 0x138, and Sprint 316's switch for any vCPU). Each mechanism, where
+it sits, and what is there:
+
+- **The park** (Sprint 118). `threads::switch` with no thread ready that this vCPU may take returns today either
+  `Switch::Idle`, with a machine link, or the error "every thread waits with no timeout and nothing can wake one (a
+  deadlock)". On a vCPU past the first, and on vCPU 0 while another vCPU runs a thread, neither is right: the vCPU
+  parks. It puts its thread down (the switch's save, the `vcpu` word cleared), adds one to the run table's `waiting`
+  word (offset 0x28, `struct w2m_run_table` in `threads.c` 50-53, which the C reads and the host has not named), lets go
+  the guard, then the word, and waits on a host condition, `Sched` (a `Mutex<u64>` change count and a `Condvar`) beside
+  `GuestLock`; woken, it takes the word, then the guard, takes one from `waiting`, makes expired waits ready
+  (`wake_expired`) and picks again with `here`, loading the thread with no save (a load onto a vCPU with no thread,
+  the switch's second half alone). A new switch result, `Switch::Parked`, returns from `schedule` to the run loop,
+  which parks outside the lock, as `turn` waits.
+- **Every wait ends** (Sprint 120). The park's wait has as its timeout the earliest deadline of a blocked thread, on
+  the host's clock (`mach_absolute_time`, the counter the guest reads), and none without one; a waiter woken by its
+  timeout makes expired waits ready before it picks.
+- **The wake** (Sprint 121). The guest's `readied()` (`threads.c` 124-127) asks `THREAD_WAKE` while `waiting` is
+  nonzero; `host_request` answers it with a notify of `Sched`, where it answers 0 alone today (`host_request.rs` 665).
+  Every host service that readies a thread does so through `threads::set_status` (`threads.rs` 526), the one writer
+  of a thread's status in the host, which notifies `Sched` on a change to READY; the run table's `waiting` is read by
+  `slice_until`, which on several vCPUs ends the readying vCPU's slice only for ready threads beyond the waiting vCPUs,
+  so a waiting vCPU takes the readied thread and the readying one goes on.
+- **The deadlock** (Sprint 120). A run of several vCPUs is deadlocked when every vCPU is parked, no blocked thread has
+  a deadline, and a whole second passes with no notify; the last vCPU to park with no deadline in sight waits one
+  second, and if the count is unchanged and every vCPU still parked, stops the run as today's error names it. One vCPU
+  keeps today's rule.
+- **The kick** (Sprint 119). SuspendThread of a thread another vCPU holds stops that vCPU (`VcpuHandle::stop`) and
+  waits, the word and the guard let go, until the thread's `vcpu` word clears; the vCPU stopped leaves through the host,
+  its `SLICE_UNTIL` 0 and the C's switch declining the suspended thread.
+- **The Machine** (Sprint 122). vCPU 0 drives the Machine of a process with children (`Switch::Idle`, `turn`); the
+  Python host refused vCPU 0 waiting for another vCPU while another process could run, and at Sprint 122 drove the
+  Machine from its own thread so that vCPU 0 need not wait. Until that is carried, a process with a machine link is
+  refused on more than one vCPU, by name, when its link is made (`host_request.rs` 527, the supervisor's creation),
+  as card 4a refused a child. The game starts UnityCrashHandler64.exe, a child, at every batch and play run, so G3
+  waits on the Machine's own thread.
+
+**Decision:** the Python host's form, carried: park, timed wait, wake through `Sched`, the deadlock over every vCPU,
+the kick, and the Machine refused on several vCPUs until it has its own thread. **The cards** card 4c3b becomes:
+4c3b1, the park, the wait, the wake and the deadlock (`Switch::Parked`, `Sched`, `RT_WAITING`, `THREAD_WAKE`'s notify,
+`set_status`'s notify, `slice_until` past the waiting), judged by a unit test of two owners and one ready thread, the
+second owner parked and woken by `set_status`; 4c3b2, the vCPU threads in the run loop inside `std::thread::scope`,
+each vCPU past the first with its private chain and `LOCK_OWNER` `k + 1`, the stop, the merged outcome, the stop
+flag, and the Machine refused by name, judged by qpc and sleeper on two vCPUs ending as on one; 4c3b3, the kick, judged
+by the threads family's SuspendThread rows on two vCPUs; 4f, the Machine driven from its own thread (Sprint 122), before
+G3.
+
 ## The second vCPU's preconditions
 
 The step 6 sequence Decision's eight, the eighth from Sprint 294's close, and a ninth from Sprint 311's, each with where it sits:

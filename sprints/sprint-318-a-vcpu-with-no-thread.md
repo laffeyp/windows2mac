@@ -80,3 +80,20 @@ the Python host's built form and the code as it is, before any second thread run
 
 ## result
 
+- **The reading** (the run-loop design's new "A vCPU with no thread"): of Sprints 118 to 122, the Rust host carried
+  the run entry's `vcpu` word alone (and 316's switch for any vCPU); the C runtime keeps the rest of its half, the run
+  table's `waiting` word (0x28, `threads.c` 50-53), `readied()` asking `THREAD_WAKE` while a vCPU waits (124-127) and
+  `held_elsewhere`. The host has no park, no wait, no wake (`THREAD_WAKE` answered 0, `host_request.rs` 665), and
+  `threads::switch` names a deadlock where on several vCPUs a vCPU should park.
+- **The decision:** the Python host's form carried: the park (`Switch::Parked`, the thread put down, `waiting` counted,
+  the word and the guard let go, a wait on `Sched` beside `GuestLock`); the wait's timeout the earliest deadline; the
+  wake by `THREAD_WAKE` and by `set_status`, the host's one writer of a thread's status (`threads.rs` 526); `slice_until`
+  past the waiting vCPUs; the deadlock only with every vCPU parked a second with no deadline and no notify; the kick for
+  SuspendThread of a thread held elsewhere; a process with a machine link refused on several vCPUs until the Machine has
+  its own thread. Card 4c3b becomes 4c3b1, 4c3b2 and 4c3b3, and a card 4f before G3.
+- **Found, for the plan:** the game starts UnityCrashHandler64.exe, a child, at every batch and play run, so the batch
+  run on two vCPUs (G3) waits on card 4f, the Machine on its own thread; the Python host met the same refusal at its
+  Sprint 120 and lifted it at 122.
+- **Expected values:** `design_check` passing, "7 plans and designs state the goal and the systems".
+- **The gates:** GATES-LINE
+
