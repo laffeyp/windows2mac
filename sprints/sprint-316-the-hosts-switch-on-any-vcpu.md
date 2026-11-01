@@ -76,3 +76,19 @@ The host's switch serves any vCPU's exit as the C runtime's switch does, never l
 
 ## result
 
+- **The switch** (`threads.rs` `switch`): `own`, the served vCPU's `LOCK_OWNER` word read whole as `this_vcpu` reads
+  it (790); `here`, a thread whose `vcpu` word is 0 or `own`; the pick of a ready thread and the timed waiters both
+  restricted to `here`; the load's refusal comparing with `own` and naming both owners (874); the loaded thread
+  claimed with `own` (889). `add_thread`'s claim of the first thread at load stays 1, vCPU 0's owner, which the run
+  loop writes into `LOCK_OWNER` at its start (`run.rs` 814).
+- **Found for 4c3b:** `private_chain` copies vCPU 0's monitor data page, `LOCK_OWNER` with it; the card that starts
+  vCPU `k` writes `k + 1` there before its first run, as `run.rs` 814 does for vCPU 0.
+- **The unit test** `threads::tests::the_switch_passes_a_thread_another_vcpu_holds_and_claims_with_its_own_owner`
+  (1237): three threads, the first current; on owner 1, the second held by owner 2 is passed by and the third loaded,
+  the claims after (2, 1); on owner 2, the second loaded and claimed with 2.
+- **Plant 1,** restored by `cp` and checked by `cmp`: `here` taken out of the pick; the test failed on the load's
+  refusal, "thread 8 loaded on vCPU owner 1 while vCPU owner 2 has it".
+- **Plant 2,** restored likewise: the claim written as 1; the test failed, "the loaded thread claimed with this vCPU's
+  owner", left 1, right 2.
+- **The gates:** GATES-LINE
+

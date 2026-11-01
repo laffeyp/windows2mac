@@ -9,9 +9,9 @@
 //! hand-over `hvc #12` makes (`_schedule`, `_switch`, `_save_thread`, `_load_thread`, 3463-3580).
 
 use guest_runtime::layout::{
-    CURRENT, CURRENT_ENTRY, E_MONITOR, E_MONITOR_AT, E_STATE, E_X, MONITOR_DATA, MONITOR_VA, PAGE, PAUSE_COUNT,
-    PEB_OFF, PROCESS_VA, RT_ENTRIES, RUN_ENTRY, RUN_TABLE, RUN_THREADS, SLICE_COUNT, SLICE_PAUSES, STATE_SIZE,
-    TIME_SLICE, VECTOR_SLOT, VECTOR_SLOTS,
+    CURRENT, CURRENT_ENTRY, E_MONITOR, E_MONITOR_AT, E_STATE, E_X, LOCK_OWNER, MONITOR_DATA, MONITOR_VA, PAGE,
+    PAUSE_COUNT, PEB_OFF, PROCESS_VA, RT_ENTRIES, RUN_ENTRY, RUN_TABLE, RUN_THREADS, SLICE_COUNT, SLICE_PAUSES,
+    STATE_SIZE, TIME_SLICE, VECTOR_SLOT, VECTOR_SLOTS,
 };
 use pe_loader::TLS_SLOTS;
 use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE, STACK_GUARD_PAGES};
@@ -784,12 +784,17 @@ fn timed_waiter(guest: &mut Guest, timed: &[Thread], pause: std::time::Duration)
 fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Result<Switch, String> {
     let mem = crate::guest::memory_view(&guest.memory);
     let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
+    // this vCPU's index + 1, its `LOCK_OWNER` word, as the C runtime's `this_vcpu` reads it; a thread whose `vcpu` word
+    // is another vCPU's is loaded there, and the pick passes it by, as `held_elsewhere` does (`threads.c` 64-68;
+    // Sprint 316)
+    let own = read_u64(mem, guest.served.vcpu.monitor + LOCK_OWNER);
+    let here = |t: &Thread| matches!(word(t, E_VCPU), v if v == 0 || v == own);
     let order: Vec<&Thread> = guest.served.threads.values().collect();
     let i = order.iter().position(|t| t.tid == cur.tid).unwrap();
     let rotation = order[i + 1..].iter().chain(order[..=i].iter());
     let next = rotation
         .clone()
-        .find(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0)
+        .find(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0 && here(t))
         .map(|t| (*t).clone());
     if next.is_none() && guest.served.link.is_some() {
         return Ok(Switch::Idle);
@@ -798,7 +803,12 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
         Some(next) => next,
         None => {
             let timed: Vec<Thread> = rotation
-                .filter(|t| word(t, E_STATUS) == BLOCKED && word(t, E_SUSPEND) == 0 && word(t, E_DEADLINE) != u64::MAX)
+                .filter(|t| {
+                    word(t, E_STATUS) == BLOCKED
+                        && word(t, E_SUSPEND) == 0
+                        && word(t, E_DEADLINE) != u64::MAX
+                        && here(t)
+                })
                 .map(|t| (*t).clone())
                 .collect();
             if timed.is_empty() {
@@ -861,9 +871,10 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     write_u64(mem, guest.served.vcpu.monitor + CURRENT, next.index);
     write_u64(mem, guest.served.vcpu.monitor + CURRENT_ENTRY, MONITOR_VA + to);
     // `_load_thread` (3487-3498)
-    if !matches!(read_u64(mem, to + E_VCPU), 0 | 1) {
+    let held = read_u64(mem, to + E_VCPU);
+    if held != 0 && held != own {
         return Err(format!(
-            "thread {} loaded on vCPU 0 while another vCPU has it",
+            "thread {} loaded on vCPU owner {own} while vCPU owner {held} has it",
             next.tid
         ));
     }
@@ -875,7 +886,7 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     put(mem, state, &data);
     write_u64(mem, guest.served.vcpu.monitor + SLICE_COUNT, executed);
     write_u64(mem, guest.served.vcpu.monitor + SLICE_PAUSES, pauses);
-    write_u64(mem, to + E_VCPU, 1);
+    write_u64(mem, to + E_VCPU, own);
     for (i, r) in x.iter_mut().enumerate() {
         *r = read_u64(mem, to + E_X + 8 * i as u64);
     }
@@ -1216,6 +1227,47 @@ pub(crate) mod tests {
         );
         set_status(&mut g, index, READY);
         assert!(!ended(&g, index));
+    }
+
+    /// The host's switch on any vCPU (Sprint 316), as the C runtime's: a ready thread whose `vcpu` word is another
+    /// vCPU's owner is passed by, and the thread loaded takes this vCPU's owner, its `LOCK_OWNER` word. Three threads
+    /// in id order, the first current on vCPU owner 1.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn the_switch_passes_a_thread_another_vcpu_holds_and_claims_with_its_own_owner() {
+        use super::{E_VCPU, Switch, current_tid, entry, read_u64, switch, write_u64};
+        use guest_runtime::layout::LOCK_OWNER;
+
+        let three = || {
+            let (mut g, _) = guest_with_a_thread();
+            let start = g.served.threads.values().next().unwrap().start;
+            super::create_thread(&mut g, start, 0, 0, 0, &mut || Ok(())).unwrap();
+            let ts: Vec<super::Thread> = g.served.threads.values().cloned().collect();
+            (g, ts)
+        };
+        let vcpu = |g: &crate::guest::Guest, t: &super::Thread| read_u64(g.memory_view(), entry(t.index) + E_VCPU);
+
+        // owner 1: the second thread held by owner 2 is passed by, the third loaded and claimed with 1
+        let (mut g, ts) = three();
+        write_u64(g.memory_view(), g.served.vcpu.monitor + LOCK_OWNER, 1);
+        write_u64(g.memory_view(), entry(ts[1].index) + E_VCPU, 2);
+        let mut x = [0u64; 31];
+        let went = switch(&mut g, &mut x, &ts[0], 0).unwrap();
+        assert!(matches!(went, Switch::Go { .. }));
+        assert_eq!(current_tid(&g), ts[2].tid, "the thread owner 2 holds passed by");
+        assert_eq!(
+            (vcpu(&g, &ts[1]), vcpu(&g, &ts[2])),
+            (2, 1),
+            "the claims after the switch"
+        );
+
+        // owner 2: the second thread, free, loaded and claimed with 2
+        let (mut g, ts) = three();
+        write_u64(g.memory_view(), g.served.vcpu.monitor + LOCK_OWNER, 2);
+        write_u64(g.memory_view(), entry(ts[0].index) + E_VCPU, 2);
+        switch(&mut g, &mut x, &ts[0], 0).unwrap();
+        assert_eq!(current_tid(&g), ts[1].tid);
+        assert_eq!(vcpu(&g, &ts[1]), 2, "the loaded thread claimed with this vCPU's owner");
     }
 
     /// With no thread ready, a timed waiter is readied as `_switch` and `warp_to_deadline` ready one (Sprint 234): on the
