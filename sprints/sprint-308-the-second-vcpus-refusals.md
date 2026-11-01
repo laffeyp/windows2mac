@@ -76,3 +76,19 @@ Every reason the design gives against a second vCPU is a refusal by name, checke
 
 ## result
 
+- **The change** (WORK-COMMIT): `hypervisor::feature`, `hw.optional.arm.<name>` by `sysctlbyname` (in libc, which
+  every macOS binary links; the crate is macOS-only, so no Linux form), with its unit test; `run::vcpus_allowed` and
+  `each_reason_against_a_second_vcpu_is_refused_by_name`; `w2m-vm --vcpus N`, 1 by default, checked after the options
+  are read and before any VM is made, the three diagnostics named by their flags. A child is started `--child <fd>
+  <fd> <slot>` alone, so it never has the option and runs on one; the check's child clause holds the design's rule in
+  the unit test, the binary passing `false`.
+- **Expected values:** `feature("FEAT_LSE2")` `Some(1)` on this Mac, an unknown name `None`; each reason refused by its
+  own words, one vCPU allowed whatever holds; `w2m-vm sleeper.exe --output … --vcpus 2` exit 1, "2 vCPUs refused: a
+  second vCPU is not built (the run-loop design's card 4c)".
+- **The gates:** GATES-LINE
+- **Plant 1,** restored by `cp` and checked by `cmp`: the diagnostic check skipped (`.filter(|_| false)`); the unit
+  test failed, "assertion failed: refused(vcpus_allowed(2, lse2, &[\"--exit-ledger\"], false)).contains(\"--exit-ledger
+  reads every exit\")".
+- **Plant 2,** restored by `cp` and checked by `cmp`: `feature` reading `hw.optional.arm.x<name>`; its test failed,
+  "left: None right: Some(1)".
+

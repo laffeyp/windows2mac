@@ -561,6 +561,29 @@ fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
 /// `docs/design-run-loop-on-several-vcpus-2026-10-31.md`, "The exits"): whether the host took it, and so must release
 /// it; a vCPU that holds it already (a miss inside the runtime) keeps it. A service found outside it after the take,
 /// the word held neither by the host nor by this vCPU, is counted in `outside`.
+/// Whether a run may have `n` vCPUs (Sprint 308; the run-loop design's card 4a): one always; more refused, each reason
+/// by name: FEAT_LSE2 not reported (the dispatch pair's single-copy atomicity rests on it, the guest-memory design's
+/// choice 3; `lse2` is `hypervisor::feature("FEAT_LSE2")`); a diagnostic (each reads every exit in order, which two
+/// threads do not have); a child process (one vCPU until its KERNEL 33 wait lets the word go, the design's host-request
+/// row); and, until card 4c builds it, the second vCPU itself.
+pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], child: bool) -> Result<(), String> {
+    if n <= 1 {
+        return Ok(());
+    }
+    if lse2 != Some(1) {
+        return Err(format!("{n} vCPUs refused: FEAT_LSE2 not reported ({lse2:?})"));
+    }
+    if let Some(d) = diagnostics.first() {
+        return Err(format!("{n} vCPUs refused: {d} reads every exit in order"));
+    }
+    if child {
+        return Err(format!("{n} vCPUs refused: a child process runs on one"));
+    }
+    Err(format!(
+        "{n} vCPUs refused: a second vCPU is not built (the run-loop design's card 4c)"
+    ))
+}
+
 /// What the flush stub's nested runs saw inside a split, which the run loop folds into its outcome (Sprint 305).
 #[derive(Default)]
 pub struct FlushCounts {
@@ -1240,6 +1263,20 @@ fn run(
 #[cfg(test)]
 mod tests {
     use super::known_block;
+
+    /// Each reason against a second vCPU refused by its own words, and one vCPU allowed whatever holds (Sprint 308).
+    #[test]
+    fn each_reason_against_a_second_vcpu_is_refused_by_name() {
+        use super::vcpus_allowed;
+        let lse2 = Some(1);
+        assert_eq!(vcpus_allowed(1, None, &["--exit-ledger"], true), Ok(()));
+        let refused = |r: Result<(), String>| r.expect_err("allowed");
+        assert!(refused(vcpus_allowed(2, None, &[], false)).contains("FEAT_LSE2 not reported (None)"));
+        assert!(refused(vcpus_allowed(2, Some(0), &[], false)).contains("FEAT_LSE2 not reported (Some(0))"));
+        assert!(refused(vcpus_allowed(2, lse2, &["--exit-ledger"], false)).contains("--exit-ledger reads every exit"));
+        assert!(refused(vcpus_allowed(2, lse2, &[], true)).contains("a child process runs on one"));
+        assert!(refused(vcpus_allowed(2, lse2, &[], false)).contains("a second vCPU is not built"));
+    }
 
     /// `super::recon_lookup` over a copy of `table`'s bytes, through the view.
     fn recon_lookup(table: &[u8], at: u64, n: u64, capacity: u64, pc: u64) -> Result<u64, String> {

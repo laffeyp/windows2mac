@@ -295,6 +295,25 @@ mod run {
             Some(_) => return Err("--main-thread-calls <tsv>".into()),
             None => None,
         };
+        // the run's vCPUs (Sprint 308), 1 by default, refused above it by name before any VM is made; a child process,
+        // started `--child` alone, never has the option and runs on one
+        let vcpus = match args.iter().position(|a| a == "--vcpus") {
+            Some(i) if args.len() >= i + 2 => {
+                let n = args.drain(i..i + 2).nth(1).unwrap();
+                n.parse::<u32>().map_err(|e| format!("--vcpus {n}: {e}"))?
+            }
+            Some(_) => return Err("--vcpus <count>".into()),
+            None => 1,
+        };
+        let diagnostics: Vec<&str> = [
+            (ledger.is_some(), "--exit-ledger"),
+            (judge.is_some(), "--judge-blocks"),
+            (log_lines.is_some(), "--log-lines"),
+        ]
+        .into_iter()
+        .filter_map(|(on, name)| on.then_some(name))
+        .collect();
+        w2m_vm::run::vcpus_allowed(vcpus, hypervisor::feature("FEAT_LSE2"), &diagnostics, false)?;
         // a guest run's instruction budget (Sprint 221): the family sweep ends a hang by count
         let max_steps = match args.iter().position(|a| a == "--max-steps") {
             Some(i) if args.len() >= i + 2 => {

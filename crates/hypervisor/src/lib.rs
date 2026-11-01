@@ -76,6 +76,14 @@ mod ffi {
         /// `os_release` (`os/object.h`): the VM configuration is an OS object, released when no longer used
         /// (`hv_vm_config.h`).
         pub fn os_release(object: *mut c_void);
+        /// `sys/sysctl.h` (`man 3 sysctl`): a kernel value by name, 0 on success.
+        pub fn sysctlbyname(
+            name: *const std::ffi::c_char,
+            oldp: *mut c_void,
+            oldlenp: *mut usize,
+            newp: *mut c_void,
+            newlen: usize,
+        ) -> i32;
         /// `sys/mman.h`.
         pub fn mmap(addr: *mut c_void, len: usize, prot: i32, flags: i32, fd: i32, offset: i64) -> *mut c_void;
         pub fn munmap(addr: *mut c_void, len: usize) -> i32;
@@ -157,6 +165,27 @@ impl Reg {
             Reg::Fpsr => 33,
             Reg::Cpsr => 34,
         }
+    }
+}
+
+/// A CPU feature as macOS reports it, `hw.optional.arm.<name>` by `sysctlbyname` (`man 3 sysctl`; Sprint 308): its
+/// value, 1 for present, or None when the kernel names no such feature.
+pub fn feature(name: &str) -> Option<i32> {
+    let key = std::ffi::CString::new(format!("hw.optional.arm.{name}")).ok()?;
+    let mut value: i32 = 0;
+    let mut len = std::mem::size_of::<i32>();
+    // SAFETY: `key` is a NUL-terminated string; `value` and `len` describe a writable i32, nothing is written back
+    let r = unsafe { ffi::sysctlbyname(key.as_ptr(), (&raw mut value).cast(), &mut len, std::ptr::null_mut(), 0) };
+    (r == 0 && len == std::mem::size_of::<i32>()).then_some(value)
+}
+
+#[cfg(test)]
+mod feature_tests {
+    /// This Mac reports FEAT_LSE2 (Sprint 303, `sysctl`), and the kernel names no feature "FEAT_NONE".
+    #[test]
+    fn lse2_is_reported_and_an_unknown_name_is_none() {
+        assert_eq!(super::feature("FEAT_LSE2"), Some(1));
+        assert_eq!(super::feature("FEAT_NONE"), None);
     }
 }
 
