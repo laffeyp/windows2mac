@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 315
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -100,5 +100,7 @@ made after it misses it.
   split the process area's block and the test failed at private_chain.rs:89, "a split in the process area's first
   gigabyte: 98304". The card named the plant as the split asked; the split is the test's own request, and the plant is
   the refusal taken away.
-- **The gates:** GATES-LINE
+- **Two work commits:** 44b4730bc went in after `scripts/pre-commit.sh` failed its format check on the new test, the
+  two joined by `;`; 3a8f36028 formats the test, its commit gated by `&&` on a passing run, and the gates judge it.
+- **The gates:** `scripts/gates.sh` exit 0 in 979 s, kept in `store/gates/passes.tsv` as sprint 315 at 3a8f36028 with root=988d51705 and "rust=crates python=0 samples=0", 187 tests, 822 ns an exit at load 5.85 (Sprint 313: 651 ns at load 4.22; one run each, the rise not measured to a cause), base=eafec35d2, Sprint 314's close; multi-vCPU: not run (Python gates not run)
 
