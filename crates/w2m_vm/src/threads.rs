@@ -1299,9 +1299,9 @@ pub fn set_budget(guest: &mut Guest) {
     write_u64(mem, guest.served.vcpu.monitor + 8, limit);
 }
 
-/// `_slice_until` (2756-2780) for one vCPU, one process, no lockstep, forced stop or pending wake: 0 when the current
-/// thread is suspended or another is ready; the count at which the earliest deadline of a blocked thread falls, on the
-/// instruction clock (0 on another clock); else ~0.
+/// `_slice_until` (2756-2780) for one process, no lockstep, forced stop or pending wake: 0 when the current thread is
+/// suspended or more threads this vCPU may take are ready than vCPUs wait (Sprint 321); the count at which the earliest
+/// deadline of a blocked thread falls, on the instruction clock (0 on another clock); else ~0.
 pub fn slice_until(guest: &Guest) -> u64 {
     // another process ready or waiting with a deadline needs the host at each slice's end (`_other_process_due`,
     // 2750-2754; Sprint 197)
@@ -1327,7 +1327,15 @@ pub fn slice_until(guest: &Guest) -> u64 {
         .values()
         .filter(|t| t.tid != current && word(t, E_SUSPEND) == 0)
         .collect();
-    if others.iter().any(|t| word(t, E_STATUS) == READY) {
+    // a ready thread ends the slice only when no vCPU will take it: one another vCPU holds runs there, and a waiting
+    // vCPU takes one readied while it waits (`_slice_until`, the Python host's Sprint 121; `threads.c` 118-127;
+    // Sprint 321); on one vCPU no thread is held elsewhere and none waits, as before
+    let own = read_u64(mem, guest.served.vcpu.monitor + LOCK_OWNER);
+    let ready = others
+        .iter()
+        .filter(|t| word(t, E_STATUS) == READY && free_for(mem, t, own))
+        .count() as u64;
+    if ready > read_u64(mem, RUN_TABLE + RT_WAITING) {
         return 0;
     }
     let deadline = others
@@ -1526,6 +1534,44 @@ pub(crate) mod tests {
             (read_u64(mem, entry(ts[1].index) + E_VCPU), waiting(mem)),
             (2, 0),
             "the taken thread claimed by owner 2, the vCPU no longer waiting"
+        );
+    }
+
+    /// A slice ends for a ready thread no vCPU will take (Sprint 321; the Python host's `_slice_until`, its Sprint 121):
+    /// on owner 1, of three threads the first current, the third blocked with no deadline, the second ready: held by
+    /// owner 2, the slice runs on; free with a vCPU waiting, it runs on; free with none waiting, it ends.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_slice_ends_only_for_a_ready_thread_no_vcpu_will_take() {
+        use super::{BLOCKED, E_DEADLINE, E_VCPU, RT_WAITING, entry, set_status, slice_until, write_u64};
+        use guest_runtime::layout::{LOCK_OWNER, RUN_TABLE};
+
+        let (mut g, _) = guest_with_a_thread();
+        let start = g.served.threads.values().next().unwrap().start;
+        super::create_thread(&mut g, start, 0, 0, 0, &mut || Ok(())).unwrap();
+        let ts: Vec<super::Thread> = g.served.threads.values().cloned().collect();
+        set_status(&mut g, ts[2].index, BLOCKED);
+        let mem = g.memory_view();
+        write_u64(mem, entry(ts[2].index) + E_DEADLINE, u64::MAX);
+        write_u64(mem, g.served.vcpu.monitor + LOCK_OWNER, 1);
+        write_u64(mem, entry(ts[1].index) + E_VCPU, 2);
+        assert_eq!(
+            slice_until(&g),
+            u64::MAX,
+            "the slice ended for a thread another vCPU holds"
+        );
+        write_u64(mem, entry(ts[1].index) + E_VCPU, 0);
+        write_u64(mem, RUN_TABLE + RT_WAITING, 1);
+        assert_eq!(
+            slice_until(&g),
+            u64::MAX,
+            "the slice ended for a thread the waiting vCPU will take"
+        );
+        write_u64(mem, RUN_TABLE + RT_WAITING, 0);
+        assert_eq!(
+            slice_until(&g),
+            0,
+            "the slice ran on past a ready thread no vCPU will take"
         );
     }
 
