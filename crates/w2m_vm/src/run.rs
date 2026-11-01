@@ -533,7 +533,7 @@ fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
 /// choice 3; `lse2` is `hypervisor::feature("FEAT_LSE2")`); a diagnostic (each reads every exit in order, which two
 /// threads do not have); a child process (one vCPU until its KERNEL 33 wait lets the word go, the design's host-request
 /// row); and, until card 4c builds it, the second vCPU itself.
-pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], child: bool) -> Result<(), String> {
+pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], child: bool, clock: bool) -> Result<(), String> {
     if n <= 1 {
         return Ok(());
     }
@@ -545,6 +545,13 @@ pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], child: boo
     }
     if child {
         return Err(format!("{n} vCPUs refused: a child process runs on one"));
+    }
+    // the C runtime's clock reads the running vCPU's own count (`process.c` 45; the per-vCPU pages design, "Not decided
+    // here"; Sprint 315)
+    if clock {
+        return Err(format!(
+            "{n} vCPUs refused: the instruction clock reads the running vCPU's own count"
+        ));
     }
     Err(format!(
         "{n} vCPUs refused: a second vCPU is not built (the run-loop design's card 4c)"
@@ -1393,13 +1400,17 @@ mod tests {
     fn each_reason_against_a_second_vcpu_is_refused_by_name() {
         use super::vcpus_allowed;
         let lse2 = Some(1);
-        assert_eq!(vcpus_allowed(1, None, &["--exit-ledger"], true), Ok(()));
+        assert_eq!(vcpus_allowed(1, None, &["--exit-ledger"], true, false), Ok(()));
         let refused = |r: Result<(), String>| r.expect_err("allowed");
-        assert!(refused(vcpus_allowed(2, None, &[], false)).contains("FEAT_LSE2 not reported (None)"));
-        assert!(refused(vcpus_allowed(2, Some(0), &[], false)).contains("FEAT_LSE2 not reported (Some(0))"));
-        assert!(refused(vcpus_allowed(2, lse2, &["--exit-ledger"], false)).contains("--exit-ledger reads every exit"));
-        assert!(refused(vcpus_allowed(2, lse2, &[], true)).contains("a child process runs on one"));
-        assert!(refused(vcpus_allowed(2, lse2, &[], false)).contains("a second vCPU is not built"));
+        assert!(refused(vcpus_allowed(2, None, &[], false, false)).contains("FEAT_LSE2 not reported (None)"));
+        assert!(refused(vcpus_allowed(2, Some(0), &[], false, false)).contains("FEAT_LSE2 not reported (Some(0))"));
+        assert!(
+            refused(vcpus_allowed(2, lse2, &["--exit-ledger"], false, false))
+                .contains("--exit-ledger reads every exit")
+        );
+        assert!(refused(vcpus_allowed(2, lse2, &[], true, false)).contains("a child process runs on one"));
+        assert!(refused(vcpus_allowed(2, lse2, &[], false, true)).contains("the instruction clock reads the running"));
+        assert!(refused(vcpus_allowed(2, lse2, &[], false, false)).contains("a second vCPU is not built"));
     }
 
     /// `super::recon_lookup` over a copy of `table`'s bytes, through the view.

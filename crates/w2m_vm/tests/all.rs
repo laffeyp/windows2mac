@@ -42,6 +42,7 @@ mod ledger;
 mod litmus;
 mod loader_lists;
 mod monitor_code_in_vm;
+mod private_chain;
 mod process_area;
 mod run_loop;
 mod skeleton_gate;

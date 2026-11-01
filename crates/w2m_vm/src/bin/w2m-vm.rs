@@ -313,7 +313,11 @@ mod run {
         .into_iter()
         .filter_map(|(on, name)| on.then_some(name))
         .collect();
-        w2m_vm::run::vcpus_allowed(vcpus, hypervisor::feature("FEAT_LSE2"), &diagnostics, false)?;
+        // the batch run (`--game`) and `--instruction-clock` take the instruction clock; a family's start may take it too,
+        // checked again once its options are read
+        let lse2 = hypervisor::feature("FEAT_LSE2");
+        let clock = instruction_clock || args.iter().any(|a| a == "--game");
+        w2m_vm::run::vcpus_allowed(vcpus, lse2, &diagnostics, false, clock)?;
         // a guest run's instruction budget (Sprint 221): the family sweep ends a hang by count
         let max_steps = match args.iter().position(|a| a == "--max-steps") {
             Some(i) if args.len() >= i + 2 => {
@@ -382,6 +386,7 @@ mod run {
             Some(options) => family_options(&mut start, options)?,
             None => None,
         };
+        w2m_vm::run::vcpus_allowed(vcpus, lse2, &[], false, start.instruction_clock.is_some())?;
         let root = root();
         start.program_path = Some(root.join(guest_path));
         // the Producer's input arrives as one JSON line; this run takes none, but the line is read so the pipe closes

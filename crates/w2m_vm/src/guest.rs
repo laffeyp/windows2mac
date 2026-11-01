@@ -797,6 +797,20 @@ pub fn memory_view(memory: &hypervisor::GuestMemory) -> ConcurrentGuestMemory<'_
     unsafe { ConcurrentGuestMemory::from_raw_parts(memory.as_ptr(), memory.len()) }
 }
 
+/// The gigabytes whose level-2 tables a vCPU's private chain copies (the per-vCPU pages design, "The copied tables
+/// after load"; Sprint 315): the monitor area's first and the process area's first. A descriptor written in them after
+/// load would not reach the copies, so `page_descriptor` refuses it, naming the range.
+fn copied_range(va: u64) -> Option<&'static str> {
+    const GIGA: u64 = 1 << 30;
+    if (MONITOR_VA..MONITOR_VA + GIGA).contains(&va) {
+        Some("in the monitor area's first gigabyte, whose tables each vCPU's private chain copies")
+    } else if (PROCESS_VA..PROCESS_VA + GIGA).contains(&va) {
+        Some("in the process area's first gigabyte, whose tables each vCPU's private chain copies")
+    } else {
+        None
+    }
+}
+
 impl Guest {
     /// `memory_view` of this guest's memory.
     pub fn memory_view(&self) -> ConcurrentGuestMemory<'_> {
@@ -1075,6 +1089,9 @@ impl Guest {
     /// block over it split into the next level's 512 descriptors with the block's attributes; 0 when nothing maps it.
     /// One vCPU: no private regions.
     pub fn page_descriptor(&mut self, va: u64, flush: Flush<'_>) -> Result<u64, String> {
+        if let Some(why) = copied_range(va) {
+            return Err(format!("0x{va:x}: {why}"));
+        }
         let mem = memory_view(&self.memory);
         let mut off = TRANSLATION_TABLES;
         for (level, shift) in [(0u32, 39u32), (1, 30), (2, 21)] {
@@ -1084,7 +1101,13 @@ impl Guest {
                 return Ok(0);
             }
             if desc & 2 == 0 {
-                // a block: split it
+                // a block: split it; never a level-0 or level-1 block under the private roots 0xFE and 0xFF, whose
+                // level-1 tables each vCPU's chain copies (Sprint 315)
+                if level < 2 && va >> 39 >= 0xFE {
+                    return Err(format!(
+                        "0x{va:x}: a level-{level} block under a private root split after load"
+                    ));
+                }
                 let size = 1u64 << shift;
                 let base = desc & 0x0000_FFFF_FFFF_F000 & !(size - 1);
                 let attributes = desc & !0x0000_FFFF_FFFF_F000 & !0x3;
@@ -1133,6 +1156,104 @@ impl Guest {
             page += PAGE;
         }
         Ok(())
+    }
+
+    /// vCPU `k`'s private chain (`k` from 1; the per-vCPU pages design, form B; Sprint 315): in its `VCPU_STRIDE` slot of
+    /// the monitor area, its 18 pages, the monitor data page, the state block and the 16 runtime stack pages, at the
+    /// same guest addresses as vCPU 0's, the first two copied from vCPU 0's with the set-once words; then its own
+    /// level-0 table and each table on the walk to those pages, a copy of the shared table, or a 2 MB block expanded
+    /// into its pages with the block's attributes, the vCPU's leaves put in. Every other entry is the shared table's, so
+    /// every other address maps as on vCPU 0. Made before any run of vCPU `k`, with the tables vCPU 0 walks unchanged.
+    /// The `TTBR0_EL1` value, the table's base with CnP 0, and the vCPU's pages.
+    pub fn private_chain(&self, k: u64) -> Result<(u64, VcpuPages), String> {
+        use guest_runtime::layout::{MAX_VCPUS, VCPU_AREA, VCPU_STRIDE};
+        const TABLES: u64 = 8;
+        if k == 0 || k >= MAX_VCPUS {
+            return Err(format!("vCPU {k}: a private chain is for vCPUs 1 to {}", MAX_VCPUS - 1));
+        }
+        let mem = memory_view(&self.memory);
+        let slot = VCPU_AREA + k * VCPU_STRIDE;
+        let stack_pages = RUNTIME_STACK_SIZE / PAGE;
+        let pages = VcpuPages {
+            monitor: slot,
+            state: slot + PAGE,
+        };
+        // the private pages: (guest address, memory offset); the first two start as vCPU 0's
+        let mut private = vec![
+            (MONITOR_VA + MONITOR_DATA, pages.monitor),
+            (PROCESS_VA + STATE_OFF, pages.state),
+        ];
+        private.extend((0..stack_pages).map(|i| (MONITOR_VA + RUNTIME_STACK + i * PAGE, slot + (2 + i) * PAGE)));
+        let mut page = vec![0u8; PAGE as usize];
+        for (from, to) in [
+            (VcpuPages::FIRST.monitor, pages.monitor),
+            (VcpuPages::FIRST.state, pages.state),
+        ] {
+            mem.read(from, &mut page);
+            mem.write(to, &page);
+        }
+        // the tables, after the pages, each made once: (level, the address bits above the level's reach) -> offset
+        let first_table = slot + (2 + stack_pages) * PAGE;
+        if first_table + TABLES * PAGE > slot + VCPU_STRIDE {
+            return Err(format!("vCPU {k}: {TABLES} tables after its pages outgrow its slot"));
+        }
+        let mut made: BTreeMap<(u32, u64), u64> = BTreeMap::new();
+        let mut count = 0u64;
+        let mut table = |source: Option<u64>, block: Option<(u64, u64, u64)>| -> Result<u64, String> {
+            if count == TABLES {
+                return Err(format!("vCPU {k}: more than {TABLES} private tables"));
+            }
+            let at = first_table + count * PAGE;
+            count += 1;
+            for i in 0..512u64 {
+                let entry = match (source, block) {
+                    (Some(s), _) => mem.read_u64(s + 8 * i),
+                    // a 2 MB block expanded: its 512 pages with its attributes
+                    (None, Some((base, attributes, step))) => (base + i * step) | attributes | 0x3,
+                    (None, None) => 0,
+                };
+                mem.write_u64(at + 8 * i, entry);
+            }
+            Ok(at)
+        };
+        let root = table(Some(TRANSLATION_TABLES), None)?;
+        made.insert((0, 0), root);
+        for &(va, to) in &private {
+            let (mut shared, mut own) = (Some(TRANSLATION_TABLES), root);
+            for (level, shift) in [(0u32, 39u32), (1, 30), (2, 21)] {
+                let index = (va >> shift) & 0x1FF;
+                let desc = match shared {
+                    Some(s) => mem.read_u64(s + 8 * index),
+                    None => mem.read_u64(own + 8 * index),
+                };
+                if desc & 1 == 0 {
+                    return Err(format!("vCPU {k}: 0x{va:x} is not mapped at level {level}"));
+                }
+                let key = (level + 1, va >> shift);
+                let child = match made.get(&key) {
+                    Some(&c) => c,
+                    None => {
+                        let c = if desc & 2 != 0 {
+                            table(Some((desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE), None)?
+                        } else if level == 2 {
+                            let base = desc & 0x0000_FFFF_FFFF_F000 & !(BLOCK - 1);
+                            table(None, Some((base, desc & !0x0000_FFFF_FFFF_F000 & !0x3, PAGE)))?
+                        } else {
+                            return Err(format!("vCPU {k}: 0x{va:x} lies in a level-{level} block"));
+                        };
+                        made.insert(key, c);
+                        mem.write_u64(own + 8 * index, (IPA_BASE + c) | 0x3);
+                        c
+                    }
+                };
+                shared = (desc & 2 != 0).then(|| (desc & 0x0000_FFFF_FFFF_F000) - IPA_BASE);
+                own = child;
+            }
+            let leaf = own + 8 * ((va >> 12) & 0x1FF);
+            let desc = mem.read_u64(leaf);
+            mem.write_u64(leaf, (IPA_BASE + to) | (desc & !0x0000_FFFF_FFFF_F000));
+        }
+        Ok((IPA_BASE + root, pages))
     }
 
     /// The memory offset of the process area's `off` (`_process`).

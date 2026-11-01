@@ -75,3 +75,30 @@ made after it misses it.
 
 ## result
 
+- **The chain** (`Guest::private_chain(k)`, `guest.rs` 1168): vCPU `k`'s 18 pages in its `VCPU_STRIDE` slot, the
+  monitor data page and the state block copied from vCPU 0's, the set-once words with them, then its tables after the
+  pages: a copy of the level-0 table, and on each walk to a private page a copy of the shared table or a 2 MB block
+  expanded into its pages with the block's attributes, the vCPU's leaves put in; 8 tables at most, refused past that or
+  past the slot; the `TTBR0_EL1` value (the root's IPA, CnP 0) and the vCPU's `VcpuPages`. vCPU 0's tables are not
+  touched. No caller in the run loop yet, which runs one vCPU.
+- **The refusals** (`guest.rs`): `copied_range` (803), checked first in `page_descriptor`, refuses any descriptor in
+  the monitor area's or the process area's first gigabyte, naming the range; a split of a level-0 or level-1 block
+  under 0xFE or 0xFF is refused in the walk (1106). `map_pages` and `protect_code` reach their writes through
+  `page_descriptor`. Every run as held shows no writer reaches them today.
+- **The instruction clock:** `run::vcpus_allowed` takes `clock`, refusing more than one vCPU with "the instruction
+  clock reads the running vCPU's own count"; `w2m-vm` passes `--instruction-clock` or `--game` at its first check
+  (318) and a family start's clock once its options are read (389); the unit test holds the new reason.
+- **The test** `private_chain::each_vcpu_reads_its_own_monitor_data_at_one_address` (`tests/private_chain.rs`, a module
+  of `tests/all.rs`): the qpc guest, vCPU 1's chain made, 0xA0A0 written at vCPU 0's monitor data and 0xB1B1 at vCPU
+  1's; an arena page mapped after the chain (a split under level-0 entry 0, which both chains share) holding 0x1A7E; a
+  split asked at `PROCESS_VA + 0x20_0000` refused by name; then two vCPUs, each on its own thread, loading through
+  `ldr x0, [x1]; hvc #0x23` at the monitor area's free words: (0xA0A0, 0xB1B1) at `MONITOR_VA + MONITOR_DATA`,
+  (0x1A7E, 0x1A7E) at the late page, `TTBR0_EL1` bit 0 clear on both.
+- **Plant 1,** restored by `cp` and checked by `cmp`: `private_chain` returning vCPU 0's `ttbr`; the test failed,
+  "each vCPU's monitor data at one address", left (41120, 41120), right (41120, 45489).
+- **Plant 2,** restored likewise: the copied-range refusal switched off (`.filter(|_| false)`); `page_descriptor`
+  split the process area's block and the test failed at private_chain.rs:89, "a split in the process area's first
+  gigabyte: 98304". The card named the plant as the split asked; the split is the test's own request, and the plant is
+  the refusal taken away.
+- **The gates:** GATES-LINE
+
