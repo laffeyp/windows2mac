@@ -320,6 +320,9 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, and a 
    *(Sprint 325's card: 4c3b2b's refusal of the Machine built first, on its own, the run's vCPU count carried onto
    `Start` and a spawn refused by name above one vCPU before its link is made; 4c3b2b keeps the threads, the stop, the
    park in the loop, the merged outcome and the stop flag.)*
+   *(Sprint 326's card: 4c3b2b's making of the vCPU on a thread of its own built first, one vCPU, the run taking the
+   `Vm` and the time limit from its three callers; 4c3b2b keeps the second vCPU, its park, the stop of every other
+   vCPU, the merged outcome and the stop flag.)*
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 
