@@ -179,6 +179,11 @@ pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
         write_u64(mem, at + E_VCPU, 1);
     }
     guest.served.threads.insert(thread.tid, Thread { index: n, ..thread });
+    // a new thread is ready and no vCPU holds it: a parked vCPU may take it (Sprint 327: the status is written here,
+    // not through `set_status`, and a parked vCPU slept through a thread's creation)
+    if n > 0 {
+        guest.sched.notify();
+    }
     Ok(n)
 }
 
@@ -542,6 +547,10 @@ pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
         guest.sched.notify();
     }
 }
+
+/// Why a run stops when no thread can run again: on one vCPU at a switch, on several when every vCPU parks with no
+/// deadline and a second passes with no change (Sprint 327 names it for both).
+pub const DEADLOCK: &str = "every thread waits with no timeout and nothing can wake one (a deadlock)";
 
 /// What a parked vCPU waits on (the run-loop design's "A vCPU with no thread"; Sprint 319): a count of changes that may
 /// let a vCPU take a thread, which every readying notifies, and of the vCPUs parked (Sprint 320), outside the run's lock
@@ -941,7 +950,7 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
                 .map(|t| (*t).clone())
                 .collect();
             if timed.is_empty() {
-                return Err("every thread waits with no timeout and nothing can wake one (a deadlock)".into());
+                return Err(DEADLOCK.into());
             }
             timed_waiter(guest, &timed, std::time::Duration::from_millis(1))
         }
@@ -1009,6 +1018,11 @@ fn save(guest: &Guest, x: &[u64; 31], cur: &Thread) -> (u64, u64) {
     let data = bytes(mem, state, STATE_SIZE);
     put(mem, from + E_STATE, &data);
     write_u64(mem, from + E_VCPU, 0);
+    // a thread put down still ready, on a yield or a slice's end, is free for any vCPU: a parked one may take it
+    // (Sprint 327; the C runtime's in-VM switch does not ask so, BLACKBOARD Deferred, Sprint 327)
+    if read_u64(mem, from + E_STATUS) == READY {
+        guest.sched.notify();
+    }
     (executed, pauses)
 }
 

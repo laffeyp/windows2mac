@@ -338,6 +338,55 @@ pub struct Outcome {
     /// the instructions retired at each in-VM compile and install, in its log's order (Sprint 266), from the words
     /// `Timing::instructions_at_compile` writes; all 0 without it
     pub instructions_at: InstructionsAt,
+    /// each vCPU's count of runs, `hv_vcpu_run` calls, in the vCPU's order (Sprint 327): a vCPU past the first runs only
+    /// once it has taken a thread, so its count above 0 says it ran guest code
+    pub runs_by_vcpu: Vec<u64>,
+}
+
+impl Outcome {
+    /// An outcome with nothing in it yet, the stop to be set at the run's end.
+    fn empty() -> Outcome {
+        Outcome {
+            stop: Stop::Exit(String::new()),
+            bridged: BTreeMap::new(),
+            blocks: BTreeMap::new(),
+            counts: BTreeMap::new(),
+            compile_ticks: Default::default(),
+            serve_ns: Vec::new(),
+            serve_by_kind: BTreeMap::new(),
+            turn_start_ns: Vec::new(),
+            runtime_word: RuntimeWordTimes::default(),
+            run_ns: Vec::new(),
+            exits: BTreeMap::new(),
+            executed: 0,
+            created: Vec::new(),
+            thread_requests: Vec::new(),
+            handovers: Vec::new(),
+            translations: Vec::new(),
+            vm_compile_starts: Vec::new(),
+            instructions_at: InstructionsAt::default(),
+            served_outside_word: 0,
+            flushes: 0,
+            runs_by_vcpu: Vec::new(),
+        }
+    }
+
+    /// One vCPU's loop's part, its times, exits and counts, added to the run's (Sprint 327: the merged outcome); the
+    /// records the lock holds and the counts read from guest memory at the stop are the run's own, not a vCPU's.
+    fn add_vcpu(&mut self, vcpu: Outcome) {
+        self.runs_by_vcpu.push(vcpu.run_ns.len() as u64);
+        self.serve_ns.extend(vcpu.serve_ns);
+        for (kind, ns) in vcpu.serve_by_kind {
+            self.serve_by_kind.entry(kind).or_default().extend(ns);
+        }
+        self.turn_start_ns.extend(vcpu.turn_start_ns);
+        self.run_ns.extend(vcpu.run_ns);
+        for (number, n) in vcpu.exits {
+            *self.exits.entry(number).or_default() += n;
+        }
+        self.served_outside_word += vcpu.served_outside_word;
+        self.flushes += vcpu.flushes;
+    }
 }
 
 /// The instructions retired at the calls that logged a block inside the VM (Sprint 266), compiles and installs apart.
@@ -386,11 +435,24 @@ pub struct Created {
 /// vm_monitor.c `vswap` (440-482): Q0-Q15, FPCR and FPSR to the outgoing thread's slot at memory offset `save`, then
 /// from the incoming thread's slot at `load`. A slot is 16 registers of 16 bytes, then FPCR and FPSR of 8 each.
 fn swap_vectors(vcpu: &Vcpu<'_>, mem: ConcurrentGuestMemory<'_>, save: u64, load: u64) -> Result<(), HvError> {
+    save_vectors(vcpu, mem, save)?;
+    load_vectors(vcpu, mem, load)
+}
+
+/// `vswap`'s first half: the vCPU's vector registers to the slot at `save`, for a thread put down with no thread loaded
+/// after it (Sprint 327: a vCPU that parks).
+fn save_vectors(vcpu: &Vcpu<'_>, mem: ConcurrentGuestMemory<'_>, save: u64) -> Result<(), HvError> {
     for n in 0..16u8 {
         mem.write(save + 16 * u64::from(n), &vcpu.simd(n)?.to_le_bytes());
     }
     mem.write_u64(save + 256, vcpu.reg(Reg::Fpcr)?);
     mem.write_u64(save + 264, vcpu.reg(Reg::Fpsr)?);
+    Ok(())
+}
+
+/// `vswap`'s second half: the slot at `load` to the vCPU's vector registers, for a thread taken by a vCPU that had none
+/// (Sprint 327).
+fn load_vectors(vcpu: &Vcpu<'_>, mem: ConcurrentGuestMemory<'_>, load: u64) -> Result<(), HvError> {
     for n in 0..16u8 {
         let mut register = [0u8; 16];
         mem.read(load + 16 * u64::from(n), &mut register);
@@ -529,15 +591,11 @@ fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
     Ok(())
 }
 
-/// The runtime word taken for a service that changes state two vCPUs share (`hvc #1`, `#4`, `#12`, `#13`;
-/// `docs/design-run-loop-on-several-vcpus-2026-10-31.md`, "The exits"): whether the host took it, and so must release
-/// it; a vCPU that holds it already (a miss inside the runtime) keeps it. A service found outside it after the take,
-/// the word held neither by the host nor by this vCPU, is counted in `outside`.
 /// Whether a run may have `n` vCPUs (Sprint 308; the run-loop design's card 4a): one always; more refused, each reason
 /// by name: FEAT_LSE2 not reported (the dispatch pair's single-copy atomicity rests on it, the guest-memory design's
 /// choice 3; `lse2` is `hypervisor::feature("FEAT_LSE2")`); a diagnostic (each reads every exit in order, which two
 /// threads do not have); a child process (one vCPU until its KERNEL 33 wait lets the word go, the design's host-request
-/// row); and, until card 4c builds it, the second vCPU itself.
+/// row); the instruction clock (Sprint 315); more than the layout's vCPUs. The second vCPU itself is built (Sprint 327).
 pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], child: bool, clock: bool) -> Result<(), String> {
     if n <= 1 {
         return Ok(());
@@ -558,9 +616,14 @@ pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], child: boo
             "{n} vCPUs refused: the instruction clock reads the running vCPU's own count"
         ));
     }
-    Err(format!(
-        "{n} vCPUs refused: a second vCPU is not built (the run-loop design's card 4c)"
-    ))
+    // the monitor region has pages for this many vCPUs (`MAX_VCPUS`, its eight vCPU areas; Sprint 327)
+    if u64::from(n) > guest_runtime::layout::MAX_VCPUS {
+        return Err(format!(
+            "{n} vCPUs refused: the layout has pages for {}",
+            guest_runtime::layout::MAX_VCPUS
+        ));
+    }
+    Ok(())
 }
 
 /// What the flush stub's nested runs saw inside a split, which the run loop folds into its outcome (Sprint 305).
@@ -603,12 +666,22 @@ pub fn flush_through_stub(vcpu: &Vcpu, counts: &FlushCounts) -> Result<(), Strin
     Ok(())
 }
 
-/// The stop of a run whose one vCPU the scheduler parks (Sprint 319): only a second vCPU holding a thread parks a vCPU,
-/// and the run loop parks none until the threads card (the run-loop design's 4c3b2b).
-const PARKED_ALONE: &str = "a vCPU parked with no other vCPU to wake it";
+/// The vector slot of thread `tid`, where a thread put down keeps its vector registers (Sprint 327: a vCPU that parks
+/// saves them there, as `vswap` does at a switch).
+fn vector_slot(guest: &Guest, tid: u64) -> Option<u64> {
+    let t = guest.served.threads.get(&tid)?;
+    Some(
+        guest
+            .memory_view()
+            .read_u64(crate::threads::entry(t.index) + crate::threads::E_VSLOT),
+    )
+}
 
-/// The runtime word taken for the host, by the vCPU whose monitor data page is at `monitor`, a hold found outside the
-/// word counted in `outside`; true when the host took it.
+/// The runtime word taken for the host, for a service that changes state two vCPUs share (`hvc #1`, `#4`, `#12`, `#13`;
+/// `docs/design-run-loop-on-several-vcpus-2026-10-31.md`, "The exits"), by the vCPU whose monitor data page is at
+/// `monitor`; true when the host took it, and so must release it; a vCPU that holds it already (a miss inside the
+/// runtime) keeps it. A service found outside it after the take, the word held neither by the host nor by this vCPU, is
+/// counted in `outside`.
 fn take_word(mem: ConcurrentGuestMemory<'_>, monitor: u64, outside: &mut u64) -> bool {
     let own = crate::monitor_code::vcpu_owner(mem, monitor);
     let took = crate::monitor_code::host_take_runtime_word(mem, own);
@@ -763,47 +836,23 @@ pub fn run_compiling(
     run(guest, loaded, vm, limit, max_steps, Some(host))
 }
 
-/// The run on a thread of its own, inside a scope (Sprint 326; the run-loop design's "The threads"): the thread makes
-/// the vCPU on `vm`, which stays on it (`Vcpu` is neither `Send` nor `Sync`), and runs it; 4c3b2b makes one a vCPU.
-/// With a `limit`, a second thread stops the vCPU through its handle when the limit passes, as `hv_vcpus_exit` from
-/// w2m-vm's GUEST_SECONDS or GAME_SECONDS did (Sprint 197); it waits on a channel the run's thread closes when it ends,
-/// so it leaves at the run's end, and no stop outlives the run to reach a later vCPU given the same id.
+/// The run on `guest.start.vcpus` vCPUs, each on a thread of its own inside a scope (Sprint 326 for one, Sprint 327
+/// for several; the run-loop design's "The threads"): each thread makes its vCPU on `vm`, where it stays (`Vcpu` is
+/// neither `Send` nor `Sync`), and runs it (`run_on_vcpu`). vCPU 0 starts at the program's entry; vCPU `k` from 1 on
+/// its own pages and root table (`Guest::private_chain`, Sprint 315) with no thread, taking one when one is ready. The
+/// first vCPU to stop gives the run its stop and stops the others (`RunStop`). With a `limit`, one more thread stops
+/// the run when the limit passes, as `hv_vcpus_exit` from w2m-vm's GUEST_SECONDS or GAME_SECONDS did (Sprint 197); it
+/// waits on a channel the run closes when its vCPUs end, so no stop outlives the run to reach a later vCPU given the
+/// same id. The set-up before the threads, and the outcome gathered after, are the run's alone.
 fn run(
     guest: &mut Guest,
     loaded: &Loaded,
     vm: &Vm,
     limit: Option<Duration>,
     max_steps: u64,
-    host: Option<&mut HostCompiler>,
-) -> Result<Outcome, HvError> {
-    std::thread::scope(|scope| {
-        let ran = scope.spawn(|| {
-            let vcpu = Vcpu::new(vm)?;
-            // dropped when this thread's run ends, which wakes the timer
-            let (_ended, end) = std::sync::mpsc::channel::<()>();
-            if let Some(limit) = limit {
-                let handle = vcpu.handle();
-                scope.spawn(move || {
-                    if end.recv_timeout(limit) == Err(std::sync::mpsc::RecvTimeoutError::Timeout) {
-                        let _ = handle.stop();
-                    }
-                });
-            }
-            run_on_vcpu(guest, loaded, &vcpu, max_steps, host)
-        });
-        ran.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-    })
-}
-
-/// The run's set-up on `vcpu`, its loop, and the outcome gathered at the stop.
-fn run_on_vcpu(
-    guest: &mut Guest,
-    loaded: &Loaded,
-    vcpu: &Vcpu<'_>,
-    max_steps: u64,
     mut host: Option<&mut HostCompiler>,
 ) -> Result<Outcome, HvError> {
-    let (pages, md) = (VcpuPages::FIRST, VcpuPages::FIRST.monitor); // one vCPU, the first (Sprint 313)
+    let md = VcpuPages::FIRST.monitor; // vCPU 0's monitor data, which the diagnostics of a one-vCPU run read
     let first = Thread {
         // the start's thread id, a child's from the Machine (`_first_tid`, vm_backend 2497; Sprint 206: it was 4)
         tid: guest.start.tid,
@@ -815,61 +864,48 @@ fn run_on_vcpu(
         start: loaded.entry,
         created_suspended: false,
     };
-    let mut out = Outcome {
-        stop: Stop::Exit(String::new()),
-        bridged: BTreeMap::new(),
-        blocks: BTreeMap::new(),
-        counts: BTreeMap::new(),
-        compile_ticks: Default::default(),
-        serve_ns: Vec::new(),
-        serve_by_kind: BTreeMap::new(),
-        turn_start_ns: Vec::new(),
-        runtime_word: RuntimeWordTimes::default(),
-        run_ns: Vec::new(),
-        exits: BTreeMap::new(),
-        executed: 0,
-        created: Vec::new(),
-        thread_requests: Vec::new(),
-        handovers: Vec::new(),
-        translations: Vec::new(),
-        vm_compile_starts: Vec::new(),
-        instructions_at: InstructionsAt::default(),
-        served_outside_word: 0,
-        flushes: 0,
-    };
+    let mut out = Outcome::empty();
     if let Err(why) = add_thread(guest, first) {
         out.stop = Stop::Exit(format!("the first thread's entry: {why}")); // a guest run before
         return Ok(out);
     }
+    let vcpus = u64::from(guest.start.vcpus.max(1));
+    // each vCPU's root table and pages: vCPU 0's the layout's, each other's its private chain (Sprint 315)
+    let mut chains = vec![(guest.ttbr, VcpuPages::FIRST)];
+    for k in 1..vcpus {
+        match guest.private_chain(k) {
+            Ok(chain) => chains.push(chain),
+            Err(why) => {
+                out.stop = Stop::Exit(format!("vCPU {k}'s pages: {why}"));
+                return Ok(out);
+            }
+        }
+    }
     {
         // `_set_budget`: one thread, the run's limit; a child shares the vCPU from its first instruction (Sprint 197)
-        let shared = guest.served.link.is_some();
+        let budget = if guest.served.link.is_some() {
+            max_steps.min(guest_runtime::layout::TIME_SLICE)
+        } else {
+            max_steps
+        };
         let mem = guest.memory_view();
-        mem.write_u64(
-            md + 8,
-            if shared {
-                max_steps.min(guest_runtime::layout::TIME_SLICE)
-            } else {
-                max_steps
-            },
-        );
         mem.write_u64(VM_COMPILER + VMC_ENABLED, 1);
-        mem.write_u32(md + MXCSR_OFF, 0x1F80);
-        mem.write_u64(md + LOCK_OWNER, 1);
-        mem.write(md + FCW_OFF, &0x27Fu16.to_le_bytes());
+        for (k, (_, pages)) in chains.iter().enumerate() {
+            let md = pages.monitor;
+            mem.write_u64(md + 8, budget);
+            mem.write_u32(md + MXCSR_OFF, 0x1F80);
+            // the vCPU's owner, its index + 1, which its takes of the word and its claims of threads write (Sprint
+            // 316's Observation 2: a private chain copies vCPU 0's page, and with it owner 1)
+            mem.write_u64(md + LOCK_OWNER, k as u64 + 1);
+            mem.write(md + FCW_OFF, &0x27Fu16.to_le_bytes());
+        }
+        // each vCPU past the first starts with no thread, counted in the run table's `waiting` until `threads::take`
+        // gives it one, as a parked vCPU is (Sprint 319)
+        mem.write_u64(
+            RUN_TABLE + crate::threads::RT_WAITING,
+            mem.read_u64(RUN_TABLE + crate::threads::RT_WAITING) + (vcpus - 1),
+        );
     }
-    set_system_registers(vcpu, guest.ttbr)?;
-    vcpu.set_reg(Reg::Fpcr, fpcr_for(0x1F80))?;
-    for r in 0..31u8 {
-        vcpu.set_reg(Reg::X(r), 0)?;
-    }
-    vcpu.set_reg(Reg::X(4), loaded.stack_top - 0x100 - 8)?; // as runtime.Runtime: RSP % 16 == 8
-    vcpu.set_reg(Reg::X(17), loaded.entry)?;
-    vcpu.set_reg(Reg::X(REG_UNDEFINED_FLAGS), 0x3F)?;
-    vcpu.set_reg(Reg::X(28), MONITOR_VA + MONITOR_DATA)?;
-    vcpu.set_reg(Reg::Pc, guest.entry_va)?;
-    vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
-
     // the Load facts the loop reads outside a service, copied before it, as each vCPU thread keeps its own (the run-loop
     // design's "How the threads share `Guest`"; Sprint 324)
     let facts = LoadFacts {
@@ -878,9 +914,55 @@ fn run_on_vcpu(
         time_runtime_word: guest.time_runtime_word,
         compiling: host.is_some(),
     };
-    // the run's shared state behind one lock (Sprints 310 and 311), which the loop holds by `&` alone (Sprint 324)
+    // where vCPU 0 starts: as runtime.Runtime, RSP % 16 == 8; the program's entry in X17; the runtime's entry
+    let entry = Entry {
+        stack: loaded.stack_top - 0x100 - 8,
+        program: loaded.entry,
+        runtime: guest.entry_va,
+    };
+    let sched = std::sync::Arc::clone(&guest.sched);
+    // the run's shared state behind one lock (Sprints 310 and 311), which each vCPU's loop holds by `&` alone (Sprint
+    // 324); the vCPUs' threads end inside the scope, before the lock gives the borrows back
     let lock = GuestLock::new(&mut *guest, host.as_deref_mut());
-    let stop = vcpu_loop(&lock, vcpu, pages, max_steps, facts, &mut out)?;
+    let stopping = RunStop::default();
+    let (ended, end) = std::sync::mpsc::channel::<()>();
+    let ran: Vec<Result<Outcome, HvError>> = std::thread::scope(|scope| {
+        let threads: Vec<_> = chains
+            .iter()
+            .enumerate()
+            .map(|(k, &(ttbr, pages))| {
+                let place = Place {
+                    k: k as u64,
+                    vcpus,
+                    pages,
+                    stopping: &stopping,
+                    sched: &sched,
+                };
+                let lock = &lock;
+                scope.spawn(move || run_on_vcpu(lock, vm, ttbr, (k == 0).then_some(entry), place, max_steps, facts))
+            })
+            .collect();
+        if let Some(limit) = limit {
+            let (stopping, sched) = (&stopping, &sched);
+            scope.spawn(move || {
+                if end.recv_timeout(limit) == Err(std::sync::mpsc::RecvTimeoutError::Timeout) {
+                    stopping.stop(Stop::TimeLimit, sched);
+                }
+            });
+        }
+        let ran = threads
+            .into_iter()
+            .map(|t| t.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
+            .collect();
+        drop(ended); // the timer leaves
+        ran
+    });
+    for mine in ran {
+        out.add_vcpu(mine?);
+    }
+    out.stop = stopping
+        .first()
+        .unwrap_or_else(|| Stop::Exit("the run's vCPUs ended with no stop".into()));
     // the records into the outcome, the borrows given back (Sprint 311)
     let records = lock.into_inner().records;
     out.bridged = records.bridged;
@@ -911,12 +993,182 @@ fn run_on_vcpu(
             .insert(name, mem.read_u64(VM_COMPILER + VMC_COUNTS + 8 * i as u64));
     }
     out.compile_ticks = crate::monitor_code::CompileTicks::read(|slot| mem.read_u64(VM_COMPILER + slot));
-    out.executed = mem.read_u64(md);
-    out.stop = stop;
+    // every vCPU's count of instructions run, each in its own monitor data (Sprint 327)
+    out.executed = chains.iter().map(|(_, pages)| mem.read_u64(pages.monitor)).sum();
     if guest.time_runtime_word {
         out.runtime_word = read_runtime_word(guest.memory_view()); // Sprint 164: read once, at the stop
     }
     Ok(out)
+}
+
+/// Where vCPU 0 starts: the guest's stack pointer, the program's entry (X17) and the runtime's entry (the PC).
+#[derive(Clone, Copy)]
+struct Entry {
+    stack: u64,
+    program: u64,
+    runtime: u64,
+}
+
+/// One vCPU of the run (Sprint 327): its index, the run's count of vCPUs, its pages, and what the vCPUs share outside
+/// the lock: the run's stop and the scheduler's condition a vCPU with no thread parks on.
+#[derive(Clone, Copy)]
+struct Place<'r> {
+    k: u64,
+    vcpus: u64,
+    pages: VcpuPages,
+    stopping: &'r RunStop,
+    sched: &'r crate::threads::Sched,
+}
+
+/// The run's stop on several vCPUs (Sprint 327; the run-loop design's "The stop"): the first vCPU to stop records its
+/// `Stop`, which is the run's, sets the flag, stops every vCPU through its handle and notifies the scheduler, so a
+/// running vCPU leaves its run cancelled and a parked one wakes; each finds the flag and ends recording nothing.
+#[derive(Default)]
+struct RunStop {
+    stopped: std::sync::atomic::AtomicBool,
+    first: std::sync::Mutex<Option<Stop>>,
+    handles: std::sync::Mutex<Vec<hypervisor::VcpuHandle>>,
+}
+
+impl RunStop {
+    fn stopped(&self) -> bool {
+        self.stopped.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// A vCPU made: its handle kept for the stop, and stopped at once if the run stopped before it was made.
+    fn add(&self, handle: hypervisor::VcpuHandle) {
+        self.handles.lock().unwrap_or_else(|e| e.into_inner()).push(handle);
+        if self.stopped() {
+            let _ = handle.stop();
+        }
+    }
+
+    /// `stop` the run's, unless another vCPU's came first; then every vCPU stopped.
+    fn stop(&self, stop: Stop, sched: &crate::threads::Sched) {
+        self.first.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert(stop);
+        self.halt(sched);
+    }
+
+    /// Every vCPU stopped, the flag set first so a vCPU cancelled by it finds it: at a stop, and when a vCPU's thread
+    /// ends by an error or a panic, which would leave the others running.
+    fn halt(&self, sched: &crate::threads::Sched) {
+        self.stopped.store(true, std::sync::atomic::Ordering::Release);
+        for handle in self.handles.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+            let _ = handle.stop();
+        }
+        sched.notify();
+    }
+
+    fn first(&self) -> Option<Stop> {
+        self.first.lock().unwrap_or_else(|e| e.into_inner()).take()
+    }
+}
+
+/// Halts the run when a vCPU's thread ends, by its stop, an error or a panic (Sprint 327).
+struct HaltAtEnd<'r>(&'r RunStop, &'r crate::threads::Sched);
+
+impl Drop for HaltAtEnd<'_> {
+    fn drop(&mut self) {
+        self.0.halt(self.1);
+    }
+}
+
+/// One vCPU's thread (Sprint 327): its vCPU made here, where it stays; its registers set, vCPU 0's at the program's
+/// entry, another's with no thread; its loop run; its stop, if it is the run's, given to the run; its guest's hold of
+/// the runtime word let go, as that guest never runs again.
+fn run_on_vcpu(
+    lock: &GuestLock<'_>,
+    vm: &Vm,
+    ttbr: u64,
+    entry: Option<Entry>,
+    place: Place<'_>,
+    max_steps: u64,
+    facts: LoadFacts,
+) -> Result<Outcome, HvError> {
+    let _halt = HaltAtEnd(place.stopping, place.sched);
+    let vcpu = Vcpu::new(vm)?;
+    place.stopping.add(vcpu.handle());
+    set_system_registers(&vcpu, ttbr)?;
+    vcpu.set_reg(Reg::Fpcr, fpcr_for(0x1F80))?;
+    for r in 0..31u8 {
+        vcpu.set_reg(Reg::X(r), 0)?;
+    }
+    vcpu.set_reg(Reg::X(REG_UNDEFINED_FLAGS), 0x3F)?;
+    vcpu.set_reg(Reg::X(28), MONITOR_VA + MONITOR_DATA)?;
+    vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
+    if let Some(entry) = entry {
+        vcpu.set_reg(Reg::X(4), entry.stack)?;
+        vcpu.set_reg(Reg::X(17), entry.program)?;
+        vcpu.set_reg(Reg::Pc, entry.runtime)?;
+    }
+    let mut mine = Outcome::empty();
+    let stop = vcpu_loop(lock, &vcpu, place, max_steps, facts, &mut mine)?;
+    if let Some(stop) = stop {
+        place.stopping.stop(stop, place.sched);
+    }
+    crate::monitor_code::release_ended_vcpus_word(lock.view(), place.k as u32 + 1);
+    Ok(mine)
+}
+
+/// How a vCPU with no thread came out of `take_a_thread` (Sprint 327).
+enum Taken {
+    /// a thread loaded, its registers set, the vCPU to go on at the dispatcher
+    Thread,
+    /// the run stopped: the vCPU ends, recording nothing
+    Ended,
+    /// the run's stop, from this vCPU
+    Stopped(Stop),
+}
+
+/// A vCPU with no thread takes one (Sprint 327; the run-loop design's "A vCPU with no thread", the Python host's
+/// Sprints 118 to 121): under the word and the lock, expired waits made ready and `threads::take` asked for a ready
+/// thread no other vCPU holds; with one, its registers and vectors loaded and the vCPU on at the dispatcher; with none,
+/// the vCPU parks on the scheduler, holding neither the word nor the lock, until a change, the earliest blocked
+/// thread's deadline, or a deadlock of every vCPU, which stops the run as one vCPU's does (`threads::DEADLOCK`).
+fn take_a_thread(
+    lock: &GuestLock<'_>,
+    vcpu: &Vcpu<'_>,
+    place: Place<'_>,
+    dispatch_va: u64,
+    out: &mut Outcome,
+) -> Result<Taken, HvError> {
+    let md = place.pages.monitor;
+    loop {
+        if place.stopping.stopped() {
+            return Ok(Taken::Ended);
+        }
+        // read before the take, so a thread readied after it moves the count and the park returns at once
+        let seen = place.sched.changes();
+        let took = take_word(lock.view(), md, &mut out.served_outside_word);
+        let (taken, deadline) = {
+            let mut held = lock.serve(place.pages);
+            crate::threads::wake_expired(held.guest);
+            let mut x = [0u64; 31];
+            let taken = crate::threads::take(held.guest, &mut x).map(|t| t.map(|(_, vslot)| (vslot, x)));
+            (taken, crate::threads::park_deadline(held.guest))
+        };
+        if took {
+            crate::monitor_code::host_release_runtime_word(lock.view());
+        }
+        match taken {
+            Err(why) => return Ok(Taken::Stopped(Stop::Handover { pc: dispatch_va, why })),
+            Ok(Some((vslot, x))) => {
+                load_vectors(vcpu, lock.view(), vslot)?;
+                for (r, v) in x.iter().enumerate() {
+                    vcpu.set_reg(Reg::X(r as u8), *v)?;
+                }
+                vcpu.set_reg(Reg::Pc, dispatch_va)?;
+                vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
+                return Ok(Taken::Thread);
+            }
+            Ok(None) => {
+                if place.sched.park(seen, deadline, place.vcpus) == crate::threads::Woken::Deadlock {
+                    let why = crate::threads::DEADLOCK.into();
+                    return Ok(Taken::Stopped(Stop::Handover { pc: dispatch_va, why }));
+                }
+            }
+        }
+    }
 }
 
 /// What the run loop reads of the loaded guest outside a service, copied before it (the run-loop design's "How the
@@ -932,21 +1184,32 @@ struct LoadFacts {
 /// One vCPU's run loop, to the run's stop (Sprint 324; reviewer-3's Low 1 at 324): it holds the run's lock by `&`, as
 /// each vCPU thread will, so the run's shared state is reached only through `GuestLock::serve`, under the runtime word;
 /// `GuestLock::get_mut`, which needs `&mut`, does not compile here or in anything the loop hands the lock to (E0596).
+/// None when another vCPU's stop ended the run first (Sprint 327): a cancel, a park's wake or a turn's start finds
+/// the run's flag set, and the vCPU ends recording nothing.
 fn vcpu_loop(
     lock: &GuestLock<'_>,
     vcpu: &Vcpu<'_>,
-    pages: VcpuPages,
+    place: Place<'_>,
     max_steps: u64,
     facts: LoadFacts,
     out: &mut Outcome,
-) -> Result<Stop, HvError> {
+) -> Result<Option<Stop>, HvError> {
     let LoadFacts {
         dispatch_va,
         miss_va,
         time_runtime_word,
         compiling,
     } = facts;
+    let pages = place.pages;
     let md = pages.monitor;
+    // a vCPU past the first starts with no thread and takes one (Sprint 327)
+    if place.k > 0 {
+        match take_a_thread(lock, vcpu, place, dispatch_va, out)? {
+            Taken::Thread => {}
+            Taken::Ended => return Ok(None),
+            Taken::Stopped(stop) => return Ok(Some(stop)),
+        }
+    }
     let runtime = MONITOR_VA + RUNTIME_IMAGE..MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE;
     let mut marked = None::<Instant>;
     let mut kind = String::new(); // the last exit's kind, whose service `marked` times
@@ -959,7 +1222,11 @@ fn vcpu_loop(
         if flushed > 0 {
             *out.exits.entry(HVC_TLB_FLUSHED as u16).or_default() += flushed;
         }
-        // a cancel that came while a split's flush ran, reported once the split was done (Sprint 305)
+        // a cancel that came while a split's flush ran, reported once the split was done (Sprint 305); another vCPU's
+        // stop, or the run's, found at the turn's start (Sprint 327)
+        if place.stopping.stopped() {
+            return Ok(None);
+        }
         if counts.cancelled.take() {
             break Stop::TimeLimit;
         }
@@ -1118,7 +1385,11 @@ fn vcpu_loop(
             }
             *out.exits.entry(0).or_default() += 1;
             if matches!(exit, Exit::Canceled) {
-                // `hv_vcpus_exit` from the run's time limit (w2m-vm's GUEST_SECONDS; Sprint 197)
+                // `hv_vcpus_exit` from the run's stop, another vCPU's or the time limit's (w2m-vm's GUEST_SECONDS;
+                // Sprint 197), which sets the flag first (Sprint 327); without it, a cancel no stop explains
+                if place.stopping.stopped() {
+                    return Ok(None);
+                }
                 break Stop::TimeLimit;
             }
             break Stop::Exit(format!("{exit:?} at pc 0x{pc:x}"));
@@ -1245,6 +1516,7 @@ fn vcpu_loop(
             let took = take_word(lock.view(), md, &mut out.served_outside_word);
             let mut held = lock.serve(pages);
             let from = crate::threads::current_tid(held.guest);
+            let from_vectors = vector_slot(held.guest, from);
             let mut switched = crate::threads::schedule(held.guest, &mut x, bits);
             // no thread ready in a process of a machine: the turn goes to the others until one is (Sprint 197)
             while switched == Ok(Switch::Idle) {
@@ -1276,10 +1548,16 @@ fn vcpu_loop(
                 Err(why) => break Stop::Handover { pc, why },
                 Ok(Switch::Idle) => unreachable!(),
                 Ok(Switch::Parked) => {
-                    break Stop::Handover {
-                        pc,
-                        why: PARKED_ALONE.into(),
-                    };
+                    // the thread put down by the switch, its vectors saved here, then the vCPU takes another or ends
+                    // (Sprint 327)
+                    if let Some(slot) = from_vectors {
+                        save_vectors(vcpu, lock.view(), slot)?;
+                    }
+                    match take_a_thread(lock, vcpu, place, dispatch_va, out)? {
+                        Taken::Thread => continue,
+                        Taken::Ended => return Ok(None),
+                        Taken::Stopped(stop) => break stop,
+                    }
                 }
                 Ok(Switch::Ended(code)) => break Stop::ExitProcess { code },
                 Ok(Switch::Go { vectors }) => {
@@ -1365,6 +1643,7 @@ fn vcpu_loop(
             // and the budget, the wakes and the scheduler change the threads and the turn; released once, after
             let took = take_word(lock.view(), md, &mut out.served_outside_word);
             let mut held = lock.serve(pages);
+            let mut from_vectors = None; // the outgoing thread's vector slot, for a park (Sprint 327)
             let switched: Result<Option<Switch>, Stop> = 'slice: {
                 crate::threads::set_budget(held.guest);
                 crate::threads::wake_expired(held.guest);
@@ -1394,6 +1673,7 @@ fn vcpu_loop(
                     }
                 }
                 let from = crate::threads::current_tid(held.guest);
+                from_vectors = vector_slot(held.guest, from);
                 let mut switched = crate::threads::schedule(held.guest, &mut x, 0);
                 while switched == Ok(Switch::Idle) {
                     let handed;
@@ -1417,10 +1697,15 @@ fn vcpu_loop(
                 Ok(None) => continue,
                 Ok(Some(Switch::Idle)) => unreachable!(),
                 Ok(Some(Switch::Parked)) => {
-                    break Stop::Handover {
-                        pc,
-                        why: PARKED_ALONE.into(),
-                    };
+                    // as at `hvc #12` (Sprint 327)
+                    if let Some(slot) = from_vectors {
+                        save_vectors(vcpu, lock.view(), slot)?;
+                    }
+                    match take_a_thread(lock, vcpu, place, dispatch_va, out)? {
+                        Taken::Thread => continue,
+                        Taken::Ended => return Ok(None),
+                        Taken::Stopped(stop) => break stop,
+                    }
                 }
                 Ok(Some(Switch::Ended(code))) => break Stop::ExitProcess { code },
                 Ok(Some(Switch::Go { vectors })) => {
@@ -1521,7 +1806,7 @@ fn vcpu_loop(
         }
         vcpu.set_reg(Reg::Pc, miss_va + 4)?; // ic ialluis; tlbi; dsb; isb; re-dispatch
     };
-    Ok(stop)
+    Ok(Some(stop))
 }
 
 #[cfg(test)]
@@ -1543,7 +1828,10 @@ mod tests {
         );
         assert!(refused(vcpus_allowed(2, lse2, &[], true, false)).contains("a child process runs on one"));
         assert!(refused(vcpus_allowed(2, lse2, &[], false, true)).contains("the instruction clock reads the running"));
-        assert!(refused(vcpus_allowed(2, lse2, &[], false, false)).contains("a second vCPU is not built"));
+        // the second vCPU is built (Sprint 327); above the layout's eight, refused
+        assert_eq!(vcpus_allowed(2, lse2, &[], false, false), Ok(()));
+        assert_eq!(vcpus_allowed(8, lse2, &[], false, false), Ok(()));
+        assert!(refused(vcpus_allowed(9, lse2, &[], false, false)).contains("the layout has pages for 8"));
     }
 
     /// `super::recon_lookup` over a copy of `table`'s bytes, through the view.

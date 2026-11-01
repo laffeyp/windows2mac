@@ -185,6 +185,13 @@ pub fn host_release_runtime_word(mem: ConcurrentGuestMemory<'_>) {
     runtime_word(mem).store(0, std::sync::atomic::Ordering::Release);
 }
 
+/// The word let go for a vCPU whose run has ended, if that vCPU's guest (owner `own`) holds it (Sprint 327): its guest
+/// never runs again to let it go, and another vCPU's take would wait on it for ever; another holder's hold is kept.
+pub fn release_ended_vcpus_word(mem: ConcurrentGuestMemory<'_>, own: u32) {
+    use std::sync::atomic::Ordering;
+    let _ = runtime_word(mem).compare_exchange(own, 0, Ordering::Release, Ordering::Relaxed);
+}
+
 /// `unlock_runtime` (vm_backend 544-546).
 pub fn unlock_runtime(a: &mut Assembler) {
     a.emit(&a64::mov_imm(16, MONITOR_VA + RUN_TABLE + RUNTIME_LOCK));

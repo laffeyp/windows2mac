@@ -100,3 +100,52 @@ Two vCPUs run one process's threads and end it as one vCPU does.
 
 ## result
 
+- **The run** (`crates/w2m_vm/src/run.rs`): `run` makes `guest.start.vcpus` vCPU threads in its scope, each through
+  `run_on_vcpu`, which makes its vCPU, sets its registers and runs `vcpu_loop`. Before the threads: vCPU `k`'s root
+  table and pages from `Guest::private_chain(k)`; each vCPU's budget, MXCSR, FCW and `LOCK_OWNER` `k + 1` written;
+  the run table's `waiting` raised by the vCPUs past the first. vCPU 0 starts at the program's entry; vCPU `k` with no
+  thread, taking one (`take_a_thread`).
+- **A vCPU with no thread** (`take_a_thread`): under the word and the lock, `wake_expired` then `threads::take`; with a
+  thread, its registers and its vectors (`load_vectors`) loaded and the vCPU on at the dispatcher; with none, a park
+  on `Sched` with `park_deadline`'s deadline, holding neither, and `Woken::Deadlock` the run's stop with
+  `threads::DEADLOCK`, the one-vCPU switch's words named once. The two `PARKED_ALONE` stops became the outgoing
+  thread's vectors saved (`save_vectors`, `vswap`'s first half, at its slot, `vector_slot`) and a take.
+- **The stop** (`RunStop`): the first `Stop` recorded; the flag set, then every vCPU stopped through its handle and the
+  scheduler notified; a vCPU that finds the flag at a turn's start, a cancel or a take ends with `None`; `HaltAtEnd`
+  halts the run when a vCPU's thread ends by any path, an error or a panic among them; the time limit's thread stops
+  the run as `Stop::TimeLimit`. An ended vCPU's guest's hold of the runtime word is let go
+  (`monitor_code::release_ended_vcpus_word`), in place of the card's stop flag in the word's spin: the waiter's take
+  then succeeds, and its turn's start finds the flag.
+- **The merged outcome:** `Outcome::empty` and `Outcome::add_vcpu`, each vCPU's times, exits and counts added;
+  `runs_by_vcpu` each vCPU's `vcpu.run` count; `executed` the sum of every vCPU's count.
+- **`vcpus_allowed`:** "a second vCPU is not built" gone; above `MAX_VCPUS`, 8, refused, `private_chain` making none
+  past it. Four lines of `take_word`'s doc, left above `vcpus_allowed`'s, folded into `take_word`'s.
+- **Found by the run, fixed:** `sleeper` on two vCPUs stopped at the 60-s limit; vCPU 1 had 0 runs and the run table
+  `waiting` 1, the main thread ready and held by none, the spinner held by vCPU 0, no hand-over recorded. `add_thread`
+  writes a new thread's `READY` with no notify, not through `set_status` (Sprint 319's "the one writer" did not hold
+  for creation), so the parked vCPU slept through the spinner's creation and vCPU 0 switched to it inside the VM. It
+  notifies now for every thread past the first; `sleeper` ended "woke\ndone\n", runs [13, 12]. Its class read whole:
+  `threads::save`, the host's put-down, cleared a ready thread's `vcpu` word with no notify, and notifies now; the C
+  runtime's `w2m_switch` does the same on a yield, carried to Deferred (Sprint 327) unseen in any run.
+- **The tests** (`tests/run_loop.rs`): `two_vcpus_end_each_guest_as_one_does`, `qpc`, `sleeper` and `twoready` on 2
+  vCPUs with a run limit of 60 s: vCPU 1's `LOCK_OWNER` 2, read first; the stop as on one vCPU; the output as on one,
+  `qpc`'s by its form; `twoready`'s `runs_by_vcpu[1]` above 0. `busychild_through_w2m_vm_on_two_vcpus_is_refused_by_name`:
+  "HostRequest op 33: " and `MACHINE_ON_ONE` (Deferred, Sprint 325, met). `run_loop_lock.rs` holds `run_on_vcpu`'s
+  signature too, its `lock: &GuestLock<'_>` passed on.
+- **Every guest on two vCPUs** (`w2m-vm --vcpus 2`, each against `store/batch_run/first-stop-2026-10-28.tsv`): seven
+  that start a child stop with `MACHINE_ON_ONE`; `model_steps`, `mutual_context`, `mutual`, `qpc`, `qpc2`, `readied`,
+  `sleeper`, `twoready` stop and print as held, `qpc`'s and `qpc2`'s readings by their form; `statsize` stops as held
+  and prints "sizes differ" for "done": the host writes a stat into the requesting vCPU's runtime stack through vCPU
+  0's mapping (`Layout::offset`). The done criterion does not hold for it: the close is partial, BLACKBOARD Deferred
+  (Sprint 327, partial), card 328 its re-visit, before 4c3b3.
+- **Every run on one vCPU as held:** `cargo nextest run -E 'rdeps(w2m_vm)'`, 198 tests passed in 415 s; `cargo
+  clippy` with the gates' flags clean.
+- **Plant 1,** `run.rs` copied aside and restored by `cp`, checked by `cmp`: the set-up's `LOCK_OWNER` `k + 1` made 1;
+  the test failed, "assertion `left == right` failed: qpc: vCPU 1's LOCK_OWNER", left 1.
+- **Plant 2,** restored likewise: the stop's hand-off (`place.stopping.stop(stop, …)`) and the `HaltAtEnd` guard both
+  taken out, the guard alone hiding the hand-off's loss; the test failed at the run's 60-s limit, "assertion `left ==
+  right` failed: qpc's stop on 2 vCPUs", left `TimeLimit`.
+- **Plant 3,** `w2m-vm.rs` likewise: `start.vcpus = vcpus;` made `let _ = vcpus;`; the test failed, `busychild` ending
+  "ExitProcess { code: 0 }".
+- **The gates:** GATES-LINE
+

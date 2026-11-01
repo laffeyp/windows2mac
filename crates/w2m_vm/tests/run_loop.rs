@@ -19,8 +19,8 @@ use std::time::Duration;
 use cpu_cases::sha256;
 use guest_runtime::layout::{
     AP_READ_ONLY, CACHE_CODE_VA, CACHE_FILE_SIZE, CACHE_FILE_VA, CODE_CACHE, CODE_CACHE_SIZE, DISPATCH_TABLE, IPA_BASE,
-    MONITOR_DATA, MONITOR_VA, PAGE, PROCESS_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE, RUNTIME_IMAGE_VA, STATE_OFF,
-    VM_COMPILER, VMC_LOG, runtime_defines,
+    LOCK_OWNER, MONITOR_DATA, MONITOR_VA, PAGE, PROCESS_VA, RECON_COUNT, RECON_TABLE, RUN_TABLE, RUNTIME_IMAGE_VA,
+    STATE_OFF, VCPU_AREA, VCPU_STRIDE, VM_COMPILER, VMC_LOG, runtime_defines,
 };
 use hypervisor::{Vcpu, Vm, memory};
 use pe_loader::{Loaded, load};
@@ -1008,4 +1008,91 @@ fn a_spawn_on_two_vcpus_is_refused_before_its_link() {
         other => panic!("busychild on 2 vCPUs stopped as {other:?}"),
     }
     assert!(guest.served.link.is_none(), "a link was made before the refusal");
+}
+
+/// Sprint 327 (the run-loop design's 4c3b2b): two vCPUs run one process and end it as one vCPU does, `qpc`'s clock
+/// reading held by its form as `batch_run.rs` holds it; vCPU 1's `LOCK_OWNER`, at its own monitor page
+/// (`VCPU_AREA + VCPU_STRIDE`, `Guest::private_chain`), is 2; and `twoready`'s vCPU 1 runs guest code, its main thread
+/// spinning on its vCPU while it readies two workers, so a waiting vCPU must take one (`twoready.c` 4-5). The run's
+/// limit of 60 s turns a vCPU left parked into a named stop, as the gates' GUEST_SECONDS does; no elapsed time is held.
+#[test]
+fn two_vcpus_end_each_guest_as_one_does() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    for name in ["qpc", "sleeper", "twoready"] {
+        let (loaded, mut one) = guest_for(&root, name);
+        let alone = run(&mut one, &loaded, &mut HostCompiler::default());
+        let mut start = Start::console("probe.exe");
+        start.vcpus = 2;
+        let mut two = guest_with(&root, &loaded, &start);
+        let both = run_limited(
+            &mut two,
+            &loaded,
+            &mut HostCompiler::default(),
+            Some(Duration::from_secs(60)),
+        );
+        // read first, so a run whose owners are wrong fails here, whatever its stop
+        let owner = two.memory_view().read_u64(VCPU_AREA + VCPU_STRIDE + LOCK_OWNER);
+        assert_eq!(owner, 2, "{name}: vCPU 1's LOCK_OWNER");
+        assert_eq!(both.stop, alone.stop, "{name}'s stop on 2 vCPUs");
+        let (said, said_alone) = (
+            String::from_utf8_lossy(&two.served.stdout),
+            String::from_utf8_lossy(&one.served.stdout),
+        );
+        if name == "qpc" {
+            let reading = said.strip_suffix('\n').unwrap_or("");
+            assert!(
+                reading.len() == 16 && reading.chars().all(|c| c.is_ascii_hexdigit()),
+                "qpc's output on 2 vCPUs: {said:?}"
+            );
+        } else {
+            assert_eq!(said, said_alone, "{name}'s output on 2 vCPUs");
+        }
+        assert_eq!(both.runs_by_vcpu.len(), 2, "{name}: a count of runs for each vCPU");
+        if name == "twoready" {
+            assert!(
+                both.runs_by_vcpu[1] > 0,
+                "twoready: vCPU 1 ran no guest code, runs {:?}",
+                both.runs_by_vcpu
+            );
+        }
+    }
+}
+
+/// Deferred (Sprint 325), met at Sprint 327: `w2m-vm --vcpus 2` carries the count to the guest's start, so `busychild`'s
+/// CreateProcessW stops the run by name (`MACHINE_ON_ONE`); the binary run through `scripts/sign_and_run.sh`, which
+/// signs it for the hypervisor, as the gates run each guest.
+#[test]
+fn busychild_through_w2m_vm_on_two_vcpus_is_refused_by_name() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let dir = std::env::temp_dir().join(format!("w2m-busychild-two-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let (output, stop) = (dir.join("busychild.txt"), dir.join("busychild.stop"));
+    let mut child = std::process::Command::new(root.join("scripts/sign_and_run.sh"))
+        .arg(env!("CARGO_BIN_EXE_w2m-vm"))
+        .arg(root.join("tests/data/timed_waits/busychild.exe"))
+        .args(["--vcpus", "2", "--output"])
+        .arg(&output)
+        .arg("--stop")
+        .arg(&stop)
+        .current_dir(&root)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        use std::io::Write;
+        child.stdin.take().unwrap().write_all(b"{}\n").unwrap();
+    }
+    let ran = child.wait_with_output().unwrap();
+    let stopped = fs::read_to_string(&stop).unwrap_or_default();
+    let _ = fs::remove_dir_all(&dir);
+    assert_eq!(
+        stopped.trim_end(),
+        format!("HostRequest op 33: {}", w2m_vm::host_request::MACHINE_ON_ONE),
+        "busychild through w2m-vm --vcpus 2; stderr {}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
 }

@@ -25,16 +25,19 @@ fn run_body(text: &str) -> Option<&str> {
     Some(&text[start..end])
 }
 
-/// Whether `text` is a `run.rs` whose loop holds the lock by `&`: `vcpu_loop` takes `lock: &GuestLock<'_>`, and
-/// `run_on_vcpu` calls it with `&lock` and has no `loop {` of its own. Err names what breaks the rule.
+/// Whether `text` is a `run.rs` whose loop holds the lock by `&`: `vcpu_loop` and `run_on_vcpu`, each vCPU's thread
+/// body (Sprint 327), take `lock: &GuestLock<'_>`, and `run_on_vcpu` hands its lock on, `vcpu_loop(lock, …)`, with no
+/// `loop {` of its own. Err names what breaks the rule.
 fn the_loop_holds_the_lock_by_ref(text: &str) -> Result<(), String> {
-    let sig = signature(text, "vcpu_loop").ok_or("no `fn vcpu_loop(`")?;
-    if !sig.contains("lock: &GuestLock<'_>,") {
-        return Err(format!("`vcpu_loop` does not take `lock: &GuestLock<'_>`: {sig}"));
+    for name in ["vcpu_loop", "run_on_vcpu"] {
+        let sig = signature(text, name).ok_or(format!("no `fn {name}(`"))?;
+        if !sig.contains("lock: &GuestLock<'_>,") {
+            return Err(format!("`{name}` does not take `lock: &GuestLock<'_>`: {sig}"));
+        }
     }
     let run = run_body(text).ok_or("no `fn run_on_vcpu(`")?;
-    if !run.contains("vcpu_loop(&lock,") {
-        return Err("`run_on_vcpu` does not call `vcpu_loop(&lock, …)`".into());
+    if !run.contains("vcpu_loop(lock,") {
+        return Err("`run_on_vcpu` does not call `vcpu_loop(lock, …)`".into());
     }
     if run
         .lines()
@@ -53,17 +56,26 @@ fn the_run_loop_holds_the_lock_by_ref() {
 
 #[test]
 fn a_mut_lock_or_a_loop_in_run_is_named() {
-    let good = "\nfn run_on_vcpu(x: u8) {\n    let s = vcpu_loop(&lock, vcpu)?;\n}\n\nfn vcpu_loop(\n    lock: &GuestLock<'_>,\n) -> R {\n    loop {}\n}\n";
+    let good = "\nfn run_on_vcpu(\n    lock: &GuestLock<'_>,\n) -> R {\n    let s = vcpu_loop(lock, vcpu)?;\n}\n\nfn vcpu_loop(\n    lock: &GuestLock<'_>,\n) -> R {\n    loop {}\n}\n";
     assert_eq!(the_loop_holds_the_lock_by_ref(good), Ok(()));
-    let by_mut = good.replace("lock: &GuestLock<'_>,", "lock: &mut GuestLock<'_>,");
+    let by_mut = good.replacen("lock: &GuestLock<'_>,", "lock: &mut GuestLock<'_>,", 1);
     assert!(
         the_loop_holds_the_lock_by_ref(&by_mut)
             .unwrap_err()
-            .contains("does not take")
+            .contains("`run_on_vcpu` does not take")
+    );
+    let by_mut = good.replace(
+        "fn vcpu_loop(\n    lock: &GuestLock",
+        "fn vcpu_loop(\n    lock: &mut GuestLock",
+    );
+    assert!(
+        the_loop_holds_the_lock_by_ref(&by_mut)
+            .unwrap_err()
+            .contains("`vcpu_loop` does not take")
     );
     let looped = good.replace(
-        "    let s = vcpu_loop(&lock, vcpu)?;",
-        "    let s = vcpu_loop(&lock, vcpu)?;\n    loop {}",
+        "    let s = vcpu_loop(lock, vcpu)?;",
+        "    let s = vcpu_loop(lock, vcpu)?;\n    loop {}",
     );
     assert!(
         the_loop_holds_the_lock_by_ref(&looped)
