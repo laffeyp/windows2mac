@@ -303,6 +303,10 @@ pub struct Outcome {
     /// the same times by the exit's kind (`hvc <k>`, `vtimer`, or `ec 0x<class>`), for step 3's measure (Sprint 163),
     /// the whole-block judge's part as `JUDGE_KIND` (Sprint 257)
     pub serve_by_kind: BTreeMap<String, Vec<u64>>,
+    /// each turn's start, the slice's end and whether another process is due read under the runtime word and the lock
+    /// before the vCPU runs, in ns, one a run of the vCPU; not counted in `serve_ns` (Sprint 324: the run-loop design's
+    /// measure of its first form against the second)
+    pub turn_start_ns: Vec<u64>,
     /// the runtime word's takings when the guest times them (Sprint 164)
     pub runtime_word: RuntimeWordTimes,
     /// each run's time, from `hv_vcpu_run`'s call to its return, in ns
@@ -599,7 +603,7 @@ pub fn flush_through_stub(vcpu: &Vcpu, counts: &FlushCounts) -> Result<(), Strin
 }
 
 /// The stop of a run whose one vCPU the scheduler parks (Sprint 319): only a second vCPU holding a thread parks a vCPU,
-/// and the run loop parks none until the threads card (the run-loop design's 4c3b2).
+/// and the run loop parks none until the threads card (the run-loop design's 4c3b2b).
 const PARKED_ALONE: &str = "a vCPU parked with no other vCPU to wake it";
 
 /// The runtime word taken for the host, by the vCPU whose monitor data page is at `monitor`, a hold found outside the
@@ -784,6 +788,7 @@ fn run(
         compile_ticks: Default::default(),
         serve_ns: Vec::new(),
         serve_by_kind: BTreeMap::new(),
+        turn_start_ns: Vec::new(),
         runtime_word: RuntimeWordTimes::default(),
         run_ns: Vec::new(),
         exits: BTreeMap::new(),
@@ -830,18 +835,90 @@ fn run(
     vcpu.set_reg(Reg::Pc, guest.entry_va)?;
     vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
 
+    // the Load facts the loop reads outside a service, copied before it, as each vCPU thread keeps its own (the run-loop
+    // design's "How the threads share `Guest`"; Sprint 324)
+    let facts = LoadFacts {
+        dispatch_va: guest.code.dispatch_va,
+        miss_va: guest.code.miss_va,
+        time_runtime_word: guest.time_runtime_word,
+        compiling: host.is_some(),
+    };
+    // the run's shared state behind one lock (Sprints 310 and 311), which the loop holds by `&` alone (Sprint 324)
+    let lock = GuestLock::new(&mut *guest, host.as_deref_mut());
+    let stop = vcpu_loop(&lock, vcpu, pages, max_steps, facts, &mut out)?;
+    // the records into the outcome, the borrows given back (Sprint 311)
+    let records = lock.into_inner().records;
+    out.bridged = records.bridged;
+    out.blocks = records.blocks;
+    out.translations = records.translations;
+    out.created = records.created;
+    out.thread_requests = records.thread_requests;
+    out.handovers = records.handovers;
+    out.vm_compile_starts = records.vm_compile_starts;
+    out.instructions_at = records.instructions_at;
+    // the stop's own row, then the file whole (Sprint 206)
+    if let Some(l) = &mut guest.exit_ledger {
+        let view = crate::guest::memory_view(&guest.memory);
+        let warp = view.read_u64(RUN_TABLE + crate::process::CLOCK_WARP);
+        // the ledger's process area as a slice, as at each exit (census D7)
+        let _ = l.resume(view.read_u64(md), warp, process_below_trace(guest.memory.as_slice()));
+        let _ = l.flush();
+        // the blocks both compilers made (Sprint 207)
+        let mut blocks: Vec<(u64, u64)> = out.translations.iter().map(|t| (t.start, t.end)).collect();
+        if let Some(h) = host.as_deref() {
+            blocks.extend(h.translations.iter().copied());
+        }
+        let _ = l.blocks(&blocks);
+    }
+    let mem = guest.memory_view();
+    for (i, name) in VMC_COUNT_NAMES.iter().enumerate() {
+        out.counts
+            .insert(name, mem.read_u64(VM_COMPILER + VMC_COUNTS + 8 * i as u64));
+    }
+    out.compile_ticks = crate::monitor_code::CompileTicks::read(|slot| mem.read_u64(VM_COMPILER + slot));
+    out.executed = mem.read_u64(md);
+    out.stop = stop;
+    if guest.time_runtime_word {
+        out.runtime_word = read_runtime_word(guest.memory_view()); // Sprint 164: read once, at the stop
+    }
+    Ok(out)
+}
+
+/// What the run loop reads of the loaded guest outside a service, copied before it (the run-loop design's "How the
+/// threads share `Guest`"; Sprint 324): fixed for the run, so each vCPU thread keeps its own.
+#[derive(Clone, Copy)]
+struct LoadFacts {
+    dispatch_va: u64,
+    miss_va: u64,
+    time_runtime_word: bool,
+    compiling: bool,
+}
+
+/// One vCPU's run loop, to the run's stop (Sprint 324; reviewer-3's Low 1 at 324): it holds the run's lock by `&`, as
+/// each vCPU thread will, so the run's shared state is reached only through `GuestLock::serve`, under the runtime word;
+/// `GuestLock::get_mut`, which needs `&mut`, does not compile here or in anything the loop hands the lock to (E0596).
+fn vcpu_loop(
+    lock: &GuestLock<'_>,
+    vcpu: &Vcpu<'_>,
+    pages: VcpuPages,
+    max_steps: u64,
+    facts: LoadFacts,
+    out: &mut Outcome,
+) -> Result<Stop, HvError> {
+    let LoadFacts {
+        dispatch_va,
+        miss_va,
+        time_runtime_word,
+        compiling,
+    } = facts;
+    let md = pages.monitor;
     let runtime = MONITOR_VA + RUNTIME_IMAGE..MONITOR_VA + RUNTIME_IMAGE + RUNTIME_IMAGE_SIZE;
     let mut marked = None::<Instant>;
     let mut kind = String::new(); // the last exit's kind, whose service `marked` times
     let mut judge_ns = 0u64; // the whole-block judge's part of that service
     // what the flush stub's nested runs inside a split saw, folded into the outcome at each turn (Sprint 305)
     let counts = FlushCounts::default();
-    // the run's shared state behind one lock (Sprints 310 and 311): a served exit's and the drain's reach through
-    // `serve`, under the runtime word; every other reach through `get_mut`, as one vCPU runs; given back after the loop
-    let compiling = host.is_some();
-    let mut lock = GuestLock::new(&mut *guest, host.as_deref_mut());
     let stop = loop {
-        let guest = &mut *lock.get_mut().guest;
         let flushed = counts.flushes.take();
         out.flushes += flushed;
         if flushed > 0 {
@@ -855,8 +932,14 @@ fn run(
         // threads itself; x23 the budget left, outside the runtime's C and the flush stub
         let pc = vcpu.reg(Reg::Pc)?;
         {
+            // the turn's start reads the threads and the link, which another vCPU's services change, under the word and
+            // the lock (the design's first form; Sprint 324), and is timed against an exit's service
+            let started = Instant::now();
+            let mem = lock.view();
+            let took = take_word(mem, md, &mut out.served_outside_word);
+            let held = lock.serve(pages);
+            let guest = &*held.guest;
             let slice_until = slice_until(guest);
-            let mem = guest.memory_view();
             let (count, limit) = (mem.read_u64(md), mem.read_u64(md + 8));
             mem.write_u64(md + SLICE_UNTIL, slice_until);
             mem.write_u64(md + RUN_END, max_steps);
@@ -866,9 +949,12 @@ fn run(
                 .link
                 .as_ref()
                 .is_some_and(|l| l.others_due(crate::threads::counter_now(guest)));
-            guest
-                .memory_view()
-                .write_u64(RUN_TABLE + u64::from(RT_IN_VM), u64::from(!others_due));
+            mem.write_u64(RUN_TABLE + u64::from(RT_IN_VM), u64::from(!others_due));
+            drop(held);
+            if took {
+                crate::monitor_code::host_release_runtime_word(mem);
+            }
+            out.turn_start_ns.push(started.elapsed().as_nanos() as u64);
             if !runtime.contains(&pc) {
                 vcpu.set_reg(Reg::X(REG_BUDGET as u8), limit.wrapping_sub(count))?;
             }
@@ -890,56 +976,60 @@ fn run(
         // the run's time ends here, before the ledger hashes the process area (reviewer-3's Medium 1 of its review of
         // Sprint 210: `run_seconds` had counted the hashing)
         let returned = Instant::now();
-        // the exit ledger's row for the last exit, the count and warp as this exit finds them, before its own refresh,
-        // as the frozen host's fixture reads them at `serve_exit`'s entry: a bridge stores the count into the word as
-        // the guest enters a service, so the word read before the resume lags it (Sprint 207). A split's flush runs
-        // nested inside its service and never reaches this loop, so it has no row, the frozen host never taking it
-        if let Some(l) = &mut guest.exit_ledger {
-            let view = crate::guest::memory_view(&guest.memory);
-            let warp = view.read_u64(RUN_TABLE + crate::process::CLOCK_WARP);
-            // the ledger hashes the process area from a slice: a diagnostic of one-vCPU runs, where the one vCPU is
-            // stopped here (census D7; a copy through the view would copy the area at every exit)
-            if let Err(why) = l.resume(view.read_u64(md), warp, process_below_trace(guest.memory.as_slice())) {
-                break Stop::Exit(format!("the exit ledger: {why}"));
-            }
-        }
-        if guest.time_runtime_word {
-            // the exit counted where the guest's timing reads it, so a taking that spans an exit says so (Sprint 164)
-            let (mem, at) = (guest.memory_view(), LOCK_TIMING + LOCK_EXITS);
-            mem.write_u64(at, mem.read_u64(at) + 1);
-        }
-        out.run_ns.push((returned - started).as_nanos() as u64);
-        // the exit's kind, named before the service is timed, so the naming is not counted in it (reviewer's finding
-        // of 2026-10-27: Sprint 163 named it after starting the timer)
-        kind = match (exit.hvc_immediate(), &exit) {
-            (Some(n), _) => format!("hvc {n}"),
-            (None, Exit::VtimerActivated) => "vtimer".to_string(),
-            (None, e) => e
-                .exception_class()
-                .map_or_else(|| format!("{e:?}"), |c| format!("ec 0x{c:02x}")),
-        };
-        marked = Some(Instant::now());
-        // the in-VM compiles judged against the Rust translator's, before the drain empties the log (Sprint 252)
-        judge_ns = 0;
-        if let Some(mut judge) = guest.block_judge.take() {
-            let started = Instant::now();
-            let judged = judge.judge(guest);
-            judge_ns = started.elapsed().as_nanos() as u64;
-            guest.block_judge = Some(judge);
-            if let Err(why) = judged {
-                break Stop::Exit(format!("the block judge: {why}"));
-            }
-        }
         let mem = lock.view();
         let pc = vcpu.reg(Reg::Pc)?;
-        // the in-VM compiler's log drained, and the exit counted with the tails the drain notes, under the runtime word
-        // and the lock (Sprints 275 and 311): another vCPU's compile appends to the log and the tails under the word
+        // the exit's diagnostics, the in-VM compiler's log drained and the exit counted with the tails the drain notes,
+        // under the runtime word and the lock, taken once (Sprints 275, 311 and 324): another vCPU's compile appends to
+        // the log and the tails under the word. The word is in the monitor region (`RUN_TABLE`), below the process area
+        // the ledger hashes, so the take leaves the hash as it was. A stop leaves the section before the word is let go
         let took = crate::monitor_code::host_take_runtime_word(mem, crate::monitor_code::vcpu_owner(mem, md));
-        let counted = {
+        let served: Result<Result<(), HvError>, Stop> = 'exit: {
             let mut held = lock.serve(pages);
-            let s = &mut *held;
-            vm_compiled(mem, &mut s.records, s.host.as_deref_mut());
-            if runtime.contains(&pc) {
+            let Shared { guest, host, records } = &mut *held;
+            let guest: &mut Guest = guest;
+            // the exit ledger's row for the last exit, the count and warp as this exit finds them, before its own
+            // refresh, as the frozen host's fixture reads them at `serve_exit`'s entry: a bridge stores the count into
+            // the word as the guest enters a service, so the word read before the resume lags it (Sprint 207). A
+            // split's flush runs nested inside its service and never reaches this loop, so it has no row, the frozen
+            // host never taking it
+            if let Some(l) = &mut guest.exit_ledger {
+                let view = crate::guest::memory_view(&guest.memory);
+                let warp = view.read_u64(RUN_TABLE + crate::process::CLOCK_WARP);
+                // the ledger hashes the process area from a slice: a diagnostic of one-vCPU runs, where the one vCPU is
+                // stopped here (census D7; a copy through the view would copy the area at every exit)
+                if let Err(why) = l.resume(view.read_u64(md), warp, process_below_trace(guest.memory.as_slice())) {
+                    break 'exit Err(Stop::Exit(format!("the exit ledger: {why}")));
+                }
+            }
+            if time_runtime_word {
+                // the exit counted where the guest's timing reads it, so a taking that spans an exit says so (Sprint 164)
+                let at = LOCK_TIMING + LOCK_EXITS;
+                mem.write_u64(at, mem.read_u64(at) + 1);
+            }
+            out.run_ns.push((returned - started).as_nanos() as u64);
+            // the exit's kind, named before the service is timed, so the naming is not counted in it (reviewer's
+            // finding of 2026-10-27: Sprint 163 named it after starting the timer)
+            kind = match (exit.hvc_immediate(), &exit) {
+                (Some(n), _) => format!("hvc {n}"),
+                (None, Exit::VtimerActivated) => "vtimer".to_string(),
+                (None, e) => e
+                    .exception_class()
+                    .map_or_else(|| format!("{e:?}"), |c| format!("ec 0x{c:02x}")),
+            };
+            marked = Some(Instant::now());
+            // the in-VM compiles judged against the Rust translator's, before the drain empties the log (Sprint 252)
+            judge_ns = 0;
+            if let Some(mut judge) = guest.block_judge.take() {
+                let started = Instant::now();
+                let judged = judge.judge(guest);
+                judge_ns = started.elapsed().as_nanos() as u64;
+                guest.block_judge = Some(judge);
+                if let Err(why) = judged {
+                    break 'exit Err(Stop::Exit(format!("the block judge: {why}")));
+                }
+            }
+            vm_compiled(mem, records, host.as_deref_mut());
+            let counted = if runtime.contains(&pc) {
                 Ok(())
             } else {
                 // the count, from x23, with a fault's give-back (5199-5208); the VM's own blocks' tails this loop does
@@ -950,34 +1040,41 @@ fn run(
                     _ => GiveBack::None,
                 };
                 let none = Tails::default();
-                let tails = s.host.as_deref().map_or(&none, |h| &h.tails);
+                let tails = host.as_deref().map_or(&none, |h| &h.tails);
                 exit_count(vcpu, mem, md, tails, give_back)
+            };
+            if counted.is_ok() && guest.exit_ledger.is_some() {
+                // the row: kind, x86 site (the dispatch target for hvc 1, else the hvc's), and a request's op and
+                // arguments
+                let site = match exit.hvc_immediate() {
+                    Some(1) => match vcpu.reg(Reg::X(17)) {
+                        Ok(target) => target,
+                        Err(e) => break 'exit Ok(Err(e)),
+                    },
+                    Some(_) => x86_address_at(mem, pc.wrapping_sub(4)).unwrap_or(0),
+                    None => pc,
+                };
+                let request = (exit.hvc_immediate() == Some(8)).then(|| {
+                    let t = MONITOR_SIZE + TRANSPORT_OFF;
+                    let w = |i: u64| mem.read_u64(t + 8 * i);
+                    [w(0), w(1), w(2), w(3), w(4), 0, 0]
+                });
+                if let Some(l) = &mut guest.exit_ledger {
+                    l.exit(crate::exit_ledger::Row {
+                        kind: kind.clone(),
+                        site,
+                        request,
+                    });
+                }
             }
+            Ok(counted)
         };
         if took {
             crate::monitor_code::host_release_runtime_word(mem);
         }
-        counted?;
-        let guest = &mut *lock.get_mut().guest;
-        if guest.exit_ledger.is_some() {
-            // the row: kind, x86 site (the dispatch target for hvc 1, else the hvc's), and a request's op and arguments
-            let site = match exit.hvc_immediate() {
-                Some(1) => vcpu.reg(Reg::X(17))?,
-                Some(_) => x86_address_at(mem, pc.wrapping_sub(4)).unwrap_or(0),
-                None => pc,
-            };
-            let request = (exit.hvc_immediate() == Some(8)).then(|| {
-                let t = MONITOR_SIZE + TRANSPORT_OFF;
-                let w = |i: u64| mem.read_u64(t + 8 * i);
-                [w(0), w(1), w(2), w(3), w(4), 0, 0]
-            });
-            if let Some(l) = &mut guest.exit_ledger {
-                l.exit(crate::exit_ledger::Row {
-                    kind: kind.clone(),
-                    site,
-                    request,
-                });
-            }
+        match served {
+            Err(stop) => break stop,
+            Ok(counted) => counted?,
         }
         let Some(number) = exit.hvc_immediate() else {
             if matches!(exit, Exit::VtimerActivated) {
@@ -1118,7 +1215,7 @@ fn run(
             while switched == Ok(Switch::Idle) {
                 let handed;
                 (held, handed) = turn(
-                    &lock,
+                    lock,
                     held,
                     crate::turns::Message::Idle,
                     took,
@@ -1140,7 +1237,6 @@ fn run(
             if took {
                 crate::monitor_code::host_release_runtime_word(lock.view());
             }
-            let guest = &mut *lock.get_mut().guest;
             match switched {
                 Err(why) => break Stop::Handover { pc, why },
                 Ok(Switch::Idle) => unreachable!(),
@@ -1153,12 +1249,12 @@ fn run(
                 Ok(Switch::Ended(code)) => break Stop::ExitProcess { code },
                 Ok(Switch::Go { vectors }) => {
                     if let Some((save, load)) = vectors {
-                        swap_vectors(vcpu, guest.memory_view(), save, load)?;
+                        swap_vectors(vcpu, lock.view(), save, load)?;
                     }
                     for (r, v) in x.iter().enumerate() {
                         vcpu.set_reg(Reg::X(r as u8), *v)?;
                     }
-                    vcpu.set_reg(Reg::Pc, guest.code.dispatch_va)?;
+                    vcpu.set_reg(Reg::Pc, dispatch_va)?;
                     vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
                     continue;
                 }
@@ -1167,12 +1263,23 @@ fn run(
         if number == crate::cases::HVC_SLOW_SSE || number == crate::cases::HVC_SLOW_STEP {
             // `serve_exit` (5232, 5270-5271; Sprint 181): the instruction at the hvc's site, one step of the model,
             // on at the dispatcher or the runtime's exception call as the step leaves the PC
-            let rip = match x86_address_at(guest.memory_view(), pc - 4) {
+            let rip = match x86_address_at(lock.view(), pc - 4) {
                 Ok(rip) => rip,
                 Err(why) => break Stop::Exit(why),
             };
-            let code = code_at(guest, rip);
-            match crate::model_step::model_step(guest, vcpu, &code, rip)? {
+            // under the runtime word and the lock, as the other services (Sprint 324): the step reads the vCPU's own
+            // pages, which `serve` names; a slow step comes from a translated block, which holds nothing
+            let took = take_word(lock.view(), md, &mut out.served_outside_word);
+            let stepped = {
+                let mut held = lock.serve(pages);
+                let guest = &mut *held.guest;
+                let code = code_at(guest, rip);
+                crate::model_step::model_step(guest, vcpu, &code, rip)
+            };
+            if took {
+                crate::monitor_code::host_release_runtime_word(lock.view());
+            }
+            match stepped? {
                 crate::model_step::ModelStep::Resumed | crate::model_step::ModelStep::Raised => {
                     vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
                     continue;
@@ -1191,12 +1298,23 @@ fn run(
                 }
             }
         }
-        if number == 4 && guest.served.link.is_some() {
+        // whether the process is one of a machine, read under the word and the lock (Sprint 324): a request makes the
+        // supervisor's link mid-run (`host_request::serve`), and none removes a link once made (a turn takes it out and
+        // puts it back under the lock), so the answer holds when the word is taken again below
+        let linked = number == 4 && {
+            let took = take_word(lock.view(), md, &mut out.served_outside_word);
+            let linked = lock.serve(pages).guest.served.link.is_some();
+            if took {
+                crate::monitor_code::host_release_runtime_word(lock.view());
+            }
+            linked
+        };
+        if linked {
             // a slice's end in a process of a machine (`serve_exit`, 5280-5293; Sprint 197): at the run's limit a
             // stop; else the next slice's budget and expired waits woken, then the turn to another process that is
             // ready, or the next thread of this one, the stopped block's count given back as the thread goes on at its
             // entry
-            let count = guest.memory_view().read_u64(md);
+            let count = lock.view().read_u64(md);
             if count >= max_steps {
                 break Stop::StepLimit {
                     count,
@@ -1230,7 +1348,7 @@ fn run(
                 if others {
                     let handed;
                     (held, handed) = turn(
-                        &lock,
+                        lock,
                         held,
                         crate::turns::Message::Slice,
                         took,
@@ -1245,7 +1363,7 @@ fn run(
                 while switched == Ok(Switch::Idle) {
                     let handed;
                     (held, handed) = turn(
-                        &lock,
+                        lock,
                         held,
                         crate::turns::Message::Idle,
                         took,
@@ -1259,7 +1377,6 @@ fn run(
             if took {
                 crate::monitor_code::host_release_runtime_word(lock.view());
             }
-            let guest = &mut *lock.get_mut().guest;
             match switched {
                 Err(stop) => break stop,
                 Ok(None) => continue,
@@ -1273,12 +1390,12 @@ fn run(
                 Ok(Some(Switch::Ended(code))) => break Stop::ExitProcess { code },
                 Ok(Some(Switch::Go { vectors })) => {
                     if let Some((save, load)) = vectors {
-                        swap_vectors(vcpu, guest.memory_view(), save, load)?;
+                        swap_vectors(vcpu, lock.view(), save, load)?;
                     }
                     for (r, v) in x.iter().enumerate() {
                         vcpu.set_reg(Reg::X(r as u8), *v)?;
                     }
-                    vcpu.set_reg(Reg::Pc, guest.code.dispatch_va)?;
+                    vcpu.set_reg(Reg::Pc, dispatch_va)?;
                     vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
                     continue;
                 }
@@ -1367,44 +1484,9 @@ fn run(
         if let Err(stop) = served {
             break stop;
         }
-        vcpu.set_reg(Reg::Pc, lock.get_mut().guest.code.miss_va + 4)?; // ic ialluis; tlbi; dsb; isb; re-dispatch
+        vcpu.set_reg(Reg::Pc, miss_va + 4)?; // ic ialluis; tlbi; dsb; isb; re-dispatch
     };
-    // the records into the outcome, the borrows given back (Sprint 311)
-    let records = lock.into_inner().records;
-    out.bridged = records.bridged;
-    out.blocks = records.blocks;
-    out.translations = records.translations;
-    out.created = records.created;
-    out.thread_requests = records.thread_requests;
-    out.handovers = records.handovers;
-    out.vm_compile_starts = records.vm_compile_starts;
-    out.instructions_at = records.instructions_at;
-    // the stop's own row, then the file whole (Sprint 206)
-    if let Some(l) = &mut guest.exit_ledger {
-        let view = crate::guest::memory_view(&guest.memory);
-        let warp = view.read_u64(RUN_TABLE + crate::process::CLOCK_WARP);
-        // the ledger's process area as a slice, as at each exit (census D7)
-        let _ = l.resume(view.read_u64(md), warp, process_below_trace(guest.memory.as_slice()));
-        let _ = l.flush();
-        // the blocks both compilers made (Sprint 207)
-        let mut blocks: Vec<(u64, u64)> = out.translations.iter().map(|t| (t.start, t.end)).collect();
-        if let Some(h) = host.as_deref() {
-            blocks.extend(h.translations.iter().copied());
-        }
-        let _ = l.blocks(&blocks);
-    }
-    let mem = guest.memory_view();
-    for (i, name) in VMC_COUNT_NAMES.iter().enumerate() {
-        out.counts
-            .insert(name, mem.read_u64(VM_COMPILER + VMC_COUNTS + 8 * i as u64));
-    }
-    out.compile_ticks = crate::monitor_code::CompileTicks::read(|slot| mem.read_u64(VM_COMPILER + slot));
-    out.executed = mem.read_u64(md);
-    out.stop = stop;
-    if guest.time_runtime_word {
-        out.runtime_word = read_runtime_word(guest.memory_view()); // Sprint 164: read once, at the stop
-    }
-    Ok(out)
+    Ok(stop)
 }
 
 #[cfg(test)]

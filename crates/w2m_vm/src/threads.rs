@@ -590,7 +590,7 @@ impl Sched {
 
     /// Parks one of the run's `vcpus` vCPUs until a change past `seen`, until `deadline`, or, when every vCPU is
     /// parked and none has a deadline, for one second with no change. A wait with neither has no timeout of its own:
-    /// the run's stop notifies (the design's card 4c3b2), as the Python host's waiter waited for its run's timeout.
+    /// the run's stop notifies (the design's card 4c3b2b), as the Python host's waiter waited for its run's timeout.
     pub fn park(&self, seen: u64, deadline: Option<std::time::Instant>, vcpus: u64) -> Woken {
         const QUIET: std::time::Duration = std::time::Duration::from_secs(1);
         let mut counts = self.counts.lock().unwrap_or_else(|e| e.into_inner());

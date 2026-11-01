@@ -45,6 +45,7 @@ mod monitor_code_in_vm;
 mod private_chain;
 mod process_area;
 mod run_loop;
+mod run_loop_lock;
 mod skeleton_gate;
 mod slice_calls;
 mod unmapped_image_faults;

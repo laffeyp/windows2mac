@@ -149,7 +149,12 @@ reads outside a service and its own view of the mapping. The turn's start reads 
 it takes the word and the lock for those reads, or the services that change them write the slice's end and whether
 another process is due into the vCPU's monitor data and the turn's start reads memory alone; card 4c measures the first
 against the second. Card 4b builds the lock: `Guest` wrapped where the run starts, the run loop holding the guard across
-each served exit, its acquire asserting the word in debug builds, card 2's plant.
+each served exit, its acquire asserting the word in debug builds, card 2's plant. *(Sprint 324, the measure: the
+first form built, the turn's start under the word and the lock, timed per turn on one vCPU against an exit's service,
+the second form to be built only were the turn's start's median the greater. On the batch run, median 375 ns and 99th
+percentile 1458 ns over 54,388 turns, against an exit's median service of 1709 ns; on `sleeper` 125 against 1709, on
+`qpc` 84 against 2625. The first form stands; the second is not built. The loop is `run.rs`'s `vcpu_loop`, holding the
+lock by `&` (reviewer-3's Low 1 at 324), the Load facts copied as `LoadFacts` before it.)*
 
 ## The threads
 

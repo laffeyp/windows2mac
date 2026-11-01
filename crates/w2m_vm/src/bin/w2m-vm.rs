@@ -541,7 +541,23 @@ mod run {
                 let _ = handle.stop();
             });
         }
-        run_compiling(guest, loaded, &vcpu, max_steps, host).map_err(|e| format!("{e:?}"))
+        let out = run_compiling(guest, loaded, &vcpu, max_steps, host).map_err(|e| format!("{e:?}"))?;
+        // the turn's start against an exit's service, the run-loop design's measure of its first form (Sprint 324)
+        let at = |ns: &[u64], part: usize| {
+            let mut v = ns.to_vec();
+            v.sort_unstable();
+            v.get((v.len() * part / 100).min(v.len().saturating_sub(1)))
+                .copied()
+                .unwrap_or(0)
+        };
+        eprintln!(
+            "w2m-vm: the turn's start: median {} ns, 99th percentile {} ns, {} turns; an exit's service: median {} ns",
+            at(&out.turn_start_ns, 50),
+            at(&out.turn_start_ns, 99),
+            out.turn_start_ns.len(),
+            at(&out.serve_ns, 50)
+        );
+        Ok(out)
     }
 
     /// A stop by its kind and reason, without host addresses, which move when the runtime image is rebuilt (Sprint
