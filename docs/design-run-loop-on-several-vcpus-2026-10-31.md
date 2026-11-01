@@ -299,7 +299,12 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, and a 
    acquire checking the word, card 2's plant, Deferred (Sprint 298)'s clause checked; 4c, a
    thread per vCPU, the stop, the kick, the merged outcome and the stop flag, `qpc` and `sleeper` on two vCPUs ending as
    on one, a stop while a guest holds the word; 4d, every other vCPU stopped for a locked model step and for a block
-   split, the misaligned XCHG race and its plant, a cancel from another thread mid-split (Deferred, Sprint 305); 4e, the
+   split, the misaligned XCHG race and its plant, a cancel from another thread mid-split (Deferred, Sprint 305) *(4d
+   split by rule 6 at Sprint 331's card: 4d1, every other vCPU stopped for a model step of a locked form, judged by
+   `probes/locked_race`, a misaligned locked add stepped in the model against an aligned one on another vCPU sharing
+   a byte, the race the runtime word does not exclude, two misaligned steps already running one at a time under it
+   since Sprint 324; 4d2, the stop for a block split, a cancel from another thread mid-split, and Deferred (Sprint
+   330)'s guest for the kick's wait)*; 4e, the
    race test of the guest-memory design's choice 6 and its step bound.)* *(4c split by rule 6 at Sprint 311's card:
    4c1, the run's Served state behind `GuestLock` with the guest, `HostCompiler` and the records a served exit or the
    in-VM compiler's drain writes into `Outcome` (the drain and the exit's count of `tails`, at every exit, missed by
