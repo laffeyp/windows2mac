@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 309
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -80,7 +80,7 @@ The form in which the vCPU threads share `Guest` is decided from the run loop's 
 
 ## result
 
-- **The reading** (WORK-COMMIT, the design): in `run.rs` `run` (693-1261), outside a service: the Load part
+- **The reading** (114921f8f, the design): in `run.rs` `run` (693-1261), outside a service: the Load part
   (`code.dispatch_va`, `code.miss_va`, `ttbr`, `entry_va`, `layout`, `start.tid`, `time_runtime_word`), the mapping
   through the view (19 `memory_view` calls), the diagnostics (`exit_ledger`, `block_judge`, `batch_stop`, refused on
   two vCPUs by Sprint 308), and the turn's start's `served.link` and `served.threads` through `slice_until`
@@ -93,7 +93,7 @@ The form in which the vCPU threads share `Guest` is decided from the run loop's 
   card 4's split (4b), and as a BLACKBOARD Decision with the close, which supersedes "Architecture: when `served`
   becomes a lock" (its `&mut Served` passed down).
 - **Expected values:** `design_check` passing; the record check passing over both Decisions.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 15 s, kept in `store/gates/passes.tsv` as sprint 309 at 114921f8f with root=5ab48077d and "rust=none python=0 samples=0", no crate changed, base=2352d5a7a, Sprint 308's close; multi-vCPU: not run (Python gates not run)
 - **Plant 1,** restored by `cp` and checked by `cmp`: the new Decision's revisit clause struck; `signal_report --check`
   failed, "holds 1 decision clauses and 0 revisit clauses, not one each".
 
