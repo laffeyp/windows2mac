@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 323
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -92,4 +92,4 @@ A change to a document a test reads runs that test in the gates.
   [\"crates/w2m_vm/tests/guest_parts.rs\"]".
 - **Plant 2,** restored likewise: the clause `|| touched '^(docs/|BLACKBOARD\.md$)'` taken out; `--plan` for the
   run-loop design alone printed "Rust tests: none (no crate changed)".
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 1383 s, kept in `store/gates/passes.tsv` as sprint 323 at d0556beb7 with root=a57230b2e and "rust=all python=0 samples=1", every stage for the change to `scripts/gates.sh` (its line 57), 346 tests, 650 ns an exit at load 3.09, base=15bcba220, Sprint 322's close; multi-vCPU: not run (Python gates not run)
