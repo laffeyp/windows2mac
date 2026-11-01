@@ -317,6 +317,9 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, and a 
    reaching `Guest` only through `serve` under the word, its five whole-lock borrows (`run.rs` 844, 961, 1143, 1262,
    1370) gone, the Load facts copied before the loop, the turn's start under the word and the lock, its time measured
    against the median exit service; 4c3b2b, the vCPU threads as 4c3b2 is written in "A vCPU with no thread".)*
+   *(Sprint 325's card: 4c3b2b's refusal of the Machine built first, on its own, the run's vCPU count carried onto
+   `Start` and a spawn refused by name above one vCPU before its link is made; 4c3b2b keeps the threads, the stop, the
+   park in the loop, the merged outcome and the stop flag.)*
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 
