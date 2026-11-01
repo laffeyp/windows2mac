@@ -702,8 +702,9 @@ pub fn resume_idle(guest: &mut Guest, x: &mut [u64; 31], cur_tid: u64, bits: u32
 /// `_switch`, unless every thread has ended, which leaves in `x` the registers of the thread that goes on.
 pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switch, String> {
     // the threads and the turn are every vCPU's services' to change, under the runtime word (Sprint 294): a caller
-    // that skipped the take fails here in debug builds, the tests'
-    debug_assert!(
+    // that skipped the take fails here, in the gates' release runs as in the tests (Sprint 311: a debug assertion was
+    // compiled out of the `w2m-vm` the gates run)
+    assert!(
         crate::monitor_code::runtime_word_held(
             guest.memory_view(),
             crate::monitor_code::vcpu_owner(guest.memory_view())

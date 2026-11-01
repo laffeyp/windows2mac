@@ -420,12 +420,6 @@ fn process_below_trace(mem: &[u8]) -> &[u8] {
     &mem[at..at + guest_runtime::layout::TRACE_OFF as usize]
 }
 
-/// `_vm_compiled` (vm_backend 2559-2580): each block block_compiler.c compiled since the last exit, from its log entry
-/// (start, end, code, then u32s first, nmarks, count, cut, live_out, live_used, npages, and the pages at 56), noted as
-/// the host notes its own compiles: the marks' tails (`_note_tails`, so a model step's give-back counts the block's
-/// unrun instructions; Sprint 207: before, a model step in a block the VM compiled gave nothing back, and the count ran
-/// 7 instructions ahead of the frozen host's at the batch run's first `hvc 11`), the block, the pages it covers and the
-/// pages it lists, and the translation; then the log emptied.
 /// The code an `hvc 1` hands back for `target` without a compile: with the host's compiler present, its map alone,
 /// which holds both compilers' blocks (`vm_compiled` adds the VM's) and from which a guest write drops a page's blocks
 /// (`HostCompiler::code_written`); without it, the in-VM compiler's, which no write handler drops from. The frozen host
@@ -435,55 +429,29 @@ fn known_block(vm_blocks: &BTreeMap<u64, u64>, host_blocks: Option<&BTreeMap<u64
     host_blocks.unwrap_or(vm_blocks).get(&target).copied()
 }
 
-fn vm_compiled(
-    mem: ConcurrentGuestMemory<'_>,
-    blocks: &mut BTreeMap<u64, u64>,
-    translations: &mut Vec<Translation>,
-    vm_compile_starts: &mut Vec<u64>,
-    instructions_at: &mut InstructionsAt,
-    host: Option<&mut HostCompiler>,
-) {
-    let mut spin = |_: &std::sync::atomic::AtomicU32| std::hint::spin_loop();
-    vm_compiled_waiting(
-        mem,
-        blocks,
-        translations,
-        vm_compile_starts,
-        instructions_at,
-        host,
-        &mut spin,
-    );
-}
-
-/// `vm_compiled`, its take of the runtime word calling `wait` while another holds it (Sprint 276: the drain's test).
-/// Through the view (Sprint 283).
-fn vm_compiled_waiting(
-    mem: ConcurrentGuestMemory<'_>,
-    blocks: &mut BTreeMap<u64, u64>,
-    translations: &mut Vec<Translation>,
-    vm_compile_starts: &mut Vec<u64>,
-    instructions_at: &mut InstructionsAt,
-    mut host: Option<&mut HostCompiler>,
-    wait: &mut dyn FnMut(&std::sync::atomic::AtomicU32),
-) {
-    use crate::monitor_code::{host_release_runtime_word, host_take_runtime_word_waiting};
+/// `_vm_compiled` (vm_backend 2559-2580): each block block_compiler.c compiled since the last exit, from its log entry
+/// (start, end, code, then u32s first, nmarks, count, cut, live_out, live_used, npages, and the pages at 56), noted as
+/// the host notes its own compiles: the marks' tails (`_note_tails`, so a model step's give-back counts the block's
+/// unrun instructions; Sprint 207: before, a model step in a block the VM compiled gave nothing back, and the count ran
+/// 7 instructions ahead of the frozen host's at the batch run's first `hvc 11`), the block, the pages it covers and the
+/// pages it lists, and the translation; then the log emptied. Through the view (Sprint 283). The caller holds the
+/// runtime word, which every in-VM compile and install appends under (Sprint 275, census D6: on several vCPUs
+/// another's append between the read and the reset would be lost), and the run's lock, `records` and `host` being
+/// what the lock guards (Sprint 311).
+fn vm_compiled(mem: ConcurrentGuestMemory<'_>, records: &mut Records, mut host: Option<&mut HostCompiler>) {
     use guest_runtime::layout::{PAGE, RECON_TABLE};
-    // the log is read and reset under the runtime word, which every in-VM compile and install appends under (Sprint
-    // 275, census D6): on several vCPUs another's append between the read and the reset would be lost
-    let own = crate::monitor_code::vcpu_owner(mem);
-    let took = host_take_runtime_word_waiting(mem, own, wait);
     let n = mem.read_u64(VM_COMPILER + VMC_LOG_COUNT);
     for i in 0..n {
         let at = VM_COMPILER + VMC_LOG + VMC_LOG_ENTRY * i;
         let (start, end, code) = (mem.read_u64(at), mem.read_u64(at + 8), mem.read_u64(at + 16));
-        blocks.insert(start, code);
+        records.blocks.insert(start, code);
         let u32_at = |off: u64| u64::from(mem.read_u32(at + off));
         let (first, count, npages, installed) = (u32_at(24), u32_at(32), u32_at(48), u32_at(52) == 1);
         let executed = mem.read_u64(at + VMC_LOG_EXECUTED);
         if installed {
-            instructions_at.installs.push(executed);
+            records.instructions_at.installs.push(executed);
         } else {
-            instructions_at.compiles.push(executed);
+            records.instructions_at.compiles.push(executed);
         }
         let hosts: Vec<u64> = (1..=count)
             .map(|k| mem.read_u64(RECON_TABLE + 16 * (first + k)))
@@ -497,8 +465,8 @@ fn vm_compiled_waiting(
             }
             continue;
         }
-        translations.push(Translation { start, end, code });
-        vm_compile_starts.push(start);
+        records.translations.push(Translation { start, end, code });
+        records.vm_compile_starts.push(start);
         let Some(h) = host.as_deref_mut() else {
             continue;
         };
@@ -518,9 +486,6 @@ fn vm_compiled_waiting(
         h.translations.push((start, end));
     }
     mem.write_u64(VM_COMPILER + VMC_LOG_COUNT, 0);
-    if took {
-        host_release_runtime_word(mem);
-    }
 }
 
 /// Runs `guest`'s program from its entry on `vcpu`, one thread, until the first miss the host must compile or an exit
@@ -634,49 +599,133 @@ fn take_word(mem: ConcurrentGuestMemory<'_>, outside: &mut u64) -> bool {
     took
 }
 
-/// `hand_over` with the runtime word let go for the wait when the host took it, and taken again after (Sprint 294): a
-/// process's turn waits on the other processes, and no wait holds the word (the design's "The exits").
-fn turn(guest: &mut Guest, message: crate::turns::Message, took: bool, outside: &mut u64) -> Result<(), String> {
-    if took {
-        crate::monitor_code::host_release_runtime_word(guest.memory_view());
+/// What a served exit or the in-VM compiler's drain writes into `Outcome` (the run-loop design's "The run loop's own
+/// state"; Sprint 311): behind the run's lock with the guest, moved into `Outcome` at the run's end.
+#[derive(Default)]
+pub struct Records {
+    pub bridged: BTreeMap<u64, u64>,
+    pub blocks: BTreeMap<u64, u64>,
+    pub translations: Vec<Translation>,
+    pub created: Vec<Created>,
+    pub thread_requests: Vec<ThreadRequest>,
+    pub handovers: Vec<Handover>,
+    pub vm_compile_starts: Vec<u64>,
+    pub instructions_at: InstructionsAt,
+}
+
+/// The run's shared state: the guest, the host's compiler and the records (Sprint 311).
+pub struct Shared<'a> {
+    pub guest: &'a mut Guest,
+    pub host: Option<&'a mut HostCompiler>,
+    pub records: Records,
+}
+
+/// The run's shared state behind one lock (Sprint 310 the guest; Sprint 311 the host's compiler and the records with
+/// it; the run-loop design's "How the threads share `Guest`"): taken once per served exit, inside the runtime word,
+/// which `serve` asserts before it locks, in release builds too (card 2's guard; Sprint 311). The lock holds the run's
+/// borrows, so `run`'s callers keep theirs and get them back when it is dropped. The word lives in guest memory, so the
+/// lock keeps a view of the mapping, made once at its creation from the guest's own `mmap` (`GuestMemory::as_ptr`),
+/// not reached through the borrow; the view is `Sync`, so card 4c's vCPU threads can share the lock
+/// (`the_lock_is_shared_by_threads`).
+pub struct GuestLock<'a> {
+    shared: std::sync::Mutex<Shared<'a>>,
+    mapping: ConcurrentGuestMemory<'a>,
+}
+
+/// Held at compile time: the lock is `Sync`, the vCPU threads sharing it by `&` (Sprint 310).
+const _: fn() = || {
+    fn the_lock_is_shared_by_threads<T: Sync>() {}
+    the_lock_is_shared_by_threads::<GuestLock<'static>>();
+};
+
+impl<'a> GuestLock<'a> {
+    pub fn new(guest: &'a mut Guest, host: Option<&'a mut HostCompiler>) -> GuestLock<'a> {
+        // SAFETY: the guest's own mapping, writable, live while the borrowed guest is, which outlives the lock
+        let mapping = unsafe { ConcurrentGuestMemory::from_raw_parts(guest.memory.as_ptr(), guest.memory.len()) };
+        let shared = Shared {
+            guest,
+            host,
+            records: Records::default(),
+        };
+        GuestLock {
+            shared: std::sync::Mutex::new(shared),
+            mapping,
+        }
     }
-    let handed = hand_over(guest, message);
-    if took {
-        take_word(guest.memory_view(), outside);
+
+    /// The mapping through the view, without the lock, live as long as the guest's borrow.
+    pub fn view(&self) -> ConcurrentGuestMemory<'a> {
+        self.mapping
     }
-    handed
+
+    /// The shared state for a served exit: the runtime word asserted held, by the host or by this vCPU, before the lock
+    /// is taken (the guest-memory design's choice 6: the word outermost). A lock its holder left poisoned by a panic is
+    /// taken as that holder left it, the panic reported where it happened.
+    pub fn serve(&self) -> std::sync::MutexGuard<'_, Shared<'a>> {
+        let mem = self.view();
+        assert!(
+            crate::monitor_code::runtime_word_held(mem, crate::monitor_code::vcpu_owner(mem)),
+            "a served exit's lock taken without the runtime word"
+        );
+        self.shared.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The shared state outside a served exit, no other thread able to hold the lock (one vCPU, or the threads joined).
+    pub fn get_mut(&mut self) -> &mut Shared<'a> {
+        self.shared.get_mut().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn into_inner(self) -> Shared<'a> {
+        self.shared.into_inner().unwrap_or_else(|e| e.into_inner())
+    }
 }
 
 /// The process's turn ends (Sprint 197: `VM.steps` yields "idle" or "slice", vm_backend 5066, 5082): the machine runs
 /// the others until this process's turn comes back; a pending wake readies its blocked threads, and on the instruction
-/// clock it is caught up to the machine's (`_catch_up`). Err: the run stops (a deadlock, a child's stop).
-fn hand_over(guest: &mut Guest, message: crate::turns::Message) -> Result<(), String> {
+/// clock it is caught up to the machine's (`_catch_up`). Err: the run stops (a deadlock, a child's stop). The wait holds
+/// neither the lock nor the word (the guest-memory design's choice 6; Sprints 294 and 311): the guard let go, then the
+/// word if the host took it; after, the word taken again, then the guard, which is handed back. The link and the kernel
+/// objects are out of `Guest` across the wait.
+fn turn<'l, 'a>(
+    lock: &'l GuestLock<'a>,
+    mut held: std::sync::MutexGuard<'l, Shared<'a>>,
+    message: crate::turns::Message,
+    took: bool,
+    outside: &mut u64,
+) -> (std::sync::MutexGuard<'l, Shared<'a>>, Result<(), String>) {
     use crate::turns::{Back, Link};
-    let mut state = crate::threads::turn_state(guest);
-    state.clock = crate::threads::counter_now(guest);
-    let (wake, machine, processes) = match guest.served.link.take() {
-        Some(Link::Supervisor(mut s)) => {
-            let mut objects = std::mem::take(&mut guest.served.kernel);
-            let back = s.hand_over(&mut objects, state);
-            let processes = 1 + s.children.len();
-            guest.served.kernel = objects;
-            guest.served.link = Some(Link::Supervisor(s));
-            match back? {
-                Back::Run { wake, machine } | Back::Timed { wake, machine } => (wake, machine, processes),
-            }
-        }
+    let mut state = crate::threads::turn_state(held.guest);
+    state.clock = crate::threads::counter_now(held.guest);
+    let mut link = held.guest.served.link.take();
+    let mut objects = std::mem::take(&mut held.guest.served.kernel);
+    drop(held);
+    if took {
+        crate::monitor_code::host_release_runtime_word(lock.view());
+    }
+    assert!(lock.shared.try_lock().is_ok(), "a turn's wait with the run's lock held");
+    let back = match &mut link {
+        Some(Link::Supervisor(s)) => s.hand_over(&mut objects, state).map(|back| match back {
+            Back::Run { wake, machine } | Back::Timed { wake, machine } => (wake, machine, 1 + s.children.len()),
+        }),
         Some(Link::Child(c)) => {
             let (wake, machine) = c.yield_turn(message, state);
-            guest.served.link = Some(Link::Child(c));
-            (wake, machine, 2)
+            Ok((wake, machine, 2))
         }
-        None => (false, 0, 1),
+        None => Ok((false, 0, 1)),
     };
-    if wake {
-        crate::host_request::wake_blocked(guest);
+    if took {
+        take_word(lock.view(), outside);
     }
-    crate::threads::catch_up(guest, machine, processes);
-    Ok(())
+    let mut held = lock.serve();
+    held.guest.served.kernel = objects;
+    held.guest.served.link = link;
+    let handed = back.map(|(wake, machine, processes)| {
+        if wake {
+            crate::host_request::wake_blocked(held.guest);
+        }
+        crate::threads::catch_up(held.guest, machine, processes);
+    });
+    (held, handed)
 }
 
 pub fn run_compiling(
@@ -768,11 +817,12 @@ fn run(
     let mut judge_ns = 0u64; // the whole-block judge's part of that service
     // what the flush stub's nested runs inside a split saw, folded into the outcome at each turn (Sprint 305)
     let counts = FlushCounts::default();
-    // the guest behind one lock (Sprint 310): a served exit's reach through `serve`, under the runtime word; every other
-    // reach through `get_mut`, as one vCPU runs; given back after the loop
-    let mut lock = crate::guest::GuestLock::new(&mut *guest);
+    // the run's shared state behind one lock (Sprints 310 and 311): a served exit's and the drain's reach through
+    // `serve`, under the runtime word; every other reach through `get_mut`, as one vCPU runs; given back after the loop
+    let compiling = host.is_some();
+    let mut lock = GuestLock::new(&mut *guest, host.as_deref_mut());
     let stop = loop {
-        let guest = lock.get_mut();
+        let guest = &mut *lock.get_mut().guest;
         let flushed = counts.flushes.take();
         out.flushes += flushed;
         if flushed > 0 {
@@ -861,28 +911,35 @@ fn run(
                 break Stop::Exit(format!("the block judge: {why}"));
             }
         }
-        vm_compiled(
-            crate::guest::memory_view(&guest.memory),
-            &mut out.blocks,
-            &mut out.translations,
-            &mut out.vm_compile_starts,
-            &mut out.instructions_at,
-            host.as_deref_mut(),
-        );
-        let mem = crate::guest::memory_view(&guest.memory);
+        let mem = lock.view();
         let pc = vcpu.reg(Reg::Pc)?;
-        if !runtime.contains(&pc) {
-            // the count, from x23, with a fault's give-back (5199-5208); the VM's own blocks' tails this loop does not
-            // note yet (2570), the host's compiles' it does
-            let give_back = match exit.hvc_immediate().map(u32::from) {
-                Some(HVC_FAULT_GIVE_BACK) => GiveBack::Fault,
-                Some(10 | 11) => GiveBack::Model { pc }, // HVC_SLOW_SSE, HVC_SLOW_STEP
-                _ => GiveBack::None,
-            };
-            let none = Tails::default();
-            let tails = host.as_deref().map_or(&none, |h| &h.tails);
-            exit_count(vcpu, mem, tails, give_back)?;
+        // the in-VM compiler's log drained, and the exit counted with the tails the drain notes, under the runtime word
+        // and the lock (Sprints 275 and 311): another vCPU's compile appends to the log and the tails under the word
+        let took = crate::monitor_code::host_take_runtime_word(mem, crate::monitor_code::vcpu_owner(mem));
+        let counted = {
+            let mut held = lock.serve();
+            let s = &mut *held;
+            vm_compiled(mem, &mut s.records, s.host.as_deref_mut());
+            if runtime.contains(&pc) {
+                Ok(())
+            } else {
+                // the count, from x23, with a fault's give-back (5199-5208); the VM's own blocks' tails this loop does
+                // not note yet (2570), the host's compiles' it does
+                let give_back = match exit.hvc_immediate().map(u32::from) {
+                    Some(HVC_FAULT_GIVE_BACK) => GiveBack::Fault,
+                    Some(10 | 11) => GiveBack::Model { pc }, // HVC_SLOW_SSE, HVC_SLOW_STEP
+                    _ => GiveBack::None,
+                };
+                let none = Tails::default();
+                let tails = s.host.as_deref().map_or(&none, |h| &h.tails);
+                exit_count(vcpu, mem, tails, give_back)
+            }
+        };
+        if took {
+            crate::monitor_code::host_release_runtime_word(mem);
         }
+        counted?;
+        let guest = &mut *lock.get_mut().guest;
         if guest.exit_ledger.is_some() {
             // the row: kind, x86 site (the dispatch target for hvc 1, else the hvc's), and a request's op and arguments
             let site = match exit.hvc_immediate() {
@@ -903,7 +960,6 @@ fn run(
                 });
             }
         }
-        let mem = crate::guest::memory_view(&guest.memory);
         let Some(number) = exit.hvc_immediate() else {
             if matches!(exit, Exit::VtimerActivated) {
                 vcpu.set_vtimer_mask(true)?;
@@ -922,14 +978,19 @@ fn run(
         if u32::from(number) == HVC_FAULT_GIVE_BACK {
             continue;
         }
-        if number == HVC_CODE_WRITE as u16
-            && let Some(h) = host.as_deref_mut()
-        {
+        if number == HVC_CODE_WRITE as u16 && compiling {
             // a write faulted: behind translated code? (5297-5299) Under the runtime word (Sprint 294): it changes the host
             // compiler's tables, and whether this vCPU holds the word here is not established
             let address = vcpu.reg(Reg::X(17))?;
             let took = take_word(lock.view(), &mut out.served_outside_word);
-            let written = h.code_written(&mut lock.serve(), address, &mut || flush_through_stub(vcpu, &counts));
+            let written = {
+                let mut held = lock.serve();
+                let s = &mut *held;
+                let Some(h) = s.host.as_deref_mut() else {
+                    unreachable!("a run compiling holds the host's compiler")
+                };
+                h.code_written(s.guest, address, &mut || flush_through_stub(vcpu, &counts))
+            };
             if took {
                 crate::monitor_code::host_release_runtime_word(lock.view());
             }
@@ -941,14 +1002,15 @@ fn run(
         }
         if number == 8 {
             let op = mem.read_u64(MONITOR_SIZE + TRANSPORT_OFF);
-            if host.is_none() {
+            if !compiling {
                 let why = "a run without the host's compiler serves no host request".into();
                 break Stop::HostRequest { op, pc, why };
             }
             // the requests the Rust host serves (`_host_request`, 5244-5256): on at the hvc's return, or the end; the
             // guest's own hold of the word
             let mut held = lock.serve();
-            let (guest, mem): (&mut Guest, _) = (&mut held, lock.view());
+            let Shared { guest, records, .. } = &mut *held;
+            let guest: &mut Guest = guest;
             let threads = guest.served.threads.len();
             let (sub, a0, current) = (
                 mem.read_u64(MONITOR_SIZE + TRANSPORT_OFF + 8),
@@ -962,7 +1024,7 @@ fn run(
             }
             if op == HOST_THREAD && matches!(sub, THREAD_EXIT_STUB | THREAD_END | THREAD_EXIT_CODE) && served.is_ok() {
                 let answer = guest.memory_view().read_u64(MONITOR_SIZE + TRANSPORT_OFF + 56);
-                out.thread_requests.push(ThreadRequest {
+                records.thread_requests.push(ThreadRequest {
                     sub,
                     a0,
                     answer,
@@ -973,7 +1035,7 @@ fn run(
                 let t = guest.served.threads.values().next_back().unwrap();
                 let (at, mem) = (crate::threads::entry(t.index), guest.memory_view());
                 let vslot = mem.read_u64(at + crate::threads::E_VSLOT);
-                out.created.push(Created {
+                records.created.push(Created {
                     tid: t.tid,
                     entry: {
                         let mut entry = vec![0; RUN_ENTRY as usize];
@@ -1016,7 +1078,7 @@ fn run(
                 }
             }
         }
-        if u32::from(number) == HVC_SCHEDULE && host.is_some() {
+        if u32::from(number) == HVC_SCHEDULE && compiling {
             // a service handed the vCPU over, and threads.c `w2m_switch` left it to the host (5300-5303): `_schedule`,
             // then the next thread's registers at the dispatcher (5077-5094), its vectors swapped as the monitor's
             // `vswap` swaps them
@@ -1031,37 +1093,40 @@ fn run(
             // changes the threads and the turn, which another vCPU's services change under it
             let took = take_word(lock.view(), &mut out.served_outside_word);
             let mut held = lock.serve();
-            let guest: &mut Guest = &mut held;
-            let from = crate::threads::current_tid(guest);
-            let mut switched = crate::threads::schedule(guest, &mut x, bits);
+            let from = crate::threads::current_tid(held.guest);
+            let mut switched = crate::threads::schedule(held.guest, &mut x, bits);
             // no thread ready in a process of a machine: the turn goes to the others until one is (Sprint 197)
             while switched == Ok(Switch::Idle) {
-                switched = turn(guest, crate::turns::Message::Idle, took, &mut out.served_outside_word)
-                    .and_then(|()| crate::threads::resume_idle(guest, &mut x, from, bits));
+                let handed;
+                (held, handed) = turn(
+                    &lock,
+                    held,
+                    crate::turns::Message::Idle,
+                    took,
+                    &mut out.served_outside_word,
+                );
+                switched = handed.and_then(|()| crate::threads::resume_idle(held.guest, &mut x, from, bits));
             }
-            let to = crate::threads::current_tid(guest);
+            let to = crate::threads::current_tid(held.guest);
+            // the hand-over recorded under the lock (Sprint 311): an ended process's to 0
+            if let Ok(s) = &switched {
+                let to = if matches!(s, Switch::Ended(_)) { 0 } else { to };
+                held.records.handovers.push(Handover {
+                    schedule: bits,
+                    from,
+                    to,
+                });
+            }
             drop(held); // the lock let go before the word, the word outermost
-            let guest = lock.get_mut();
             if took {
-                crate::monitor_code::host_release_runtime_word(guest.memory_view());
+                crate::monitor_code::host_release_runtime_word(lock.view());
             }
+            let guest = &mut *lock.get_mut().guest;
             match switched {
                 Err(why) => break Stop::Handover { pc, why },
                 Ok(Switch::Idle) => unreachable!(),
-                Ok(Switch::Ended(code)) => {
-                    out.handovers.push(Handover {
-                        schedule: bits,
-                        from,
-                        to: 0,
-                    });
-                    break Stop::ExitProcess { code };
-                }
+                Ok(Switch::Ended(code)) => break Stop::ExitProcess { code },
                 Ok(Switch::Go { vectors }) => {
-                    out.handovers.push(Handover {
-                        schedule: bits,
-                        from,
-                        to,
-                    });
                     if let Some((save, load)) = vectors {
                         swap_vectors(vcpu, guest.memory_view(), save, load)?;
                     }
@@ -1122,43 +1187,54 @@ fn run(
             // and the budget, the wakes and the scheduler change the threads and the turn; released once, after
             let took = take_word(lock.view(), &mut out.served_outside_word);
             let mut held = lock.serve();
-            let guest: &mut Guest = &mut held;
             let switched: Result<Option<Switch>, Stop> = 'slice: {
-                crate::threads::set_budget(guest);
-                crate::threads::wake_expired(guest);
-                let others = guest
-                    .served
-                    .link
-                    .as_ref()
-                    .is_some_and(|l| l.others_ready(crate::threads::counter_now(guest)));
-                if !others && guest.served.threads.len() < 2 {
+                crate::threads::set_budget(held.guest);
+                crate::threads::wake_expired(held.guest);
+                let now = crate::threads::counter_now(held.guest);
+                let others = held.guest.served.link.as_ref().is_some_and(|l| l.others_ready(now));
+                if !others && held.guest.served.threads.len() < 2 {
                     break 'slice Ok(None);
                 }
-                x[17] = match x86_address_at(guest.memory_view(), pc - 4) {
+                x[17] = match x86_address_at(lock.view(), pc - 4) {
                     Ok(at) => at,
                     Err(why) => break 'slice Err(Stop::Exit(why)),
                 };
-                if let Err(why) = give_back(guest, pc) {
+                if let Err(why) = give_back(held.guest, pc) {
                     break 'slice Err(Stop::Exit(why));
                 }
-                if others
-                    && let Err(why) = turn(guest, crate::turns::Message::Slice, took, &mut out.served_outside_word)
-                {
-                    break 'slice Err(Stop::Handover { pc, why });
+                if others {
+                    let handed;
+                    (held, handed) = turn(
+                        &lock,
+                        held,
+                        crate::turns::Message::Slice,
+                        took,
+                        &mut out.served_outside_word,
+                    );
+                    if let Err(why) = handed {
+                        break 'slice Err(Stop::Handover { pc, why });
+                    }
                 }
-                let from = crate::threads::current_tid(guest);
-                let mut switched = crate::threads::schedule(guest, &mut x, 0);
+                let from = crate::threads::current_tid(held.guest);
+                let mut switched = crate::threads::schedule(held.guest, &mut x, 0);
                 while switched == Ok(Switch::Idle) {
-                    switched = turn(guest, crate::turns::Message::Idle, took, &mut out.served_outside_word)
-                        .and_then(|()| crate::threads::resume_idle(guest, &mut x, from, 0));
+                    let handed;
+                    (held, handed) = turn(
+                        &lock,
+                        held,
+                        crate::turns::Message::Idle,
+                        took,
+                        &mut out.served_outside_word,
+                    );
+                    switched = handed.and_then(|()| crate::threads::resume_idle(held.guest, &mut x, from, 0));
                 }
                 switched.map(Some).map_err(|why| Stop::Handover { pc, why })
             };
             drop(held);
-            let guest = lock.get_mut();
             if took {
-                crate::monitor_code::host_release_runtime_word(guest.memory_view());
+                crate::monitor_code::host_release_runtime_word(lock.view());
             }
+            let guest = &mut *lock.get_mut().guest;
             match switched {
                 Err(stop) => break stop,
                 Ok(None) => continue,
@@ -1183,41 +1259,54 @@ fn run(
         if number == 9 {
             let thunk = vcpu.reg(Reg::X(17))?;
             let rsp = vcpu.reg(Reg::X(4))?;
-            let name = guest
-                .served
-                .thunks
-                .get(&thunk)
-                .cloned()
-                .unwrap_or_else(|| format!("{thunk:#x}"));
-            let Some(at) = guest.layout.offset(rsp) else {
-                break Stop::Exit(format!("import {name}: the guest's RSP 0x{rsp:x} is not mapped"));
+            // the record written under the word and the lock (Sprint 311), the run stopping after
+            let took = take_word(lock.view(), &mut out.served_outside_word);
+            let stop = {
+                let mut held = lock.serve();
+                let guest = &mut *held.guest;
+                let name = guest
+                    .served
+                    .thunks
+                    .get(&thunk)
+                    .cloned()
+                    .unwrap_or_else(|| format!("{thunk:#x}"));
+                match guest.layout.offset(rsp) {
+                    None => Stop::Exit(format!("import {name}: the guest's RSP 0x{rsp:x} is not mapped")),
+                    Some(at) => {
+                        guest.served.unimplemented = Some((name.clone(), guest.memory_view().read_u64(at)));
+                        Stop::Import { name, pc }
+                    }
+                }
             };
-            guest.served.unimplemented = Some((name.clone(), guest.memory_view().read_u64(at)));
-            break Stop::Import { name, pc };
+            if took {
+                crate::monitor_code::host_release_runtime_word(lock.view());
+            }
+            break stop;
         }
         if number != 1 {
             break Stop::Hvc { number, pc };
         }
         let target = vcpu.reg(Reg::X(17))?;
-        if host.is_none() && out.bridged.contains_key(&target) {
-            // its bridge was inserted at the last miss here: the table should have hit (with the host compiling, a
-            // two-way slot may have let it go, and it is inserted again)
-            break Stop::Repeated { target };
-        }
         // the install or compile and the dispatch insert under the runtime word (Sprint 286): they write the code cursor,
         // the reconstruction table and the dispatch table, which the in-VM compiler and the installer write holding the
         // word, and the miss stub released it before `hvc 1`; released on every path before the loop goes on or stops
         let took = take_word(lock.view(), &mut out.served_outside_word);
         let mut held = lock.serve();
-        let guest: &mut Guest = &mut held;
+        let Shared { guest, host, records } = &mut *held;
+        let guest: &mut Guest = guest;
         let served: Result<u64, Stop> = 'serve: {
+            if !compiling && records.bridged.contains_key(&target) {
+                // its bridge was inserted at the last miss here: the table should have hit (with the host compiling, a
+                // two-way slot may have let it go, and it is inserted again)
+                break 'serve Err(Stop::Repeated { target });
+            }
             let va = match guest.served.bridges.get(&target) {
                 Some(&va) => {
-                    *out.bridged.entry(target).or_default() += 1;
+                    *records.bridged.entry(target).or_default() += 1;
                     va
                 }
                 None => match (
-                    known_block(&out.blocks, host.as_deref().map(|h| &h.blocks), target),
+                    known_block(&records.blocks, host.as_deref().map(|h| &h.blocks), target),
                     host.as_deref_mut(),
                 ) {
                     (Some(va), _) => va,
@@ -1229,7 +1318,7 @@ fn run(
                         None => match h.compile(guest, target, &mut || flush_through_stub(vcpu, &counts)) {
                             Ok(va) => {
                                 let (start, end) = *h.translations.last().unwrap();
-                                out.translations.push(Translation { start, end, code: va });
+                                records.translations.push(Translation { start, end, code: va });
                                 va
                             }
                             Err(why) => break 'serve Err(Stop::Untranslated { target, why }),
@@ -1241,16 +1330,24 @@ fn run(
             Ok(va)
         };
         drop(held);
-        let guest = lock.get_mut();
         if took {
-            crate::monitor_code::host_release_runtime_word(guest.memory_view());
+            crate::monitor_code::host_release_runtime_word(lock.view());
         }
         if let Err(stop) = served {
             break stop;
         }
-        vcpu.set_reg(Reg::Pc, guest.code.miss_va + 4)?; // ic ialluis; tlbi; dsb; isb; re-dispatch
+        vcpu.set_reg(Reg::Pc, lock.get_mut().guest.code.miss_va + 4)?; // ic ialluis; tlbi; dsb; isb; re-dispatch
     };
-    drop(lock);
+    // the records into the outcome, the borrows given back (Sprint 311)
+    let records = lock.into_inner().records;
+    out.bridged = records.bridged;
+    out.blocks = records.blocks;
+    out.translations = records.translations;
+    out.created = records.created;
+    out.thread_requests = records.thread_requests;
+    out.handovers = records.handovers;
+    out.vm_compile_starts = records.vm_compile_starts;
+    out.instructions_at = records.instructions_at;
     // the stop's own row, then the file whole (Sprint 206)
     if let Some(l) = &mut guest.exit_ledger {
         let view = crate::guest::memory_view(&guest.memory);
@@ -1368,42 +1465,26 @@ mod tests {
         assert!(recon_lookup(&t, 0, u64::MAX, u64::MAX, 0x110).is_err());
     }
 
-    /// The guest memory's monitor area, as large as the compiler's area reaches, its runtime word held by `holder`
-    /// and this vCPU's `LOCK_OWNER` `own`.
-    fn monitor_area(holder: u32, own: u64) -> Vec<u64> {
-        use guest_runtime::layout::{LOCK_OWNER, MONITOR_DATA, RUN_TABLE, VM_COMPILER, VM_COMPILER_SIZE};
-        // 8-byte words, so the runtime word is aligned for its atomic
-        let mut area = vec![0u64; ((VM_COMPILER + VM_COMPILER_SIZE) / 8) as usize];
-        area[((RUN_TABLE + crate::monitor_code::RUNTIME_LOCK) / 8) as usize] = u64::from(holder);
-        area[((MONITOR_DATA + LOCK_OWNER) / 8) as usize] = own;
-        area
-    }
-
-    /// Sprints 275 and 276: the drain of the compile log waits while another vCPU holds the runtime word, as an append
-    /// would; the wait frees the word as that vCPU would, so no second thread and no time (plant 2 drains without it).
+    /// A served exit's lock is taken only under the runtime word (Sprints 310 and 311): with the word free, `serve`
+    /// fails its assertion before it locks, and the lock is left free; with the host holding the word, it gives the
+    /// run's shared state. The drain of the in-VM compiler's log takes the lock so (Sprint 311), its wait for another
+    /// vCPU's hold of the word being the host's take's (`monitor_code`'s test of it, Sprints 275 and 276).
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     #[test]
-    fn the_logs_drain_waits_for_another_vcpus_hold_of_the_runtime_word() {
-        use crate::monitor_code::RUNTIME_LOCK;
-        use guest_runtime::layout::RUN_TABLE;
-        use std::sync::atomic::{AtomicU32, Ordering};
-        let mut area = monitor_area(1, 2);
-        let len = area.len() * 8;
-        let mem = unsafe { std::slice::from_raw_parts_mut(area.as_mut_ptr().cast::<u8>(), len) };
-        let mut waited_for = Vec::new();
-        super::vm_compiled_waiting(
-            crate::concurrent_memory::ConcurrentGuestMemory::new(mem),
-            &mut BTreeMap::new(),
-            &mut Vec::new(),
-            &mut Vec::new(),
-            &mut super::InstructionsAt::default(),
-            None,
-            &mut |word: &AtomicU32| waited_for.push(word.swap(0, Ordering::AcqRel)),
-        );
-        assert_eq!(waited_for, [1], "the drain did not wait for the other vCPU's hold");
+    fn a_served_exit_takes_the_lock_only_under_the_word() {
+        use crate::monitor_code::{host_release_runtime_word, host_take_runtime_word};
+
+        let (mut g, tid) = crate::threads::tests::guest_with_a_thread();
+        let lock = super::GuestLock::new(&mut g, None);
+        host_release_runtime_word(lock.view());
+        let free = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(lock.serve())));
+        let why = free.expect_err("a served exit with the word free");
         assert_eq!(
-            area[((RUN_TABLE + RUNTIME_LOCK) / 8) as usize] & 0xFFFF_FFFF,
-            0,
-            "the drain left the word held"
+            why.downcast_ref::<&str>(),
+            Some(&"a served exit's lock taken without the runtime word")
         );
+        assert!(lock.shared.try_lock().is_ok(), "the lock left taken by a refused serve");
+        assert!(host_take_runtime_word(lock.view(), 0));
+        assert!(lock.serve().guest.served.threads.contains_key(&tid));
     }
 }

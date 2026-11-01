@@ -83,3 +83,37 @@ Every part of the run that a served exit writes is behind the one lock, and no w
 
 ## result
 
+
+- **The lock and what it holds** (`run.rs` 605-681): `Records`, the eight records; `Shared`, the guest's borrow, the
+  host compiler's borrow and the records; `GuestLock` moved from `guest.rs` to `run.rs`, beside the state it guards,
+  a `Mutex<Shared>` and the mapping's view, `view()` now live as long as the borrow so a view outlives no guard;
+  `into_inner()` hands the records to `Outcome` at the run's end (1342). The compile-time `Sync` assertion holds with
+  `HostCompiler` inside.
+- **The run loop:** whether the host compiles read once before the lock (822); the drain and the exit's count take the
+  word (918), then the lock, the drain writing `records` and the host, the count reading the tails under the same
+  hold, the word released after the guard, an `exit_count` error raised after the release; `hvc #13`, `#8`, `#12`,
+  `#4` and `#1` as Sprint 310 made them, their records written through the guard; the hand-overs recorded under the
+  lock before it is let go; `Stop::Repeated`'s check of `bridged` moved inside `hvc #1`'s hold; `hvc #9`'s write of
+  `served.unimplemented` under the word and the lock (1259), a served write the card's list had missed.
+- **`turn`** (689-729): takes the lock and the guard and hands a guard back; the link and the kernel objects out of
+  `Guest`, the guard let go, then the word, the wait, the word taken, then the guard; `hand_over` folded into it.
+- **The drain:** `vm_compiled` no longer takes the word itself; `vm_compiled_waiting` and its test (Sprint 276, the
+  drain's wait for another vCPU's hold) removed, the wait being the host's take's, which `monitor_code`'s test of
+  Sprints 275-276 holds, and the drain's hold now `serve()`'s assertion.
+- **Found and fixed, a class:** the gates run `w2m-vm` built `--release`, whose profile (`Cargo.toml` 16-20) has no
+  `debug-assertions`, so every `debug_assert!` was compiled out of the family runs, the two-process guest and the batch
+  run; plant 1, written as a debug assertion, passed the family test (which reads stored stops, 0.11 s). The class in
+  `w2m_vm` and `hypervisor`, six: `serve`'s word check, `turn`'s lock check and the scheduler's word check (Sprint 294,
+  `threads.rs` 707) now `assert!`, run in release (two relaxed loads a served exit, one `try_lock` a turn); the
+  stop-companion table check (`run_outputs.rs` 18) and the two destroy codes in `hypervisor`'s `Drop`s stay debug.
+- **Expected values:** `twoproc.exe` on the release build with the instruction clock, `ExitProcess { code: 0 }`
+  printing "child ended\n", as `store/batch_run/first-stop-2026-10-28.tsv` 54 holds; every other run by the gates.
+- **The unit test** moved to `run.rs` (1474), its lock built with no host.
+- **Plant 1,** restored by `cp` and checked by `cmp`: `turn`'s `drop(held)` struck; `twoproc.exe` on the release
+  build exited 101, "panicked at crates/w2m_vm/src/run.rs:705:5: a turn's wait with the run's lock held", no stop
+  written. (Before the class's fix, the same plant passed the family test, a debug assertion in a release run.)
+- **Plant 2,** restored likewise: the host compiler read inside the loop; the build failed, E0502, "cannot borrow
+  `host` as immutable because it is also borrowed as mutable".
+- **Changed from the card:** plant 1's judge is the two-process guest, not a family run, the family test reading stored
+  stops; a third file, `threads.rs`, for the scheduler's assertion.
+- **The gates:** GATES-LINE
