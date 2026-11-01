@@ -76,3 +76,19 @@ No commit is made unless the checks passed on the index committed, whatever sepa
 
 ## result
 
+- **The script** (`scripts/commit.sh`, executable, `dash -n` passing): refuses a tracked file whose working copy
+  differs from the index, naming it; records `git write-tree`; runs `scripts/pre-commit.sh`, stopping with its status;
+  compares the index's tree and the working tree after; then `git commit` with its own arguments. WORKING_AGREEMENT's
+  "Before a work commit" opens with it, Sprint 301's text and the amendments kept after as the list's history.
+- **Expected values:** this card's work committed through `scripts/commit.sh`, its output read whole.
+- **Plant 3,** restored by `cp` and checked by `cmp`, HEAD read before and after: a comment appended to
+  `crates/w2m_vm/src/lib.rs` and left unstaged; exit 1, "commit: tracked files differ from the index, which the checks
+  would not judge: crates/w2m_vm/src/lib.rs", no commit made.
+- **Plant 1,** restored likewise and unstaged: `pub const   PLANT_ONE: u64 = 1;` staged in `lib.rs`; the format check
+  printed "Diff in /Users/peterlaffey/port/crates/w2m_vm/src/lib.rs:133", and the script "commit: scripts/pre-commit.sh
+  exited 1; no commit", exit 1, HEAD unchanged.
+- **Plant 2,** both files restored and unstaged: a last line of `scripts/pre-commit.sh`, staged so the first refusal
+  passed, appending to `lib.rs` and staging it; the checks passed, and the script "commit: the index or the tree changed
+  while the checks ran; no commit", exit 1, HEAD unchanged.
+- **The gates:** GATES-LINE
+
