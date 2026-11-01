@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 316
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -90,5 +90,5 @@ The host's switch serves any vCPU's exit as the C runtime's switch does, never l
   refusal, "thread 8 loaded on vCPU owner 1 while vCPU owner 2 has it".
 - **Plant 2,** restored likewise: the claim written as 1; the test failed, "the loaded thread claimed with this vCPU's
   owner", left 1, right 2.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 734 s, kept in `store/gates/passes.tsv` as sprint 316 at e17e0cee0 with root=389bfeaa6 and "rust=crates python=0 samples=0", 188 tests, 654 ns an exit at load 4.22 (Sprint 315's 822 ns at load 5.85 not repeated), base=97cdecd4a, Sprint 315's close; multi-vCPU: not run (Python gates not run)
 
