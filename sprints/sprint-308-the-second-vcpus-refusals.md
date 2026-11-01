@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 308
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -76,7 +76,7 @@ Every reason the design gives against a second vCPU is a refusal by name, checke
 
 ## result
 
-- **The change** (WORK-COMMIT): `hypervisor::feature`, `hw.optional.arm.<name>` by `sysctlbyname` (in libc, which
+- **The change** (d25c1eeee): `hypervisor::feature`, `hw.optional.arm.<name>` by `sysctlbyname` (in libc, which
   every macOS binary links; the crate is macOS-only, so no Linux form), with its unit test; `run::vcpus_allowed` and
   `each_reason_against_a_second_vcpu_is_refused_by_name`; `w2m-vm --vcpus N`, 1 by default, checked after the options
   are read and before any VM is made, the three diagnostics named by their flags. A child is started `--child <fd>
@@ -85,7 +85,7 @@ Every reason the design gives against a second vCPU is a refusal by name, checke
 - **Expected values:** `feature("FEAT_LSE2")` `Some(1)` on this Mac, an unknown name `None`; each reason refused by its
   own words, one vCPU allowed whatever holds; `w2m-vm sleeper.exe --output … --vcpus 2` exit 1, "2 vCPUs refused: a
   second vCPU is not built (the run-loop design's card 4c)".
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 819 s, kept in `store/gates/passes.tsv` as sprint 308 at d25c1eeee with root=b7adffbea and "rust=crates python=0 samples=0", rdeps(hypervisor) and rdeps(w2m_vm), 192 tests, base=a5d3629f1, Sprint 307's close; multi-vCPU: not run (Python gates not run)
 - **Plant 1,** restored by `cp` and checked by `cmp`: the diagnostic check skipped (`.filter(|_| false)`); the unit
   test failed, "assertion failed: refused(vcpus_allowed(2, lse2, &[\"--exit-ledger\"], false)).contains(\"--exit-ledger
   reads every exit\")".
