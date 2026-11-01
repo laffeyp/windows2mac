@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 314
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -98,5 +98,5 @@ makes every private table once and refuses a later entry.
   one spelling and `design_check` passed, the section's next sentence opening "Six threads", which the check reads
   lowercased; struck in both, `design_check` exit 1, "docs/design-each-vcpus-own-pages-2026-10-31.md: \"## Against
   the goal\" does not state six threads".
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 15 s, kept in `store/gates/passes.tsv` as sprint 314 at f0268fe9d with root=1432ebc5e and "rust=none python=0 samples=0", no crate changed, base=421a784ea, Sprint 313's close; multi-vCPU: not run (Python gates not run)
 
