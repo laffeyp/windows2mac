@@ -92,16 +92,24 @@ No valid block becomes a table without first being invalid with every vCPU's TLB
   `dsb ishst; tlbi vmalle1is; dsb ish; isb; hvc #15`, before it touches memory: every vCPU's TLB loses the block
   entry, and no page is ever unmapped. The C runtime is unchanged, against the card's files; the design's
   precondition 4 says so.
-- **The change** (WORK-COMMIT): `a64_encoder::DSB_ISHST`; `w2m_vm::FLUSH_STUB` (0x2010, in the free area past the
+- **The change** (07e802849): `a64_encoder::DSB_ISHST`; `w2m_vm::FLUSH_STUB` (0x2010, in the free area past the
   exception entry, beside `RETURN_STUB`) and `FLUSH_STUB_END`; `monitor_code::HVC_TLB_FLUSHED` (15) and `flush_stub`,
   written by `write`; `Served.splits`, counted in `page_descriptor`, its row in the design's table (23 Served) and
   `the_served_part_is_the_designs`' count; in `run`, a vCPU whose `splits` is ahead of `out.flushes` resumed at the
   stub, its PC kept, and given it back at `hvc #15`, `Outcome.flushes` counting; the stub's range, its end the PC
   after its `hvc`, kept out of the two places the loop sets and reads x23, which in the runtime's C is the C's own.
 - **Expected values:** the sleeper run, 3 blocks split and 3 flushes, `hvc #15` 3 times among its exits, its stop and
-  its comparisons with the Python host as before. The batch run's count, which the card asked for, is not recorded:
-  `w2m-vm` reports no counter of `Outcome`'s kind, `served_outside_word` among them being held by `run_loop.rs`
-  alone; the sleeper test holds this one.
+  its comparisons with the Python host as before. The batch run: 35 blocks split, `hvc 15` 35 among its exits, every
+  other count and its reference stop as before. That count, which the card asked for, was first written here as not
+  recorded, `w2m-vm` reporting no counter of `Outcome`'s kind; the gates on 07e802849 showed otherwise, failing
+  `batch_run.rs` and `batch_record.rs` on the batch run's exits, which the held stop file lists by `hvc` number and
+  now holds `hvc 15\t35` (`store/batch_run/first-stop-2026-10-28.tsv`), no other figure moved.
+- **A gap the form leaves, found by the audit after the commit:** the table is written before the flush, so the
+  requesting vCPU's own TLB may hold the block for the stub's first two instructions while a speculative walk loads
+  the table's entry, an UNPREDICTABLE pair; the Arm order needs the request's page writes after the flush. Stated in
+  the design's precondition 4 and in BLACKBOARD Deferred (Sprint 304), with the TLB conflict abort's signature as a
+  revisit; and card 4's stop of the other vCPUs now names the split, which the stub assumes (5e86ccbf1, the design
+  alone).
 - **The gates:** GATES-LINE
 - **Plant 1,** restored by `cp` and checked by `cmp`: the redirect switched off (`if false && …`); the sleeper test
   failed, "a split without its flush: the vCPU ran on with every TLB's block entry", left 0, right 3.
