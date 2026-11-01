@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 325
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -99,5 +99,6 @@ A process that starts another stops by name on a run of more than one vCPU, befo
 - **Plant 2 not run, and why:** it needs `w2m-vm --vcpus 2` to reach a spawn, and `vcpus_allowed` refuses any count
   above 1 with "a second vCPU is not built" before the start is built, so `w2m-vm`'s `start.vcpus = vcpus` is reached
   by no run until card 4c3b2b lifts that refusal; 4c3b2b's judge holds it then, `busychild` on two vCPUs stopping with
-  `MACHINE_ON_ONE`.
-- **The gates:** GATES-LINE
+  `MACHINE_ON_ONE` (BLACKBOARD Deferred, Sprint 325). The card named this judge with no lookup that it reaches the
+  planted line, a breach of WORKING_AGREEMENT's plant-judge rule (Sprint 284).
+- **The gates:** `scripts/gates.sh` exit 0 in 811 s, kept in `store/gates/passes.tsv` as sprint 325 at cdae07b69 with root=800cc40fc and "rust=crates python=0 samples=0", 208 tests, 649 ns an exit at load 2.68, base=294fa0827, Sprint 324's close; multi-vCPU: not run (Python gates not run)
