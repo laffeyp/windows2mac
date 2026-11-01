@@ -131,6 +131,24 @@ mapping, from which each thread takes its view.
 under the word; the exit counts, `run_ns`, `serve_ns`, `serve_by_kind` and the other fields of `Outcome` are each
 vCPU's own, merged when every thread has ended; `out.bridged`, `blocks` and `translations` are Served.
 
+**How the threads share `Guest`** (Sprint 309, read from `run.rs` `run`, 693-1261). Outside a service the run loop
+touches the Load part (`code.dispatch_va`, `code.miss_va`, `ttbr`, `entry_va`, `layout`, `start.tid`,
+`time_runtime_word`), the mapping through the view, the diagnostics (refused on two vCPUs, Sprint 308), and, at each
+turn's start, `served.link` and, through `threads::slice_until`, `served.threads` (`run.rs` 786-800, `threads.rs`
+1099-1113), without the word; the model step touches memory and the code's addresses alone. Every other touch of
+`served` is inside a service under the word: `take_word` before `hvc #13`, `#12`, `#4` and `#1` (`run.rs` 928, 1026,
+1113, 1196), `host_request::serve` under the word the guest holds. Two forms were weighed: `served` alone locked, the
+42 functions that take `&mut Guest` (20 in `threads.rs`) taking the Load part by `&` and `&mut Served` from the guard,
+each signature changed; or the whole `Guest` behind one lock, taken once per served exit under the word, the functions
+keeping `&mut Guest` from the guard. A served exit already holds the word, so the second adds no contention to the
+word's and changes no signature. **Decision:** the whole `Guest` behind one `Mutex`, taken once per served exit, inside
+the word (the guest-memory design's choice 6: the word outermost); each vCPU thread keeps a copy of the Load facts it
+reads outside a service and its own view of the mapping. The turn's start reads `served.link` and `served.threads`, so
+it takes the word and the lock for those reads, or the services that change them write the slice's end and whether
+another process is due into the vCPU's monitor data and the turn's start reads memory alone; card 4c measures the first
+against the second. Card 4b builds the lock: `Guest` wrapped where the run starts, the run loop holding the guard across
+each served exit, its acquire asserting the word in debug builds, card 2's plant.
+
 ## The threads
 
 - The run creates a host thread per vCPU; each creates its vCPU, runs it, serves its exits, and ends when the run
@@ -208,8 +226,9 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    one through the run loop, the sum of the exchanged values conserved, with its plant, a step without the stop; a stop
    while a guest holds the word, the run ending within its bound. *(Split by rule 6 at Sprint 307's close, each its
    own card, in this order, with the judges above shared out: 4a, the refusals on one vCPU: a vCPU count, 1 by default,
-   refused above 1 without FEAT_LSE2, with a diagnostic, or in a child process, each by name; 4b, `served` a lock taken
-   once per served exit, its guard checking the word, card 2's plant, Deferred (Sprint 298)'s clause checked; 4c, a
+   refused above 1 without FEAT_LSE2, with a diagnostic, or in a child process, each by name; 4b, the whole `Guest`
+   behind one lock taken once per served exit inside the word (Sprint 309, "How the threads share `Guest`"), its
+   acquire checking the word, card 2's plant, Deferred (Sprint 298)'s clause checked; 4c, a
    thread per vCPU, the stop, the kick, the merged outcome and the stop flag, `qpc` and `sleeper` on two vCPUs ending as
    on one, a stop while a guest holds the word; 4d, every other vCPU stopped for a locked model step and for a block
    split, the misaligned XCHG race and its plant, a cancel from another thread mid-split (Deferred, Sprint 305); 4e, the

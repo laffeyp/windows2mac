@@ -80,3 +80,20 @@ The form in which the vCPU threads share `Guest` is decided from the run loop's 
 
 ## result
 
+- **The reading** (WORK-COMMIT, the design): in `run.rs` `run` (693-1261), outside a service: the Load part
+  (`code.dispatch_va`, `code.miss_va`, `ttbr`, `entry_va`, `layout`, `start.tid`, `time_runtime_word`), the mapping
+  through the view (19 `memory_view` calls), the diagnostics (`exit_ledger`, `block_judge`, `batch_stop`, refused on
+  two vCPUs by Sprint 308), and the turn's start's `served.link` and `served.threads` through `slice_until`
+  (786-800, `threads.rs` 1099-1113), without the word; the model step (1074-1075) touches memory and the code's
+  addresses alone. Inside a service, under the word: `take_word` at 928, 1026, 1113 and 1196 before `hvc #13`, `#12`,
+  `#4` and `#1`, and `host_request::serve` (952) under the guest's own hold.
+- **The decision:** the whole `Guest` behind one `Mutex`, taken once per served exit inside the word, the 42 functions
+  keeping `&mut Guest`; each thread a copy of the Load facts and its view; the turn's start's two reads under the word
+  or moved to monitor data, card 4c measuring which. Written into the design's "How the threads share `Guest`" and
+  card 4's split (4b), and as a BLACKBOARD Decision with the close, which supersedes "Architecture: when `served`
+  becomes a lock" (its `&mut Served` passed down).
+- **Expected values:** `design_check` passing; the record check passing over both Decisions.
+- **The gates:** GATES-LINE
+- **Plant 1,** restored by `cp` and checked by `cmp`: the new Decision's revisit clause struck; `signal_report --check`
+  failed, "holds 1 decision clauses and 0 revisit clauses, not one each".
+
