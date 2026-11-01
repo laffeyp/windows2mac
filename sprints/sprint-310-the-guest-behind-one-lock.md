@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 310
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -112,4 +112,4 @@ without locking, ready for 4c.
   assertion (644), "`*mut u8` cannot be shared between threads safely".
 - **Deferred (Sprint 298),** read at the start: no change to `struct w2m_state` or a monitor-data slot, G4 not met; the
   three cards stay deferred.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 823 s, kept in `store/gates/passes.tsv` as sprint 310 at d67426f18 with root=ffa899895 and "rust=crates python=0 samples=0", 224 tests, 661 ns an exit at load 2.98, base=b969cf3ed, Sprint 309's close; multi-vCPU: not run (Python gates not run)
