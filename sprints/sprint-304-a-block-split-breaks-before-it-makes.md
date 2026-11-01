@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 304
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -116,7 +116,7 @@ No valid block becomes a table without first being invalid with every vCPU's TLB
   the design's precondition 4 and in BLACKBOARD Deferred (Sprint 304), with the TLB conflict abort's signature as a
   revisit; and card 4's stop of the other vCPUs now names the split, which the stub assumes (5e86ccbf1, the design
   alone).
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 692 s, kept in `store/gates/passes.tsv` as sprint 304 at 36f751b13 with root=23e112bed and "rust=crates python=0 samples=0", rdeps(a64_encoder), rdeps(signal_report) and rdeps(w2m_vm), 237 tests, base=c54b9efed, Sprint 303's close; the runs on 07e802849 and bdea165fa stopped at the batch run's stop file and the exit ledger, no pass row; multi-vCPU: not run (Python gates not run)
 - **Plant 1,** restored by `cp` and checked by `cmp`: the redirect switched off (`if false && …`); the sleeper test
   failed, "a split without its flush: the vCPU ran on with every TLB's block entry", left 0, right 3.
 
