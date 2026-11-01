@@ -68,6 +68,11 @@ pub enum Served {
     Answered,
     /// the process ended with this code (HOST_EXIT)
     Exit(u32),
+    /// answered, a SuspendThread of a thread another vCPU runs (Sprint 330, the kick): that vCPU, its `owner`, is to be
+    /// stopped and the thread's run entry, at `entry`, waited on until it is put down, before the guest goes on; the
+    /// `answer`, written again into the transport page after the wait, which another vCPU's request may have overwritten
+    /// while the word was let go (reviewer-3's Low 1 at 330: `w2m_host` reads `t->result` after its `hvc #8`)
+    Kick { owner: u32, entry: u64, answer: u64 },
 }
 
 /// Why a spawn is refused on a run of more than one vCPU (Sprint 325): the run stops as `Stop::HostRequest` naming it.
@@ -688,6 +693,18 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -
     };
     let mem = crate::guest::memory_view(&guest.memory);
     mem.write((TRANSPORT + 56) as u64, &result.to_le_bytes());
+    // SuspendThread of a thread another vCPU runs, which has not ended: the run loop kicks that vCPU (Sprint 330)
+    if op == HOST_THREAD
+        && a0 == THREAD_SUSPEND
+        && result != u64::MAX
+        && let Some((owner, entry)) = crate::threads::held_elsewhere(guest, (a1 & 0xFFFF_FFFF) as u32)
+    {
+        return Ok(Served::Kick {
+            owner,
+            entry,
+            answer: result,
+        });
+    }
     Ok(Served::Answered)
 }
 

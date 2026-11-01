@@ -185,11 +185,34 @@ pub fn host_release_runtime_word(mem: ConcurrentGuestMemory<'_>) {
     runtime_word(mem).store(0, std::sync::atomic::Ordering::Release);
 }
 
-/// The word let go for a vCPU whose run has ended, if that vCPU's guest (owner `own`) holds it (Sprint 327): its guest
-/// never runs again to let it go, and another vCPU's take would wait on it for ever; another holder's hold is kept.
-pub fn release_ended_vcpus_word(mem: ConcurrentGuestMemory<'_>, own: u32) {
+/// The word let go for vCPU guest `own`, if that guest holds it; another holder's hold is kept. True when it was let go.
+/// For a vCPU whose run has ended (Sprint 327: its guest never runs again to let it go, and another vCPU's take would
+/// wait on it for ever), and for a guest whose SuspendThread waits on another vCPU, which must take the word to put the
+/// thread down (Sprint 330, the kick; `take_word_for_guest` gives it back).
+pub fn release_guests_word(mem: ConcurrentGuestMemory<'_>, own: u32) -> bool {
     use std::sync::atomic::Ordering;
-    let _ = runtime_word(mem).compare_exchange(own, 0, Ordering::Release, Ordering::Relaxed);
+    runtime_word(mem)
+        .compare_exchange(own, 0, Ordering::Release, Ordering::Relaxed)
+        .is_ok()
+}
+
+/// The word taken back for vCPU guest `own`, as its guest held it before `release_guests_word` (Sprint 330, the kick),
+/// waiting while another holds it; false, untaken, once `stopped` answers true, the run having stopped.
+pub fn take_word_for_guest(mem: ConcurrentGuestMemory<'_>, own: u32, stopped: &dyn Fn() -> bool) -> bool {
+    use std::sync::atomic::Ordering;
+    let word = runtime_word(mem);
+    loop {
+        if word
+            .compare_exchange(0, own, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+        {
+            return true;
+        }
+        if stopped() {
+            return false;
+        }
+        std::hint::spin_loop();
+    }
 }
 
 /// `unlock_runtime` (vm_backend 544-546).

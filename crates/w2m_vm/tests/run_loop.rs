@@ -1066,13 +1066,21 @@ fn two_vcpus_end_each_guest_as_one_does() {
 /// which signs it for the hypervisor, as the gates run each guest: its stop, its output and its stderr. The binary
 /// gives the guest what an in-process run does not: its program's file and the file bridge (Sprint 328).
 fn through_w2m_vm(name: &str, vcpus: u32) -> (String, String, String) {
+    let program = root().join(format!("tests/data/timed_waits/{name}.exe"));
+    program_through_w2m_vm(name, &program, &[], vcpus)
+}
+
+/// `program` run by the `w2m-vm` binary on `vcpus` vCPUs with `extra` arguments, as `through_w2m_vm` runs a guest
+/// (Sprint 330: a family's probe with the arguments its `known` row gives, as the gates run it).
+fn program_through_w2m_vm(name: &str, program: &Path, extra: &[String], vcpus: u32) -> (String, String, String) {
     let root = root();
     let dir = std::env::temp_dir().join(format!("w2m-{name}-{vcpus}-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     let (output, stop) = (dir.join(format!("{name}.txt")), dir.join(format!("{name}.stop")));
     let mut child = std::process::Command::new(root.join("scripts/sign_and_run.sh"))
         .arg(env!("CARGO_BIN_EXE_w2m-vm"))
-        .arg(root.join(format!("tests/data/timed_waits/{name}.exe")))
+        .arg(program)
+        .args(extra)
         .args(["--vcpus", &vcpus.to_string(), "--output"])
         .arg(&output)
         .arg("--stop")
@@ -1125,5 +1133,90 @@ fn statsize_through_w2m_vm_on_two_vcpus_reads_its_own_stat() {
             "statsize on {vcpus} vCPUs; stderr {stderr}"
         );
         assert_eq!(said, "done\n", "statsize's output on {vcpus} vCPUs");
+    }
+}
+
+/// The threads family's probe through `w2m-vm` on `vcpus` vCPUs, with the binary and DLL its row in
+/// `store/family_runs/known-2026-10-29.tsv` names, as the gates run it (Sprint 330).
+fn threads_probe(vcpus: u32) -> (String, String, String) {
+    let root = root();
+    let known = fs::read_to_string(root.join("store/family_runs/known-2026-10-29.tsv")).unwrap();
+    let row: Vec<&str> = known
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .map(|l| l.split('\t').collect::<Vec<_>>())
+        .find(|r| r[0] == "threads")
+        .expect("the threads family's row");
+    let (binary, beside, options) = (row[2], row[4], row[6]);
+    let (name, dll) = beside.split_once(':').expect("the threads probe's DLL");
+    assert_eq!(options, "-", "the threads probe takes no start options");
+    let extra = [
+        "--beside".to_string(),
+        name.to_string(),
+        root.join(format!("store/binaries/{dll}.dll")).to_string_lossy().into(),
+        "--max-steps".into(),
+        "20000000000".into(),
+    ];
+    let program = root.join(format!("store/binaries/{binary}.exe"));
+    program_through_w2m_vm("threads", &program, &extra, vcpus)
+}
+
+/// Sprint 330 (the run-loop design's 4c3b3, the kick): SuspendThread of the threads probe's spinner, which runs on vCPU
+/// 1 while the main thread loops on SwitchToThread, stops it before it returns. Measured before the card: on two vCPUs
+/// with no kick, `suspend.frozen`'s `count_unchanged` 0 and `context`'s `rip_in_image` 0, where one vCPU reads 1. Each
+/// is held to 1, and the whole output to the one-vCPU run's.
+#[test]
+fn a_thread_suspended_on_another_vcpu_stops_before_suspend_returns() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let (stopped_one, said_one, _) = threads_probe(1);
+    let (stopped, said, stderr) = threads_probe(2);
+    assert_eq!(stopped_one, "ExitProcess { code: 0 }", "the threads probe on one vCPU");
+    assert_eq!(
+        stopped, "ExitProcess { code: 0 }",
+        "the threads probe on two vCPUs; stderr {stderr}"
+    );
+    let row = |name: &str| {
+        said.lines()
+            .find(|l| l.starts_with(&format!("{{\"s\":\"{name}\",")))
+            .unwrap_or_else(|| panic!("no {name} row"))
+            .to_string()
+    };
+    assert!(
+        row("suspend.frozen").contains("\"count_unchanged\":1"),
+        "the suspended thread went on: {}",
+        row("suspend.frozen")
+    );
+    assert!(
+        row("context").contains("\"rip_in_image\":1"),
+        "the context read before the thread stopped: {}",
+        row("context")
+    );
+    assert_eq!(said, said_one, "the threads probe's rows on two vCPUs as on one");
+}
+
+/// Deferred (Sprint 329), met at Sprint 330: the single-process guests no other test runs on two vCPUs, through
+/// `w2m-vm`, each held to its stop and output in `store/batch_run/first-stop-2026-10-28.tsv` (`qpc2`'s clock reading by
+/// its form, as `batch_run.rs` holds it).
+#[test]
+fn the_other_single_process_guests_end_on_two_vcpus_as_held() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let held = fs::read_to_string(root().join("store/batch_run/first-stop-2026-10-28.tsv")).unwrap();
+    for name in ["model_steps", "mutual", "mutual_context", "qpc2", "readied"] {
+        let row: Vec<&str> = held
+            .lines()
+            .map(|l| l.split('\t').collect::<Vec<_>>())
+            .find(|r| r.len() >= 5 && r[0] == "guest" && r[1] == name)
+            .unwrap_or_else(|| panic!("no held row for {name}"));
+        let (stopped, said, stderr) = through_w2m_vm(name, 2);
+        assert_eq!(stopped, row[2], "{name} on two vCPUs; stderr {stderr}");
+        if name == "qpc2" {
+            let reading = said.strip_suffix('\n').unwrap_or("");
+            assert!(
+                reading.len() == 16 && reading.chars().all(|c| c.is_ascii_hexdigit()),
+                "qpc2's output on two vCPUs: {said:?}"
+            );
+        } else {
+            assert_eq!(said, row[4].replace("\\n", "\n"), "{name}'s output on two vCPUs");
+        }
     }
 }

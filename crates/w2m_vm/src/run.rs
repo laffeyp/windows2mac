@@ -695,7 +695,7 @@ fn take_word_unchecked(mem: ConcurrentGuestMemory<'_>, monitor: u64, outside: &m
 
 /// `take_word_unchecked`, then the run's stop read (Sprint 329; reviewer-3's Low 2 at 327): None when the run has
 /// stopped, the word given back if the host took it, so the service returns before it reads what the word guards. An
-/// ended vCPU's guest's hold is let go at its stop (`release_ended_vcpus_word`), and the state under it may be half
+/// ended vCPU's guest's hold is let go at its stop (`release_guests_word`), and the state under it may be half
 /// written; a take that finds the stop reads none of it. Some(whether the host took it) otherwise.
 fn take_word(mem: ConcurrentGuestMemory<'_>, monitor: u64, outside: &mut u64, stopping: &RunStop) -> Option<bool> {
     let took = take_word_unchecked(mem, monitor, outside);
@@ -1025,6 +1025,37 @@ struct Entry {
     runtime: u64,
 }
 
+/// The kick (Sprint 330; the run-loop design's 4c3b3, the Python host's Sprint 119): SuspendThread of a thread that the
+/// vCPU whose owner is `owner` runs waits until that vCPU puts it down. The requesting guest holds the runtime word at
+/// its `hvc #8`: it is let go, so the stopped vCPU can take it to switch; that vCPU is stopped through its handle and,
+/// with the run going on, comes back through its turn's start, which ends the suspended thread's slice, and its switch
+/// puts the thread down, clearing the run entry's `vcpu` word at `entry`. The wait holds neither the word nor the lock,
+/// and ends when the word names another vCPU or none, when that vCPU is out of guest code, or when the run stops; then
+/// the word is taken back for the guest, which goes on holding it as before its request. Out of guest code is enough
+/// (reviewer-3's Medium 1 at 330): SuspendThread needs only that the thread runs no more guest instructions, and a vCPU
+/// in a host service, its own kick's wait among them, runs none; its cancel stays pending, so its next `hv_vcpu_run`
+/// returns at once and its turn's start ends the suspended thread's slice. Waiting on the word alone, two vCPUs whose
+/// threads suspend each other at once each waited in its own service for the other for ever.
+/// The request's `answer` is written again into the transport page once the word is the guest's: `w2m_host` reads
+/// `t->result` after its `hvc #8`, and another vCPU's guest may make its own request while the word is out (reviewer-3's
+/// Low 1 at 330). `k32_SuspendThread` reads nothing else across the request but its own thread's suspend count.
+fn kick_and_wait(lock: &GuestLock<'_>, place: Place<'_>, owner: u32, entry: u64, answer: u64) {
+    let mem = lock.view();
+    let own = owner_of(place.k);
+    let released = crate::monitor_code::release_guests_word(mem, own);
+    if place.stopping.kick(owner) {
+        while mem.read_u64(entry + crate::threads::E_VCPU) == u64::from(owner)
+            && place.stopping.in_guest(owner)
+            && !place.stopping.stopped()
+        {
+            std::thread::yield_now();
+        }
+    }
+    if released && crate::monitor_code::take_word_for_guest(mem, own, &|| place.stopping.stopped()) {
+        mem.write_u64(MONITOR_SIZE + TRANSPORT_OFF + 56, answer);
+    }
+}
+
 /// vCPU `k`'s owner, its index + 1: the `LOCK_OWNER` its set-up writes, which its guest's takes of the runtime word and
 /// claims of threads write, and the hold its thread's end lets go (Sprint 329: one function, so the two cannot drift;
 /// `two_vcpus_end_each_guest_as_one_does` reads vCPU 1's as 2).
@@ -1050,7 +1081,11 @@ struct Place<'r> {
 struct RunStop {
     stopped: std::sync::atomic::AtomicBool,
     first: std::sync::Mutex<Option<Stop>>,
-    handles: std::sync::Mutex<Vec<hypervisor::VcpuHandle>>,
+    /// each vCPU's handle by its owner (`owner_of`), for the stop and the kick (Sprint 330)
+    handles: std::sync::Mutex<Vec<(u32, hypervisor::VcpuHandle)>>,
+    /// whether each vCPU, by its index, is running guest code, set around `hv_vcpu_run` (Sprint 330; reviewer-3's
+    /// Medium 1 at 330): a vCPU outside guest code runs no thread's instructions, which is all SuspendThread needs
+    in_guest: [std::sync::atomic::AtomicBool; guest_runtime::layout::MAX_VCPUS as usize],
 }
 
 impl RunStop {
@@ -1058,12 +1093,37 @@ impl RunStop {
         self.stopped.load(std::sync::atomic::Ordering::Acquire)
     }
 
-    /// A vCPU made: its handle kept for the stop, and stopped at once if the run stopped before it was made.
-    fn add(&self, handle: hypervisor::VcpuHandle) {
-        self.handles.lock().unwrap_or_else(|e| e.into_inner()).push(handle);
+    /// A vCPU made, its owner `owner`: its handle kept for the stop and the kick, and stopped at once if the run stopped
+    /// before it was made.
+    fn add(&self, owner: u32, handle: hypervisor::VcpuHandle) {
+        self.handles
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((owner, handle));
         if self.stopped() {
             let _ = handle.stop();
         }
+    }
+
+    /// vCPU `k` entering guest code (`true`) or back in the host (`false`), around its `hv_vcpu_run`.
+    fn set_in_guest(&self, k: u64, running: bool) {
+        self.in_guest[k as usize].store(running, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Whether the vCPU whose owner is `owner` is running guest code now.
+    fn in_guest(&self, owner: u32) -> bool {
+        self.in_guest[(owner - 1) as usize].load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// The vCPU whose owner is `owner` stopped through its handle, the run going on (Sprint 330, the kick): it leaves its
+    /// run cancelled, and with the run's flag not set goes on through the host. False when no vCPU has that owner.
+    fn kick(&self, owner: u32) -> bool {
+        let handles = self.handles.lock().unwrap_or_else(|e| e.into_inner());
+        let Some((_, handle)) = handles.iter().find(|(o, _)| *o == owner) else {
+            return false;
+        };
+        let _ = handle.stop();
+        true
     }
 
     /// `stop` the run's, unless another vCPU's came first; then every vCPU stopped.
@@ -1076,7 +1136,7 @@ impl RunStop {
     /// ends by an error or a panic, which would leave the others running.
     fn halt(&self, sched: &crate::threads::Sched) {
         self.stopped.store(true, std::sync::atomic::Ordering::Release);
-        for handle in self.handles.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        for (_, handle) in self.handles.lock().unwrap_or_else(|e| e.into_inner()).iter() {
             let _ = handle.stop();
         }
         sched.notify();
@@ -1088,7 +1148,7 @@ impl RunStop {
 }
 
 /// When a vCPU's thread ends, by its stop, an error or a panic (Sprint 327): the run halted, then the vCPU's guest's
-/// hold of the runtime word let go (`release_ended_vcpus_word`), as that guest never runs again. Both on every path out
+/// hold of the runtime word let go (`release_guests_word`), as that guest never runs again. Both on every path out
 /// of the thread (Sprint 329; reviewer-3's Medium 1 at 329: the release ran on the `Ok` path only, and a peer waiting in
 /// a take for a word an erring vCPU's guest held spun for ever). The halt's flag is stored before the word is let go,
 /// so a take that then gets the word finds the stop (`take_word`).
@@ -1103,7 +1163,7 @@ struct HaltAtEnd<'r> {
 impl Drop for HaltAtEnd<'_> {
     fn drop(&mut self) {
         self.stopping.halt(self.sched);
-        crate::monitor_code::release_ended_vcpus_word(self.mem, self.own);
+        crate::monitor_code::release_guests_word(self.mem, self.own);
     }
 }
 
@@ -1126,7 +1186,7 @@ fn run_on_vcpu(
         own: owner_of(place.k),
     };
     let vcpu = Vcpu::new(vm)?;
-    place.stopping.add(vcpu.handle());
+    place.stopping.add(owner_of(place.k), vcpu.handle());
     set_system_registers(&vcpu, ttbr)?;
     vcpu.set_reg(Reg::Fpcr, fpcr_for(0x1F80))?;
     for r in 0..31u8 {
@@ -1267,9 +1327,9 @@ fn vcpu_loop(
         if place.stopping.stopped() {
             return Ok(None);
         }
-        if counts.cancelled.take() {
-            break Stop::TimeLimit;
-        }
+        // a cancel that came while a split's flush ran and is not the run's stop, found above, is a kick, which this
+        // turn's start serves (Sprint 330: the time limit stops the run through `RunStop`, setting the flag first)
+        counts.cancelled.take();
         // `_before_run` (5129-5141): one vCPU, no other process: the slice's end (`_slice_until`), the VM may switch
         // threads itself; x23 the budget left, outside the runtime's C and the flush stub
         let pc = vcpu.reg(Reg::Pc)?;
@@ -1316,7 +1376,11 @@ fn vcpu_loop(
             }
         }
         let started = Instant::now();
-        let exit = vcpu.run()?;
+        // in guest code while it runs, for a kick's wait (Sprint 330); out again before any error is returned
+        place.stopping.set_in_guest(place.k, true);
+        let exit = vcpu.run();
+        place.stopping.set_in_guest(place.k, false);
+        let exit = exit?;
         // the run's time ends here, before the ledger hashes the process area (reviewer-3's Medium 1 of its review of
         // Sprint 210: `run_seconds` had counted the hashing)
         let returned = Instant::now();
@@ -1430,11 +1494,12 @@ fn vcpu_loop(
             *out.exits.entry(0).or_default() += 1;
             if matches!(exit, Exit::Canceled) {
                 // `hv_vcpus_exit` from the run's stop, another vCPU's or the time limit's (w2m-vm's GUEST_SECONDS;
-                // Sprint 197), which sets the flag first (Sprint 327); without it, a cancel no stop explains
+                // Sprint 197), which sets the flag first (Sprint 327); without it, a kick (Sprint 330): the turn's start
+                // ends the slice of a suspended thread (`slice_until`), and its switch puts the thread down
                 if place.stopping.stopped() {
                     return Ok(None);
                 }
-                break Stop::TimeLimit;
+                continue;
             }
             break Stop::Exit(format!("{exit:?} at pc 0x{pc:x}"));
         };
@@ -1533,6 +1598,13 @@ fn vcpu_loop(
             }
             match served {
                 Ok(crate::host_request::Served::Answered) => continue,
+                // SuspendThread of a thread another vCPU runs (Sprint 330): the lock let go, that vCPU kicked and the
+                // thread waited on, then the guest goes on as after any answer
+                Ok(crate::host_request::Served::Kick { owner, entry, answer }) => {
+                    drop(held);
+                    kick_and_wait(lock, place, owner, entry, answer);
+                    continue;
+                }
                 Ok(crate::host_request::Served::Exit(code)) => break Stop::ExitProcess { code },
                 // a request w2m does not serve stops as unserved; a failure in serving one, as a failure (reviewer-3's
                 // High 1 of its review of Sprint 211)
@@ -1661,24 +1733,13 @@ fn vcpu_loop(
                 }
             }
         }
-        // whether the process is one of a machine, read under the word and the lock (Sprint 324): a request makes the
-        // supervisor's link mid-run (`host_request::serve`), and none removes a link once made (a turn takes it out and
-        // puts it back under the lock), so the answer holds when the word is taken again below
-        let linked = number == 4 && {
-            let Some(took) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
-                return Ok(None);
-            };
-            let linked = lock.serve(pages).guest.served.link.is_some();
-            if took {
-                crate::monitor_code::host_release_runtime_word(lock.view());
-            }
-            linked
-        };
-        if linked {
-            // a slice's end in a process of a machine (`serve_exit`, 5280-5293; Sprint 197): at the run's limit a
-            // stop; else the next slice's budget and expired waits woken, then the turn to another process that is
-            // ready, or the next thread of this one, the stopped block's count given back as the thread goes on at its
-            // entry
+        // a slice's end the VM's switch left to the host: in a process of a machine, and (Sprint 330, the kick) in any
+        // process whose running thread was suspended from another vCPU, which `w2m_switch` declines (`threads.c`
+        // "suspended from another vCPU: the host puts it down"); with no machine link `others` is false below
+        if number == 4 {
+            // a slice's end (`serve_exit`, 5280-5293; Sprint 197): at the run's limit a stop; else the next slice's
+            // budget and expired waits woken, then the turn to another process that is ready, or the next thread of
+            // this one, the stopped block's count given back as the thread goes on at its entry
             let count = lock.view().read_u64(md);
             if count >= max_steps {
                 break Stop::StepLimit {
@@ -1870,6 +1931,7 @@ fn vcpu_loop(
 #[cfg(test)]
 mod tests {
     use super::known_block;
+    use guest_runtime::layout::{MONITOR_SIZE, RUN_TABLE, TRANSPORT_OFF};
 
     /// Each reason against a second vCPU refused by its own words, and one vCPU allowed whatever holds (Sprint 308).
     #[test]
@@ -2006,7 +2068,7 @@ mod tests {
         let (g, _) = crate::threads::tests::guest_with_a_thread();
         let mem = g.memory_view();
         let md = crate::VcpuPages::FIRST.monitor;
-        let word = mem.atomic_u32(guest_runtime::layout::RUN_TABLE + RUNTIME_LOCK);
+        let word = mem.atomic_u32(RUN_TABLE + RUNTIME_LOCK);
         let stopping = super::RunStop::default();
         let mut outside = 0;
         host_release_runtime_word(mem);
@@ -2045,7 +2107,7 @@ mod tests {
 
         let (g, _) = crate::threads::tests::guest_with_a_thread();
         let mem = g.memory_view();
-        let word = mem.atomic_u32(guest_runtime::layout::RUN_TABLE + RUNTIME_LOCK);
+        let word = mem.atomic_u32(RUN_TABLE + RUNTIME_LOCK);
         let stopping = super::RunStop::default();
         // vCPU 1's guest, owner 2, holds the word when its thread panics
         word.store(2, Ordering::Relaxed);
@@ -2061,5 +2123,41 @@ mod tests {
         assert!(ended.is_err(), "the thread panicked");
         assert_eq!(word.load(Ordering::Relaxed), 0, "the guest's word let go");
         assert!(stopping.stopped(), "the run halted");
+    }
+
+    /// A kick gives the requesting guest back its word and its answer (Sprint 330; reviewer-3's Low 1 at 330): the guest
+    /// holds the word at its `hvc #8`, the kick lets it go for the wait, and another vCPU's request may write the
+    /// transport page meanwhile; after the kick the word is the guest's again and the transport holds the kick's answer.
+    /// Owner 2 has no vCPU here, so nothing is stopped and the wait ends at once.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_kick_gives_the_guest_back_its_word_and_its_answer() {
+        use crate::monitor_code::RUNTIME_LOCK;
+        use std::sync::atomic::Ordering;
+
+        let (mut g, _) = crate::threads::tests::guest_with_a_thread();
+        let sched = std::sync::Arc::clone(&g.sched);
+        let lock = super::GuestLock::new(&mut g, None);
+        let stopping = super::RunStop::default();
+        let place = super::Place {
+            k: 0,
+            vcpus: 2,
+            pages: crate::VcpuPages::FIRST,
+            stopping: &stopping,
+            sched: &sched,
+        };
+        let mem = lock.view();
+        let word = mem.atomic_u32(RUN_TABLE + RUNTIME_LOCK);
+        let answer_at = MONITOR_SIZE + TRANSPORT_OFF + 56;
+        // the guest's hold at its request, and another request's answer written over this one's
+        word.store(super::owner_of(0), Ordering::Relaxed);
+        mem.write_u64(answer_at, 0xBAD);
+        super::kick_and_wait(&lock, place, 2, crate::threads::entry(1), 7);
+        assert_eq!(
+            word.load(Ordering::Relaxed),
+            super::owner_of(0),
+            "the guest's word back"
+        );
+        assert_eq!(mem.read_u64(answer_at), 7, "the kick's answer in the transport");
     }
 }

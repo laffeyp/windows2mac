@@ -612,7 +612,8 @@ pub fn run_cases(
             let op = read_u64(crate::guest::memory_view(&guest.memory), MONITOR_SIZE + TRANSPORT_OFF);
             *tally.host_requests.entry(op).or_default() += 1;
             match host_request::serve(guest, vcpu, &crate::run::FlushCounts::default()) {
-                Ok(Served::Answered) => {}
+                // the case runner drives one vCPU, so no thread is held elsewhere and no kick arises (Sprint 330)
+                Ok(Served::Answered | Served::Kick { .. }) => {}
                 Ok(Served::Exit(code)) => break Err(Ok(code)),
                 Err(e) => break Err(Err(e.to_string())),
             }

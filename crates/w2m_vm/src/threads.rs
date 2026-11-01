@@ -432,6 +432,18 @@ pub fn suspend(guest: &mut Guest, tid: u32, resume: bool) -> Result<u64, String>
     })
 }
 
+/// The vCPU that runs thread `tid`, when it is not the served vCPU: the owner its run entry's `vcpu` word names and the
+/// entry's memory offset, for the kick (Sprint 330; the run-loop design's 4c3b3): a thread suspended there runs on until
+/// that vCPU is stopped and puts it down, which clears the word. None when no vCPU or the served one holds it.
+pub fn held_elsewhere(guest: &Guest, tid: u32) -> Option<(u32, u64)> {
+    let t = guest.served.threads.get(&u64::from(tid))?;
+    let mem = crate::guest::memory_view(&guest.memory);
+    let at = entry(t.index);
+    let holder = read_u64(mem, at + E_VCPU);
+    let own = read_u64(mem, guest.served.vcpu.monitor + LOCK_OWNER);
+    (holder != 0 && holder != own).then_some((holder as u32, at))
+}
+
 /// CONTEXT's parts (scheduler.py 35-36): ContextFlags' bits, and the x64 user-mode selectors (rows context: CS 0x33,
 /// SS 0x2B).
 const CONTEXT_CONTROL: u32 = 0x1;

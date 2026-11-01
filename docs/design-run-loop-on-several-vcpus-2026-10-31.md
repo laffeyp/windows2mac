@@ -332,6 +332,13 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, and a 
    ready thread. Each vCPU's step limit is its own. `qpc`, `sleeper`, `twoready` and five more guests end on two vCPUs
    as on one, seven that start a child are refused by name; `statsize` prints "sizes differ", the host reaching the
    requesting vCPU's stack through vCPU 0's mapping: card 328.)*
+   *(Sprint 330: 4c3b3 built. A SuspendThread whose thread another vCPU holds (`threads::held_elsewhere`) is answered
+   `Served::Kick`; the serving vCPU drops the lock, lets go its guest's word, cancels the holder through `RunStop`'s
+   handle by owner, and waits until the thread's `vcpu` word clears or the holder is out of guest code (`RunStop`'s
+   in-guest flag, set around `hv_vcpu_run`), so two vCPUs suspending each other's threads do not wait on each other;
+   it then takes the word again and writes the request's answer back into the transport page. A cancel without the
+   run's stop is a kick: the vCPU goes back to its turn's start, which ends the suspended thread's slice
+   (`slice_until`), and its switch puts the thread down. `hvc #4` is served for every process.)*
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 
