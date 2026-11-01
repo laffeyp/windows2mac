@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 327
-status: active
+status: closed-partial
 phase: 6
 pass_kind: functional
 ---
@@ -147,5 +147,11 @@ Two vCPUs run one process's threads and end it as one vCPU does.
   right` failed: qpc's stop on 2 vCPUs", left `TimeLimit`.
 - **Plant 3,** `w2m-vm.rs` likewise: `start.vcpus = vcpus;` made `let _ = vcpus;`; the test failed, `busychild` ending
   "ExitProcess { code: 0 }".
-- **The gates:** GATES-LINE
+- **Files, against the card's list:** `crates/w2m_vm/src/monitor_code.rs` (`release_ended_vcpus_word`) changed and is
+  not listed; `crates/w2m_vm/src/bin/w2m-vm.rs`, listed for the count to the run, did not change: the run reads the
+  count `w2m-vm` already writes on the guest's start (Sprint 325).
+- **The step limit on several vCPUs:** each vCPU counts its own instructions against its own limit, `max_steps` at
+  its monitor data's offset 8, so a run of `n` vCPUs may run up to `n` times `max_steps` before a `Stop::StepLimit`;
+  `executed` sums the counts. One vCPU is as before. The family runs, which end a hang by count, run on one vCPU.
+- **The gates:** `scripts/gates.sh` exit 0 in 1252 s, kept in `store/gates/passes.tsv` as sprint 327 at 411435de3 with root=0bc8a16f5 and "rust=crates python=0 samples=0", 211 tests, 651 ns an exit at load 3.13, base=6cdcc8e78, Sprint 326's close; multi-vCPU: not run (Python gates not run)
 
