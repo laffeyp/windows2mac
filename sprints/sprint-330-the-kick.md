@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 330
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -123,8 +123,12 @@ A thread suspended while another vCPU runs it stops before SuspendThread returns
   nextest exit 0. The card named this judge from a run without the whole kick, not a run with the wait alone taken
   out, so its reach was reasoned, not read: a breach of WORKING_AGREEMENT's plant-judge rule (Sprint 284). The probe
   takes the spinner's count after a second SuspendThread, itself a host request, and compares it after a `Sleep(20)`;
-  why the spinner did not count on in the planted run, one run, is not measured. No test reaches the wait; Deferred
-  (Sprint 330) names a guest that reads the suspended thread straight after SuspendThread, at card 4d.
+  why the spinner did not count on in the planted run, one run, is not measured. The wait's condition reached no
+  judge; Deferred (Sprint 330) names a guest that reads the suspended thread straight after SuspendThread, at card 4d.
+  A replacement plant, run at the close against e952a31e5, `run.rs` copied aside and restored by `cp`, checked by
+  `cmp`, held the wait until the run's stop (`while true && true && !place.stopping.stopped()`): the probe test
+  failed, "the threads probe on two vCPUs", left "the run's time limit", right "ExitProcess { code: 0 }". The probe's
+  run reaches the wait; what no test holds is that the wait must last until the thread is put down.
 - **Plant 3,** restored likewise: the out-of-guest exit made `&& true`; the five-guest test failed, `mutual` on two
   vCPUs ending "the run's time limit". The card expected `mutual_context`; `mutual` came first in the test's order.
 - **Plant 4,** restored likewise: the answer's write-back made `let _ = answer;`; the unit test failed, "assertion
@@ -144,4 +148,5 @@ A thread suspended while another vCPU runs it stops before SuspendThread returns
   after `Served::Answered`, a kick skipping it; only `--game` sets the batch end, held to one vCPU by
   `vcpus_allowed`, so no kick reaches it: Deferred (Sprint 330), G3. The card's files listed `threads.rs`, `run.rs`
   and `run_loop.rs`; the work also changed `host_request.rs`, `monitor_code.rs` and `cases.rs`.
+- **The gates:** `scripts/gates.sh` exit 0 in 1418 s, kept in `store/gates/passes.tsv` as sprint 330 at e952a31e5 with root=6e1e4fd3f and "rust=crates python=0 samples=0", 250 tests, 690 ns an exit at load 4.78, base=2627a7757, Sprint 329's close; multi-vCPU: not run (Python gates not run)
 
