@@ -556,6 +556,9 @@ pub struct Sched {
 struct Counts {
     changes: u64,
     parked: u64,
+    /// the parked vCPUs waiting with a deadline: while any is, a wait with none takes no deadlock verdict, the deadline
+    /// a wake to come (Sprint 320's audit: each vCPU's own deadline, read at its park, does not see one set after)
+    timed: u64,
     /// a deadlock declared by the vCPU whose quiet second ran out, which every parked vCPU then ends on
     deadlock: bool,
 }
@@ -592,7 +595,8 @@ impl Sched {
         const QUIET: std::time::Duration = std::time::Duration::from_secs(1);
         let mut counts = self.counts.lock().unwrap_or_else(|e| e.into_inner());
         counts.parked += 1;
-        // the second with no change starts when every vCPU is parked with no deadline; a change ends the park
+        counts.timed += u64::from(deadline.is_some());
+        // the second with no change starts when every vCPU is parked and none with a deadline; a change ends the park
         let mut quiet_since: Option<std::time::Instant> = None;
         let woken = loop {
             if counts.changes != seen {
@@ -605,7 +609,7 @@ impl Sched {
             if deadline.is_some_and(|d| now >= d) {
                 break Woken::Deadline;
             }
-            let all = deadline.is_none() && counts.parked == vcpus;
+            let all = counts.timed == 0 && counts.parked == vcpus;
             if !all {
                 quiet_since = None;
             }
@@ -628,6 +632,7 @@ impl Sched {
             };
         };
         counts.parked -= 1;
+        counts.timed -= u64::from(deadline.is_some());
         woken
     }
 }
@@ -1566,6 +1571,26 @@ pub(crate) mod tests {
         });
         let took = started.elapsed();
         assert_eq!(ends, (Woken::Deadlock, Woken::Deadlock));
+
+        // two parked, the second with a deadline set after the first parked: the first, its own deadline none, takes
+        // no deadlock verdict while the second's deadline stands (Sprint 320's audit), even woken with no change, as
+        // `Condvar` allows (a spurious wakeup, made here by a bare `notify_all`); a later change ends it
+        let late = Sched::default();
+        let ends = std::thread::scope(|s| {
+            let first = s.spawn(|| late.park(0, None, 2));
+            std::thread::sleep(Duration::from_millis(50));
+            let second = s.spawn(|| late.park(0, Some(Instant::now() + Duration::from_millis(1500)), 2));
+            std::thread::sleep(Duration::from_millis(50));
+            late.changed.notify_all();
+            let second = second.join().unwrap();
+            late.notify();
+            (first.join().unwrap(), second)
+        });
+        assert_eq!(
+            ends,
+            (Woken::Changed, Woken::Deadline),
+            "a deadlock declared while another parked vCPU's deadline stood"
+        );
         assert!(
             took >= Duration::from_secs(1) && took < Duration::from_secs(3),
             "the deadlock took {took:?}"

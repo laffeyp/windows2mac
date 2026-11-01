@@ -100,5 +100,16 @@ A parked vCPU's wait ends by a change, by the earliest deadline, or by a deadloc
   test failed, "one of two vCPUs parked with no deadline ended its wait", left Deadlock, right Changed.
 - **Plant 2,** restored likewise: the latest deadline (`max`); the test failed, "the park's deadline 9.999999092s
   ahead, not the earliest's 50 ms".
+- **A second work commit, from an audit after the first:** the first commit's rule judged "every vCPU parked and no
+  deadline" by the vCPU's own deadline, read at its park. `park_deadline` reads every blocked thread, so a vCPU parking
+  after another sees its deadline; but a vCPU parked with no deadline that `Condvar` wakes with no change, which it
+  allows, re-judged by its own stale none and could declare a deadlock while another parked vCPU's deadline stood. The
+  counts now hold `timed`, the parked vCPUs with a deadline, and the quiet second runs only when it is 0. The first
+  commit's gates were stopped before their end, no row written. The test gains the case, its spurious wakeup made by a
+  bare `notify_all`; its first form, without that wakeup, passed with the old rule planted, a judge that did not reach
+  the line, found by running the plant before the commit.
+- **Plant 3,** restored by `cp` and checked by `cmp`: the old rule put back (`deadline.is_none()` for `timed == 0`); the
+  test failed, "a deadlock declared while another parked vCPU's deadline stood", left (Deadlock, Deadlock), right
+  (Changed, Deadline).
 - **The gates:** GATES-LINE
 
