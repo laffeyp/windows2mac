@@ -80,3 +80,24 @@ A process that starts another stops by name on a run of more than one vCPU, befo
 
 ## result
 
+- **The count** (`crates/w2m_vm/src/process.rs`): `Start.vcpus`, 1 in `Start::console`; `w2m-vm` sets it on the guest
+  path after `vcpus_allowed` (`w2m-vm.rs` 389-392). The game's start keeps 1: `--game` takes the instruction clock,
+  which `vcpus_allowed` holds to one vCPU (`w2m-vm.rs` 319-320), so the count is not carried through `GameOptions`.
+- **The refusal** (`crates/w2m_vm/src/host_request.rs`): at the head of `HOST_KERNEL`'s spawn, before `child_start`,
+  the link and `Supervisor::spawn`, `guest.start.vcpus > 1` returns `HostError::NotServed(MACHINE_ON_ONE)`, "a process
+  that starts another runs on one vCPU until the Machine has its own thread (the run-loop design's card 4f)", which the
+  run loop stops as `Stop::HostRequest`.
+- **The test** `run_loop::a_spawn_on_two_vcpus_is_refused_before_its_link`: `busychild` on a start of 2 vCPUs (the run
+  itself one vCPU; the refusal reads the count alone) stops as `Stop::HostRequest` with that reason, `served.link`
+  still `None`; passing. The spawn on one vCPU is held by the gates' `busychild` and `twoproc-ic` rows in
+  `store/batch_run/first-stop-2026-10-28.tsv`, read by `batch_run.rs`.
+- **Plant 1,** `host_request.rs` copied aside and restored by `cp`, checked by `cmp`: the test `if guest.start.vcpus >
+  1` made `if false`; the test failed, "busychild on 2 vCPUs stopped as Handover { …, why: \"child process 4100: its
+  w2m-vm ended without a word to the supervisor (Some(ExitStatus(unix_wait_status(25856))))\" }". Its first two runs
+  ran no test: `timeout`, which macOS does not have, ended the first before nextest started, the output filtered to
+  nothing, and the second printed "command not found: timeout".
+- **Plant 2 not run, and why:** it needs `w2m-vm --vcpus 2` to reach a spawn, and `vcpus_allowed` refuses any count
+  above 1 with "a second vCPU is not built" before the start is built, so `w2m-vm`'s `start.vcpus = vcpus` is reached
+  by no run until card 4c3b2b lifts that refusal; 4c3b2b's judge holds it then, `busychild` on two vCPUs stopping with
+  `MACHINE_ON_ONE`.
+- **The gates:** GATES-LINE

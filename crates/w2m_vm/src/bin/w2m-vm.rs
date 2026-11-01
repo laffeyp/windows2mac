@@ -387,6 +387,9 @@ mod run {
             None => None,
         };
         w2m_vm::run::vcpus_allowed(vcpus, lse2, &[], false, start.instruction_clock.is_some())?;
+        // the count the run's requests read: a process that starts another is refused above one vCPU (Sprint 325). The
+        // game's start keeps 1: `--game` takes the instruction clock, which `vcpus_allowed` holds to one vCPU
+        start.vcpus = vcpus;
         let root = root();
         start.program_path = Some(root.join(guest_path));
         // the Producer's input arrives as one JSON line; this run takes none, but the line is read so the pipe closes

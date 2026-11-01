@@ -969,3 +969,23 @@ fn monotonic_count() -> u64 {
     const CLOCK_UPTIME_RAW: u32 = 8;
     unsafe { clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 100 }
 }
+
+/// Sprint 325 (the Decision "Architecture: a vCPU with no thread"): a process that starts another runs on one vCPU until
+/// the Machine has its own thread; on a start of 2 vCPUs `busychild`'s CreateProcessW stops the run by name, before the
+/// child or the supervisor's link is made.
+#[test]
+fn a_spawn_on_two_vcpus_is_refused_before_its_link() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let data = fs::read(root.join("tests/data/timed_waits/busychild.exe")).unwrap();
+    let loaded = load(&data, None, "probe.exe").unwrap();
+    let mut start = Start::console("probe.exe");
+    start.vcpus = 2;
+    let mut guest = guest_with(&root, &loaded, &start);
+    let out = run(&mut guest, &loaded, &mut HostCompiler::default());
+    match &out.stop {
+        Stop::HostRequest { why, .. } => assert_eq!(why, w2m_vm::host_request::MACHINE_ON_ONE),
+        other => panic!("busychild on 2 vCPUs stopped as {other:?}"),
+    }
+    assert!(guest.served.link.is_none(), "a link was made before the refusal");
+}

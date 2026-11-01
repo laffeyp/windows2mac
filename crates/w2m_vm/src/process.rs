@@ -100,6 +100,9 @@ pub struct Start {
     /// the program's file on the host: a child started by its own name finds it here when the run has no program
     /// directory (a probe run's C:\w2m\app holds only the program; Sprint 197)
     pub program_path: Option<std::path::PathBuf>,
+    /// the run's vCPUs, 1 unless `w2m-vm --vcpus` says more (Sprint 325): a process that starts another is refused
+    /// above one until the Machine has its own thread (the run-loop design's card 4f)
+    pub vcpus: u32,
 }
 
 impl Start {
@@ -128,6 +131,7 @@ impl Start {
             app_root: None,
             memory_fd: None,
             program_path: None,
+            vcpus: 1,
         }
     }
 

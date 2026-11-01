@@ -70,6 +70,9 @@ pub enum Served {
     Exit(u32),
 }
 
+/// Why a spawn is refused on a run of more than one vCPU (Sprint 325): the run stops as `Stop::HostRequest` naming it.
+pub const MACHINE_ON_ONE: &str = "a process that starts another runs on one vCPU until the Machine has its own thread (the run-loop design's card 4f)";
+
 /// A request the host does not serve, or could not (reviewer-3's High 1 of its review of Sprint 211: one variant had
 /// carried both, so a failure read as a service not implemented).
 #[derive(Debug)]
@@ -521,6 +524,12 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -
                 guest.served.kernel = objects;
                 let answer = answered.map_err(HostError::Failed)?;
                 if let Some(child) = &answer.spawn {
+                    // the Machine is driven from vCPU 0's turns, so a process that starts another runs on one vCPU
+                    // until the Machine has its own thread (Decision "Architecture: a vCPU with no thread"; Sprint
+                    // 325): refused before the child or the link is made
+                    if guest.start.vcpus > 1 {
+                        return Err(HostError::NotServed(MACHINE_ON_ONE.into()));
+                    }
                     // `spawner` (kernel.py 437-468): a second `w2m-vm`, run in its turn (Sprint 197)
                     let start = child_start(guest, child).map_err(HostError::Failed)?;
                     if guest.served.link.is_none() {
