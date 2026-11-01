@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 328
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -120,5 +120,5 @@ A host request's guest address resolves to the requesting vCPU's own pages, and 
   failed, "the stack's first page at 0x7f0004160010 on vCPU 1", left 176021520 against 176017424, a page apart.
 - **Every run as held:** `cargo nextest run -E 'rdeps(w2m_vm)'`, 200 tests passed in 434 s; `cargo clippy` with the
   gates' flags clean.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 841 s, kept in `store/gates/passes.tsv` as sprint 328 at 422e47cfe with root=46c3e261c and "rust=crates python=0 samples=0", 245 tests, 652 ns an exit at load 3.72, base=b3c30c9bb, Sprint 327's close; multi-vCPU: not run (Python gates not run)
 
