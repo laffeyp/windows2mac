@@ -1588,9 +1588,10 @@ pub(crate) mod tests {
         let woken = sched.park(sched.changes(), Some(started + Duration::from_millis(50)), 2);
         let took = started.elapsed();
         assert_eq!(woken, Woken::Deadline);
+        // a lower bound alone: an upper one fails on the machine's load (`no_wall_clock_bound.rs`, Sprint 224)
         assert!(
-            took >= Duration::from_millis(50) && took < Duration::from_secs(2),
-            "the deadline's wait took {took:?}"
+            took >= Duration::from_millis(50),
+            "the deadline's wait ended early, at {took:?}"
         );
 
         // one of two parked, no deadline: no deadlock, though its second passes; a change ends it
@@ -1638,8 +1639,8 @@ pub(crate) mod tests {
             "a deadlock declared while another parked vCPU's deadline stood"
         );
         assert!(
-            took >= Duration::from_secs(1) && took < Duration::from_secs(3),
-            "the deadlock took {took:?}"
+            took >= Duration::from_secs(1),
+            "the deadlock declared before its second, at {took:?}"
         );
     }
 

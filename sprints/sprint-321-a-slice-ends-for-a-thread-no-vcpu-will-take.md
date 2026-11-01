@@ -86,5 +86,13 @@ On several vCPUs a running thread's slice ends only for a ready thread no runnin
 - **A breach, recorded in the tail entry:** the doc comment's first rewrite went in by a `sed` whose replacement held an
   escaped newline, which wrote an empty line and dropped half a sentence; the Edit tool repaired it, the diff against
   HEAD read after.
+- **A second work commit, for a rule CI caught:** CI on Sprint 320's close, 101ce0f55, failed
+  `hypervisor/tests/no_wall_clock_bound.rs` (Sprint 224), "wall-clock upper bounds in the correctness run", naming the
+  two `took < Duration::from_secs(…)` asserts Sprint 320 put in `threads.rs`' wait test; an upper bound fails on the
+  machine's load, a lower bound cannot. The local gates never ran the rule: it scans every crate's source but lives in
+  `hypervisor`, which the gates select only when `hypervisor` or a crate it depends on changes. 936e57d77 carried the
+  same test, so its gates were stopped by `TaskStop`, no row written; the second commit keeps the lower bounds alone,
+  and `cargo test -p hypervisor --test no_wall_clock_bound` passes on it. No other elapsed time is held under an upper
+  bound in the tree.
 - **The gates:** GATES-LINE
 
