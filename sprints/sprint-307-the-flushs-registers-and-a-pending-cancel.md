@@ -74,3 +74,17 @@ thread.
 
 ## result
 
+- **The change** (WORK-COMMIT): `tests/flush_stub.rs`, declared in `tests/all.rs`: a VM over `common::area()`'s monitor
+  area, a vCPU with x0 to x30 each `0x5EED_0000_0000_0000 | i << 8 | i`, CPSR EL1h with N, Z, C and V, the PC a stub
+  of the area's; `the_flush_gives_back_every_register_cpsr_and_the_pc` and `a_pending_cancel_is_absorbed_and_reported`,
+  the second calling `VcpuHandle::stop` before the flush; both naming the first of the 33 values that differs. No
+  change to `run.rs`.
+- **Expected values:** both passing: the 33 values back as set, `flushes` 1; with the cancel sent first, `cancelled`
+  true as well, which reads `hv_vcpu.h` 377-378 as the card did: the pending cancel used by the run that returns it,
+  the stub run again to its `hvc #15`.
+- **The gates:** GATES-LINE
+- **Plant 1,** restored by `cp` and checked by `cmp`: the restore loop writing x(i) from slot i + 1; the register test
+  failed, "x0: 0x5eed000000000000 set, 0x5eed000000000101 back".
+- **Plant 2,** restored by `cp` and checked by `cmp`: the `Exit::Canceled` arm returning an error; the cancel test
+  failed, "planted: a cancel refused".
+
