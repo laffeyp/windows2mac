@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 322
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -102,6 +102,8 @@ A rule that reads the whole tree runs in every gates run that runs Rust tests, w
   first run struck every line instead, the `grep` that gave the line's number matching nothing and `sed` with an empty
   address rewriting the whole file, and named all three; rerun with `grep -F` and the number checked non-empty first.
 - **Plant 2,** restored likewise, its number checked the same way: `no_wall_clock_bound`'s line struck; the listing for
-  a `design_check` change held 0 of it, `layout_constants` still 4.
-- **The gates:** GATES-LINE
+  a `design_check` change held 0 of it, `layout_constants` still 4. The bullet quoted no output at first and the close's
+  `signal_report 322 --check` refused it; rerun at the close, restored and checked the same way, the counts of the
+  listing printed "no_wall_clock_bound: 0" and "layout_constants: 4".
+- **The gates:** `scripts/gates.sh` exit 0 in 1134 s, kept in `store/gates/passes.tsv` as sprint 322 at df1283cb8 with root=6e5885643 and "rust=all python=0 samples=1", every stage for the change to `scripts/gates.sh` (its line 57), 346 tests, 650 ns an exit at load 3.91, base=4dfd82bf0, Sprint 321's close; multi-vCPU: not run (Python gates not run)
 
