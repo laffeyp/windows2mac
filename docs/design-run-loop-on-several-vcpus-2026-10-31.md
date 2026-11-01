@@ -308,7 +308,10 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, and a 
    switch on any vCPU, the loaded thread's `vcpu` word the vCPU's own `LOCK_OWNER` and a thread another vCPU holds
    skipped, as the C runtime's `held_elsewhere` does (`threads.c` 65-68, 293-294), where the host's `switch` writes 1
    and stops at such a thread (`threads.rs` 859-878); 4c3b, the threads, the stop, the kick, the merged outcome and the
-   stop flag, inside `std::thread::scope`.)*
+   stop flag, inside `std::thread::scope`.)* *(4c3b2 split at Sprint 324's card: 4c3b2a, the run loop on one vCPU
+   reaching `Guest` only through `serve` under the word, its five whole-lock borrows (`run.rs` 844, 961, 1143, 1262,
+   1370) gone, the Load facts copied before the loop, the turn's start under the word and the lock, its time measured
+   against the median exit service; 4c3b2b, the vCPU threads as 4c3b2 is written in "A vCPU with no thread".)*
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 
