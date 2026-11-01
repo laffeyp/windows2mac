@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 312
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -106,5 +106,5 @@ thread runs.
 - **Expected values:** `design_check` passing, "7 plans and designs state the goal and the systems".
 - **Plant 1,** restored by `cp` and checked by `cmp`: the systems heading renamed; `design_check` exit 1,
   "docs/design-each-vcpus-own-pages-2026-10-31.md: no "## Against the systems that solved it" section".
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 15 s, kept in `store/gates/passes.tsv` as sprint 312 at 614e6fb63 with root=2ce2e78dd and "rust=none python=0 samples=0", no crate changed, base=c1919f9be, Sprint 311's close; multi-vCPU: not run (Python gates not run)
 
