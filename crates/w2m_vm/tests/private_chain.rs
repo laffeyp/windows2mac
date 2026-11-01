@@ -42,7 +42,15 @@ fn guest() -> Guest {
     let modules: BTreeSet<String> = exports["modules"].as_object().unwrap().keys().cloned().collect();
     let symbols =
         vm_compiler_symbols(&fs::read_to_string(root.join("tools/vm_compiler/stencil_table.h")).unwrap()).unwrap();
-    let guest = Guest::new(&loaded, &image, &services, &Start::console("probe.exe"), &modules, &symbols).unwrap();
+    let guest = Guest::new(
+        &loaded,
+        &image,
+        &services,
+        &Start::console("probe.exe"),
+        &modules,
+        &symbols,
+    )
+    .unwrap();
     let words: Vec<u8> = [a64::ldr(8, 0, 1, 0), a64::hvc(0x23)]
         .iter()
         .flat_map(|w| w.to_le_bytes())
@@ -99,7 +107,15 @@ fn each_vcpu_reads_its_own_monitor_data_at_one_address() {
         let b = s.spawn(|| (load_on_a_vcpu(&vm, ttbr1, monitor), load_on_a_vcpu(&vm, ttbr1, late)));
         (a.join().unwrap(), b.join().unwrap())
     });
-    assert_eq!((on0.0.0, on1.0.0), (0xA0A0, 0xB1B1), "each vCPU's monitor data at one address");
-    assert_eq!((on0.1.0, on1.1.0), (0x1A7E, 0x1A7E), "a page mapped after the chain, on both");
+    assert_eq!(
+        (on0.0.0, on1.0.0),
+        (0xA0A0, 0xB1B1),
+        "each vCPU's monitor data at one address"
+    );
+    assert_eq!(
+        (on0.1.0, on1.1.0),
+        (0x1A7E, 0x1A7E),
+        "a page mapped after the chain, on both"
+    );
     assert_eq!((on0.0.1 & 1, on1.0.1 & 1), (0, 0), "TTBR0_EL1.CnP");
 }
