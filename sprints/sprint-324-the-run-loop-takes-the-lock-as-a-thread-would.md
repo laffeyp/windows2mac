@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 324
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -130,4 +130,4 @@ The run loop on one vCPU touches `Guest` only under the word and the lock, as a 
   `Guest`" says so.
 - **Plant 2,** restored likewise: the turn's start's `take_word` made `let took = false;`; `qpc` exited 101, "thread
   'main' panicked at crates/w2m_vm/src/run.rs:686:9: a served exit's lock taken without the runtime word".
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 852 s, kept in `store/gates/passes.tsv` as sprint 324 at 38a90b136 with root=890bfb12d and "rust=crates python=0 samples=0", 207 tests, 651 ns an exit at load 2.96, base=343825e77, Sprint 323's close; multi-vCPU: not run (Python gates not run)
