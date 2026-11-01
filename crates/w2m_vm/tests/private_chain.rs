@@ -90,7 +90,7 @@ fn each_vcpu_reads_its_own_monitor_data_at_one_address() {
     // a page the guest maps after vCPU 1's chain is made, in the arena, which every chain shares
     let late = VIRTUAL_VA + 0x40_0000;
     g.map_pages(late, late + PAGE, true, &mut || Ok(())).unwrap();
-    let at = g.layout.offset(late).expect("the arena's page in the layout");
+    let at = g.offset(late).expect("the arena's page in the layout");
     g.memory_view().write_u64(at, 0x1A7E);
     let refused = g
         .page_descriptor(PROCESS_VA + 0x20_0000, &mut || Ok(()))
@@ -118,4 +118,55 @@ fn each_vcpu_reads_its_own_monitor_data_at_one_address() {
         "a page mapped after the chain, on both"
     );
     assert_eq!((on0.0.1 & 1, on1.0.1 & 1), (0, 0), "TTBR0_EL1.CnP");
+}
+
+/// Sprint 328 (Deferred, Sprint 327, partial; reviewer-3's Low 1 at 327): the host resolves a guest address as the
+/// served vCPU sees it. An address in a vCPU's monitor data page, state block or runtime stack resolves with vCPU 1's
+/// pages into vCPU 1's slot, where `private_chain` laid them, and with vCPU 0's where the layout's maps put it; an
+/// address outside them resolves alike for both.
+#[test]
+fn a_guest_address_resolves_to_the_served_vcpus_own_page() {
+    use guest_runtime::layout::{RUNTIME_STACK, RUNTIME_STACK_SIZE, STATE_OFF, VCPU_AREA, VCPU_STRIDE};
+    let g = guest();
+    let (_, pages) = g.private_chain(1).unwrap();
+    let slot = VCPU_AREA + VCPU_STRIDE;
+    let last = RUNTIME_STACK_SIZE - 8;
+    for (va, on0, on1, what) in [
+        (
+            MONITOR_VA + MONITOR_DATA + 8,
+            MONITOR_DATA + 8,
+            slot + 8,
+            "the monitor data page",
+        ),
+        (
+            PROCESS_VA + STATE_OFF + 8,
+            VcpuPages::FIRST.state + 8,
+            slot + PAGE + 8,
+            "the state block",
+        ),
+        (
+            MONITOR_VA + RUNTIME_STACK + 0x10,
+            RUNTIME_STACK + 0x10,
+            slot + 2 * PAGE + 0x10,
+            "the stack's first page",
+        ),
+        (
+            MONITOR_VA + RUNTIME_STACK + last,
+            RUNTIME_STACK + last,
+            slot + 2 * PAGE + last,
+            "the stack's last word",
+        ),
+    ] {
+        assert_eq!(
+            g.layout.offset(va, VcpuPages::FIRST),
+            Some(on0),
+            "{what} at {va:#x} on vCPU 0"
+        );
+        assert_eq!(g.layout.offset(va, pages), Some(on1), "{what} at {va:#x} on vCPU 1");
+    }
+    assert_eq!(
+        g.layout.offset(PROCESS_VA, pages),
+        g.layout.offset(PROCESS_VA, VcpuPages::FIRST),
+        "a shared address on both"
+    );
 }

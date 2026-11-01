@@ -169,7 +169,7 @@ fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostErro
     if a[0] == crate::kernel::PIPE_READ
         && second == 0
         && result > 0
-        && let Some(at) = guest.layout.offset(a[2])
+        && let Some(at) = guest.offset(a[2])
     {
         let data = bytes(guest.memory_view(), at as usize, result as usize);
         if let Some(l) = &mut guest.exit_ledger {
@@ -186,7 +186,6 @@ fn environment_now(guest: &Guest) -> Result<Vec<String>, String> {
     use guest_runtime::layout::{ENVIRONMENT_OFF, ENVIRONMENT_SIZE, PROCESS_VA};
     let mem = crate::guest::memory_view(&guest.memory);
     let parameters = guest
-        .layout
         .offset(crate::process::PARAMETERS_VA + 0x80)
         .ok_or("ProcessParameters is not mapped")? as usize;
     let at = read_u64(mem, parameters);
@@ -246,7 +245,6 @@ impl crate::kernel::Memory for KernelMemory<'_> {
     fn read(&self, va: u64, n: usize) -> Result<Vec<u8>, String> {
         let at = self
             .0
-            .layout
             .offset(va)
             .ok_or_else(|| format!("a kernel request at unmapped 0x{va:x}"))? as usize;
         Ok(bytes(self.0.memory_view(), at, n))
@@ -254,7 +252,6 @@ impl crate::kernel::Memory for KernelMemory<'_> {
     fn write(&mut self, va: u64, data: &[u8]) -> Result<(), String> {
         let at = self
             .0
-            .layout
             .offset(va)
             .ok_or_else(|| format!("a kernel request at unmapped 0x{va:x}"))? as usize;
         self.0.memory_view().write(at as u64, data);
@@ -334,6 +331,7 @@ pub fn map_view(guest: &mut Guest, size: u64, fd: u64, protect: u64) -> Result<(
     let mut view = GuestView {
         mem: crate::guest::memory_view(&guest.memory),
         layout: &guest.layout,
+        vcpu: guest.served.vcpu,
     };
     let base = guest
         .served
@@ -341,7 +339,6 @@ pub fn map_view(guest: &mut Guest, size: u64, fd: u64, protect: u64) -> Result<(
         .map_view(&mut view, size, protect as u32)
         .map_err(|e| HostError::NotServed(format!("{e:?}")))?;
     let at = guest
-        .layout
         .offset(base)
         .ok_or_else(|| HostError::Failed(format!("a file view at unmapped 0x{base:x}")))? as usize;
     crate::guest::memory_view(&guest.memory).write(at as u64, &bytes);
@@ -390,7 +387,6 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -
         HOST_WRITE => {
             // `self.out += self.mem.read(a0, a1)`: a1 bytes of the guest's output at a0 (Sprint 155)
             let at = guest
-                .layout
                 .offset(a0)
                 .ok_or_else(|| HostError::Failed(format!("a write from unmapped 0x{a0:x}")))?
                 as usize;
@@ -417,7 +413,6 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -
         HOST_MODULE | HOST_PROC | HOST_MODULE_PATH => {
             let read = |guest: &Guest, va: u64, n: u64| -> Result<Vec<u8>, HostError> {
                 let at = guest
-                    .layout
                     .offset(va)
                     .ok_or_else(|| HostError::Failed(format!("a module request's name at unmapped 0x{va:x}")))?
                     as usize;
@@ -447,7 +442,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -
                         let raw: Vec<u8> = path.encode_utf16().flat_map(u16::to_le_bytes).collect();
                         let n = raw.len().min(2 * a2 as usize);
                         if a2 != 0 {
-                            let at = guest.layout.offset(a1).ok_or_else(|| {
+                            let at = guest.offset(a1).ok_or_else(|| {
                                 HostError::Failed(format!("a module path's buffer at unmapped 0x{a1:x}"))
                             })? as usize;
                             crate::guest::memory_view(&guest.memory).write(at as u64, &raw[..n]);
@@ -472,6 +467,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -
             let mut view = GuestView {
                 mem: crate::guest::memory_view(&guest.memory),
                 layout: &guest.layout,
+                vcpu: guest.served.vcpu,
             };
             let refused = |e: virtual_memory::Unimplemented| HostError::NotServed(format!("{e:?}"));
             let (result, second) = match op {
@@ -497,7 +493,6 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -
                     let info = guest.served.arena.query(&view, a0).map_err(refused)?;
                     let raw = memory_basic_information(&info);
                     let at = guest
-                        .layout
                         .offset(a1)
                         .ok_or_else(|| HostError::Failed(format!("VirtualQuery's buffer at unmapped 0x{a1:x}")))?
                         as usize;
@@ -621,7 +616,6 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -
                 *register = vcpu.simd(n as u8)?.to_le_bytes();
             }
             let at = guest
-                .layout
                 .offset(a1)
                 .ok_or_else(|| HostError::Failed(format!("XMM capture to unmapped 0x{a1:x}")))?
                 as usize;
@@ -812,12 +806,13 @@ mod tests {
         let (second, base) = map_view(&mut g, size, fd, 2).unwrap();
         assert_eq!(base % 0x1_0000, 0, "64 KB-aligned");
         assert_eq!(second, 0, "the second word");
-        let at = g.layout.offset(base).unwrap() as usize;
+        let at = g.offset(base).unwrap() as usize;
         assert_eq!(g.memory.as_slice()[at], 1, "the file's first byte at the base");
         assert_eq!(&g.memory.as_slice()[at..at + size as usize], &bytes[..]);
         let view = GuestView {
             mem: crate::guest::memory_view(&g.memory),
             layout: &g.layout,
+            vcpu: g.served.vcpu,
         };
         let info = g.served.arena.query(&view, base).unwrap();
         assert_eq!(

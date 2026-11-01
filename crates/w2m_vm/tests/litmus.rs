@@ -200,7 +200,7 @@ fn run_threads(texts: &[String], entso: bool, start: &[(u64, u64)]) -> Vec<u8> {
     )
     .unwrap();
     let write = |g: &mut Guest, va: u64, bytes: &[u8]| {
-        let at = g.layout.offset(va).unwrap() as usize;
+        let at = g.offset(va).unwrap() as usize;
         g.memory.as_mut_slice()[at..at + bytes.len()].copy_from_slice(bytes);
     };
     write(&mut guest, CODE + 0x100, &code);
@@ -282,7 +282,7 @@ fn run_threads(texts: &[String], entso: bool, start: &[(u64, u64)]) -> Vec<u8> {
                     let (guest, _) = &mut *held;
                     let rip = x86_address_at(concurrent, pc - 4).unwrap();
                     let mut code = vec![0u8; 15];
-                    concurrent.read(guest.layout.offset(rip).unwrap(), &mut code);
+                    concurrent.read(guest.offset(rip).unwrap(), &mut code);
                     let stepped = model_step(guest, &vcpu, &code, rip).unwrap();
                     assert!(
                         matches!(stepped, ModelStep::Resumed),
@@ -303,7 +303,7 @@ fn run_threads(texts: &[String], entso: bool, start: &[(u64, u64)]) -> Vec<u8> {
     }
     {
         let mut held = shared.lock().unwrap();
-        let at = held.0.layout.offset(DATA).unwrap() as usize;
+        let at = held.0.offset(DATA).unwrap() as usize;
         let mem = held.0.memory.as_mut_slice();
         mem[at..at + DATA_SIZE as usize].fill(0);
         for &(offset, value) in start {
@@ -317,7 +317,7 @@ fn run_threads(texts: &[String], entso: bool, start: &[(u64, u64)]) -> Vec<u8> {
         }
     });
     let held = shared.lock().unwrap();
-    let at = held.0.layout.offset(DATA).unwrap() as usize;
+    let at = held.0.offset(DATA).unwrap() as usize;
     held.0.memory.as_slice()[at..at + DATA_SIZE as usize].to_vec()
 }
 

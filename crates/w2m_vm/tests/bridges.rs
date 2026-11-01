@@ -85,7 +85,7 @@ fn a_bridged_call_returns_through_the_dispatcher() {
     let stack_top = 0x1_0000_0000u64; // pe_loader::STACK_TOP
     let rsp = stack_top - 0x100;
     let ret = 0x1_4000_1234u64;
-    let at = |g: &Guest, va: u64| g.layout.offset(va).unwrap() as usize;
+    let at = |g: &Guest, va: u64| g.offset(va).unwrap() as usize;
     let rsp_off = at(&g, rsp);
     g.memory.as_mut_slice()[rsp_off..rsp_off + 8].copy_from_slice(&ret.to_le_bytes());
     let std_output = {

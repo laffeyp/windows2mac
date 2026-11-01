@@ -214,7 +214,7 @@ pub const EFLAGS_FAULT_MASK: u64 = 0x1 | 0x2 | 0x4 | 0x10 | 0x40 | 0x80 | 0x200 
 /// `windows` (vm_oracle 159-167): the data, stack and edge windows against Windows's.
 fn windows(guest: &Guest, r: &CaseResult) -> Vec<(String, String)> {
     let mem = guest.memory_view();
-    let at = |va: u64| guest.layout.offset(va).unwrap();
+    let at = |va: u64| guest.offset(va).unwrap();
     let mut out = Vec::new();
     if bytes(mem, at(DATA_VA + DATA_OFF), WINDOW) != r.data[..] {
         out.push(("data window".into(), "differs".into()));
@@ -431,7 +431,7 @@ pub fn run_cases(
             read_u64(mem, RUN_TABLE + RECON_COUNT),
         )
     };
-    let offset = |g: &Guest, va: u64| g.layout.offset(va).unwrap() as usize;
+    let offset = |g: &Guest, va: u64| g.offset(va).unwrap() as usize;
     // the empty dispatch table (2795-2796), built once and copied whole per case: written entry by entry, an
     // unoptimized build took over an hour for the cases a release build runs in 33 s
     let mut tails = Tails::default();

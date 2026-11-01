@@ -39,8 +39,8 @@ impl GuestModelMemory<'_> {
             code: crate::model::STATUS_ACCESS_VIOLATION,
             why: format!("access of {n} bytes at 0x{va:x} outside mapped memory"),
         };
-        let first = self.0.layout.offset(va).ok_or_else(fault)?;
-        let last = self.0.layout.offset(va + n as u64 - 1).ok_or_else(fault)?;
+        let first = self.0.offset(va).ok_or_else(fault)?;
+        let last = self.0.offset(va + n as u64 - 1).ok_or_else(fault)?;
         if last != first + n as u64 - 1 {
             return Err(fault());
         }

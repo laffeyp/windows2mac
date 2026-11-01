@@ -183,7 +183,6 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
     pe_loader::map_image(&mut staging, &raw, &pe, base, &file).map_err(|e| Failed(format!("{file}: {e:?}")))?;
     let data = &staging.regions[0].data;
     let at = guest
-        .layout
         .offset(base)
         .ok_or_else(|| Failed(format!("{file} placed at 0x{base:x}, which is not mapped")))?;
     // the image, its import slots and PEB.Ldr through the view: LoadLibrary is served while the run runs (Sprint 290,
@@ -213,6 +212,7 @@ fn load_dll(guest: &mut Guest, name: &str) -> Result<u64, ModuleError> {
     let view = crate::guest::GuestView {
         mem: crate::guest::memory_view(&guest.memory),
         layout: &guest.layout,
+        vcpu: guest.served.vcpu,
     };
     guest.served.arena.snapshot_image(&view, base, &pe);
     // `Modules.dll_paths` (vm_backend 3944-3945): below C:\w2m\app by its components, else the host path

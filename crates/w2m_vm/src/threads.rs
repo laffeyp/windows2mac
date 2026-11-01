@@ -105,7 +105,6 @@ fn bytes(mem: ConcurrentGuestMemory<'_>, off: u64, n: u64) -> Vec<u8> {
 /// Guest bytes at `va`, through the layout.
 fn write_guest(guest: &mut Guest, va: u64, bytes: &[u8]) -> Result<(), String> {
     let at = guest
-        .layout
         .offset(va)
         .ok_or_else(|| format!("guest address 0x{va:x} is not mapped"))?;
     guest.memory_view().write(at, bytes);
@@ -114,7 +113,6 @@ fn write_guest(guest: &mut Guest, va: u64, bytes: &[u8]) -> Result<(), String> {
 
 fn read_guest(guest: &Guest, va: u64, n: u64) -> Result<Vec<u8>, String> {
     let at = guest
-        .layout
         .offset(va)
         .ok_or_else(|| format!("guest address 0x{va:x} is not mapped"))?;
     let mut out = vec![0; n as usize];
@@ -137,6 +135,7 @@ fn arena_alloc(guest: &mut Guest, address: u64, size: u64, kind: u32) -> Result<
     let mut view = GuestView {
         mem: crate::guest::memory_view(&guest.memory),
         layout: &guest.layout,
+        vcpu: guest.served.vcpu,
     };
     guest
         .served
@@ -1131,6 +1130,7 @@ pub fn stack_grow(
         let mut view = GuestView {
             mem: crate::guest::memory_view(&guest.memory),
             layout: &guest.layout,
+            vcpu: guest.served.vcpu,
         };
         guest.served.arena.commit(
             &mut view as &mut dyn GuestPages,
@@ -1143,6 +1143,7 @@ pub fn stack_grow(
         let mut view = GuestView {
             mem: crate::guest::memory_view(&guest.memory),
             layout: &guest.layout,
+            vcpu: guest.served.vcpu,
         };
         guest.served.arena.commit(
             &mut view as &mut dyn GuestPages,
@@ -1209,6 +1210,7 @@ pub fn create_thread(
         let mut view = GuestView {
             mem: crate::guest::memory_view(&guest.memory),
             layout: &guest.layout,
+            vcpu: guest.served.vcpu,
         };
         guest.served.arena.commit(
             &mut view as &mut dyn GuestPages,
@@ -1755,7 +1757,7 @@ pub(crate) mod tests {
 
         let (mut g, _) = guest_with_a_thread();
         let names = guest_runtime::services::api_names(&g.services).unwrap();
-        let at = g.layout.offset(HEAP_VA).unwrap() as usize;
+        let at = g.offset(HEAP_VA).unwrap() as usize;
         let slot = (g.served.vcpu.state + 8 * 4) as usize;
         let mem = g.memory.as_mut_slice();
         mem[slot..slot + 8].copy_from_slice(&HEAP_VA.to_le_bytes());
@@ -1836,7 +1838,7 @@ pub(crate) mod tests {
         mem.write(lazy + 0x18, &[1]);
         // a CONTEXT asking for control, integer, segments and floating point (0x10000F)
         let buffer = HEAP_VA + 0x800;
-        let off = g.layout.offset(buffer).unwrap() as usize;
+        let off = g.offset(buffer).unwrap() as usize;
         g.memory.as_mut_slice()[off..off + 1232].fill(0);
         g.memory.as_mut_slice()[off + 48..off + 52].copy_from_slice(&0x0010_000Fu32.to_le_bytes());
         assert_eq!(thread_context(&mut g, t, buffer), Ok(1));
@@ -1874,13 +1876,14 @@ pub(crate) mod tests {
         let (dealloc, limit, _) = g.served.threads[&tid].stack;
         let teb = g.served.threads[&tid].teb;
         let stack_limit = |g: &Guest| {
-            let at = g.layout.offset(teb + 0x10).unwrap() as usize;
+            let at = g.offset(teb + 0x10).unwrap() as usize;
             u64::from_le_bytes(g.memory.as_slice()[at..at + 8].try_into().unwrap())
         };
         let query = |g: &mut Guest, va: u64| {
             let view = GuestView {
                 mem: crate::guest::memory_view(&g.memory),
                 layout: &g.layout,
+                vcpu: g.served.vcpu,
             };
             let info = g.served.arena.query(&view, va).unwrap();
             (info.state, info.protect)

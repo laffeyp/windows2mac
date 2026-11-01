@@ -938,7 +938,7 @@ mod run {
             let (a0, a1, a2) = (word(1), word(2), word(3));
             tsv += &format!("arguments\t0x{a0:x} 0x{a1:x} 0x{a2:x}\n");
             if op == 15
-                && let Some(at) = guest.layout.offset(a0)
+                && let Some(at) = guest.offset(a0)
             {
                 let units: Vec<u16> = mem[at as usize..at as usize + 2 * a1 as usize]
                     .as_chunks::<2>()

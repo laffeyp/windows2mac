@@ -276,12 +276,17 @@ impl Layout {
         }
     }
 
-    /// The memory offset of guest address `va`, if a map holds it.
-    pub fn offset(&self, va: u64) -> Option<u64> {
-        self.maps
-            .iter()
-            .find(|(v, _, n)| (*v..v + n).contains(&va))
-            .map(|(v, ipa, _)| ipa - IPA_BASE + (va - v))
+    /// The memory offset of guest address `va` as the vCPU whose pages are `vcpu` sees it, if a map holds it: an
+    /// address in that vCPU's own pages (its monitor data page, state block or runtime stack) resolves to its copy, every
+    /// other through the layout's maps (Sprint 328; the maps alone are vCPU 0's view). A caller with no served vCPU
+    /// names vCPU 0's, `VcpuPages::FIRST`.
+    pub fn offset(&self, va: u64, vcpu: VcpuPages) -> Option<u64> {
+        vcpu.private(va).or_else(|| {
+            self.maps
+                .iter()
+                .find(|(v, _, n)| (*v..v + n).contains(&va))
+                .map(|(v, ipa, _)| ipa - IPA_BASE + (va - v))
+        })
     }
 }
 
@@ -740,16 +745,19 @@ pub struct Served {
 pub use crate::VcpuPages;
 
 /// Guest memory by guest address, for the arena (`_zero`, and the `read` the arena is given, vm_backend 2498-2500).
-/// Through the view (Sprint 278): no reference into guest memory.
+/// Through the view (Sprint 278): no reference into guest memory. An address resolves as the vCPU whose pages are
+/// `vcpu` sees it (Sprint 328; reviewer-3's Low 1 at 328), the served vCPU's where a request builds the view, so a
+/// caller that hands it a buffer in a vCPU's own pages reaches that vCPU's.
 pub struct GuestView<'a> {
     pub mem: ConcurrentGuestMemory<'a>,
     pub layout: &'a Layout,
+    pub vcpu: VcpuPages,
 }
 
 impl GuestView<'_> {
     fn at(&self, va: u64) -> u64 {
         self.layout
-            .offset(va)
+            .offset(va, self.vcpu)
             .unwrap_or_else(|| panic!("guest address 0x{va:x} is not mapped"))
     }
 }
@@ -817,6 +825,13 @@ impl Guest {
     /// `memory_view` of this guest's memory.
     pub fn memory_view(&self) -> ConcurrentGuestMemory<'_> {
         memory_view(&self.memory)
+    }
+
+    /// The memory offset of guest address `va` as the served vCPU sees it (Sprint 328): `Layout::offset` with
+    /// `served.vcpu`, which the run loop's `serve` sets to the vCPU whose exit is served, so a host request's buffer in
+    /// the requesting vCPU's runtime stack is that vCPU's.
+    pub fn offset(&self, va: u64) -> Option<u64> {
+        self.layout.offset(va, self.served.vcpu)
     }
 
     /// `VM.__init__`'s memory and code (vm_backend 2382-2424, 2461, 2472-2475, 2506-2508) for `loaded`, with the
@@ -929,6 +944,7 @@ impl Guest {
         arena.snapshot(&GuestView {
             mem: memory_view(&memory),
             layout: &layout,
+            vcpu: VcpuPages::FIRST, // at load, before any vCPU runs
         });
         Guest {
             memory,
@@ -1180,6 +1196,7 @@ impl Guest {
         let pages = VcpuPages {
             monitor: slot,
             state: slot + PAGE,
+            stack: slot + 2 * PAGE,
         };
         // the private pages: (guest address, memory offset); the first two start as vCPU 0's
         let mut private = vec![
@@ -1275,9 +1292,9 @@ impl Guest {
         let mem = self.memory_view();
         let word = |at: u64| mem.read_u64(at);
         let rsp = word(self.served.vcpu.state + 8 * 4);
-        let ret = word(self.layout.offset(rsp)?);
+        let ret = word(self.offset(rsp)?);
         let name = (|| {
-            let at = self.layout.offset(ret.checked_sub(6)?)?;
+            let at = self.offset(ret.checked_sub(6)?)?;
             if at + 6 > mem.len() as u64 {
                 return None;
             }
@@ -1288,7 +1305,7 @@ impl Guest {
             }
             let disp = i32::from_le_bytes(call[2..6].try_into().unwrap());
             let slot = ret.wrapping_add_signed(i64::from(disp));
-            let thunk = word(self.layout.offset(slot)?);
+            let thunk = word(self.offset(slot)?);
             self.served.thunks.get(&thunk).cloned()
         })();
         Some((ret, name))
@@ -1369,7 +1386,6 @@ impl Guest {
             for &slot in image.pe.iat.keys() {
                 let va = base + u64::from(slot);
                 let off = self
-                    .layout
                     .offset(va)
                     .ok_or_else(|| GuestError::Layout(format!("{name}'s import slot 0x{va:x} is not mapped")))?;
                 let held = self.memory_view().read_u64(off);
@@ -1401,7 +1417,7 @@ impl Guest {
             let mem = self.memory_view();
             let rsp = word(mem, self.served.vcpu.state + 8 * 4);
             // the Python's `self.mem.read(rsp, 8)` raises on an unmapped RSP (Sprint 194; reviewer-2's Low 1)
-            let caller = match self.layout.offset(rsp) {
+            let caller = match self.offset(rsp) {
                 Some(off) => word(mem, off),
                 None => {
                     return Err(GuestError::Layout(format!(
@@ -1579,6 +1595,7 @@ impl Guest {
         let mut view = GuestView {
             mem: crate::guest::memory_view(&self.memory),
             layout: &self.layout,
+            vcpu: self.served.vcpu,
         };
         let (va, err) = self
             .served

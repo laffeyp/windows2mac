@@ -228,7 +228,7 @@ fn code_at(guest: &Guest, rip: u64) -> Vec<u8> {
     let mem = guest.memory_view();
     let mut code: Vec<u8> = (0..15u64)
         .map_while(|i| {
-            guest.layout.offset(rip + i).map(|o| {
+            guest.offset(rip + i).map(|o| {
                 let mut b = [0u8];
                 mem.read(o, &mut b);
                 b[0]
@@ -1738,7 +1738,7 @@ fn vcpu_loop(
                     .get(&thunk)
                     .cloned()
                     .unwrap_or_else(|| format!("{thunk:#x}"));
-                match guest.layout.offset(rsp) {
+                match guest.offset(rsp) {
                     None => Stop::Exit(format!("import {name}: the guest's RSP 0x{rsp:x} is not mapped")),
                     Some(at) => {
                         guest.served.unimplemented = Some((name.clone(), guest.memory_view().read_u64(at)));

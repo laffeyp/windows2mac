@@ -271,7 +271,7 @@ fn qpc_runs_past_its_first_decline_compiling_as_the_python_host() {
             "block 0x{start:x}'s code address"
         );
         let hex = want[1].as_str().unwrap();
-        let at = guest.layout.offset(*va).unwrap() as usize;
+        let at = guest.offset(*va).unwrap() as usize;
         let ours: String = guest.memory.as_slice()[at..at + hex.len() / 2]
             .iter()
             .map(|b| format!("{b:02x}"))
@@ -414,7 +414,7 @@ fn a_cached_guest_holds_the_file_read_only_at_its_region() {
     let root = root();
     let (_, guest, host) = cached_guest(&root, "qpc", false);
     let bytes = cache_file::to_bytes(&host.cache.as_ref().unwrap().file);
-    let at = guest.layout.offset(CACHE_FILE_VA).expect("no map at CACHE_FILE_VA") as usize;
+    let at = guest.offset(CACHE_FILE_VA).expect("no map at CACHE_FILE_VA") as usize;
     assert_eq!(
         &guest.memory.as_slice()[at..at + bytes.len()],
         bytes.as_slice(),
@@ -433,7 +433,7 @@ fn a_cached_guest_holds_the_file_read_only_at_its_region() {
     let (_, plain) = guest_for(&root, "qpc");
     assert_eq!(plain.layout.cache_file_off, None);
     assert_eq!(
-        plain.layout.offset(CACHE_FILE_VA),
+        plain.offset(CACHE_FILE_VA),
         None,
         "a guest without a cache maps the region"
     );
@@ -491,7 +491,7 @@ fn the_installer_installs_a_cached_start_and_declines_the_rest() {
     // the words, as `relocate` moves them
     let from = CACHE_CODE_VA + 4 * u64::from(b.word);
     let want = cache_file::relocate(&file.words[b.word as usize..(b.word + b.nwords) as usize], from, code).unwrap();
-    let at = guest.layout.offset(code).unwrap() as usize;
+    let at = guest.offset(code).unwrap() as usize;
     let got: Vec<u32> = (0..want.len())
         .map(|k| u32::from_le_bytes(after[at + 4 * k..at + 4 * k + 4].try_into().unwrap()))
         .collect();
@@ -835,7 +835,7 @@ fn sleeper_creates_and_ends_its_thread_as_the_python_host() {
         assert_eq!(mapped(page), page >= limit, "the stack page 0x{page:x}'s mapping");
     }
     let read = |va: u64, n: u64| {
-        let at = guest.layout.offset(va).unwrap() as usize;
+        let at = guest.offset(va).unwrap() as usize;
         guest.memory.as_slice()[at..at + n as usize].to_vec()
     };
     for (off, value) in want["teb_words"].as_object().unwrap() {
@@ -1022,6 +1022,9 @@ fn two_vcpus_end_each_guest_as_one_does() {
     for name in ["qpc", "sleeper", "twoready"] {
         let (loaded, mut one) = guest_for(&root, name);
         let alone = run(&mut one, &loaded, &mut HostCompiler::default());
+        // each guest ends on one vCPU, so a run that fails alike on one and two cannot pass by matching (Sprint 328:
+        // `statsize`, which in-process has no file bridge and stops at its stat, so matched)
+        assert_eq!(alone.stop, Stop::ExitProcess { code: 0 }, "{name} on one vCPU");
         let mut start = Start::console("probe.exe");
         start.vcpus = 2;
         let mut two = guest_with(&root, &loaded, &start);
@@ -1059,20 +1062,18 @@ fn two_vcpus_end_each_guest_as_one_does() {
     }
 }
 
-/// Deferred (Sprint 325), met at Sprint 327: `w2m-vm --vcpus 2` carries the count to the guest's start, so `busychild`'s
-/// CreateProcessW stops the run by name (`MACHINE_ON_ONE`); the binary run through `scripts/sign_and_run.sh`, which
-/// signs it for the hypervisor, as the gates run each guest.
-#[test]
-fn busychild_through_w2m_vm_on_two_vcpus_is_refused_by_name() {
-    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+/// `tests/data/timed_waits/<name>.exe` run by the `w2m-vm` binary on `vcpus` vCPUs, through `scripts/sign_and_run.sh`,
+/// which signs it for the hypervisor, as the gates run each guest: its stop, its output and its stderr. The binary
+/// gives the guest what an in-process run does not: its program's file and the file bridge (Sprint 328).
+fn through_w2m_vm(name: &str, vcpus: u32) -> (String, String, String) {
     let root = root();
-    let dir = std::env::temp_dir().join(format!("w2m-busychild-two-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("w2m-{name}-{vcpus}-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
-    let (output, stop) = (dir.join("busychild.txt"), dir.join("busychild.stop"));
+    let (output, stop) = (dir.join(format!("{name}.txt")), dir.join(format!("{name}.stop")));
     let mut child = std::process::Command::new(root.join("scripts/sign_and_run.sh"))
         .arg(env!("CARGO_BIN_EXE_w2m-vm"))
-        .arg(root.join("tests/data/timed_waits/busychild.exe"))
-        .args(["--vcpus", "2", "--output"])
+        .arg(root.join(format!("tests/data/timed_waits/{name}.exe")))
+        .args(["--vcpus", &vcpus.to_string(), "--output"])
         .arg(&output)
         .arg("--stop")
         .arg(&stop)
@@ -1088,11 +1089,41 @@ fn busychild_through_w2m_vm_on_two_vcpus_is_refused_by_name() {
     }
     let ran = child.wait_with_output().unwrap();
     let stopped = fs::read_to_string(&stop).unwrap_or_default();
+    let said = fs::read_to_string(&output).unwrap_or_default();
     let _ = fs::remove_dir_all(&dir);
+    (
+        stopped.trim_end().to_string(),
+        said,
+        String::from_utf8_lossy(&ran.stderr).into(),
+    )
+}
+
+/// Deferred (Sprint 325), met at Sprint 327: `w2m-vm --vcpus 2` carries the count to the guest's start, so `busychild`'s
+/// CreateProcessW stops the run by name (`MACHINE_ON_ONE`).
+#[test]
+fn busychild_through_w2m_vm_on_two_vcpus_is_refused_by_name() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let (stopped, _, stderr) = through_w2m_vm("busychild", 2);
     assert_eq!(
-        stopped.trim_end(),
+        stopped,
         format!("HostRequest op 33: {}", w2m_vm::host_request::MACHINE_ON_ONE),
-        "busychild through w2m-vm --vcpus 2; stderr {}",
-        String::from_utf8_lossy(&ran.stderr)
+        "busychild through w2m-vm --vcpus 2; stderr {stderr}"
     );
+}
+
+/// Deferred (Sprint 327, partial), met at Sprint 328: `statsize`'s worker, on vCPU 1 while the main thread spins on
+/// vCPU 0, asks GetFileAttributesExW, whose stat the host writes into the requesting vCPU's runtime stack, and prints
+/// "done" only when both threads read the same size; through `w2m-vm`, which gives it its file, on two vCPUs as on one.
+/// In-process it has no file bridge and stops at its stat on any count of vCPUs, so it is not judged there.
+#[test]
+fn statsize_through_w2m_vm_on_two_vcpus_reads_its_own_stat() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    for vcpus in [1, 2] {
+        let (stopped, said, stderr) = through_w2m_vm("statsize", vcpus);
+        assert_eq!(
+            stopped, "ExitProcess { code: 0 }",
+            "statsize on {vcpus} vCPUs; stderr {stderr}"
+        );
+        assert_eq!(said, "done\n", "statsize's output on {vcpus} vCPUs");
+    }
 }

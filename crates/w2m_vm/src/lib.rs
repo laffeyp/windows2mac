@@ -78,19 +78,37 @@ pub const FLUSH_STUB_END: u64 = FLUSH_STUB + 4 * 5;
 pub const NATIVE_OPERANDS: u64 = 0x300;
 
 /// The memory offsets of one vCPU's own pages (`docs/design-each-vcpus-own-pages-2026-10-31.md`; Sprint 313): its
-/// monitor data page and its state block, which every vCPU reaches at the same guest address. The host reads a vCPU's
-/// own words only through these; vCPU 0's are the layout's, and card 4c2b puts each later vCPU's in its slot.
+/// monitor data page, its state block and its runtime stack, which every vCPU reaches at the same guest addresses. The
+/// host reads a vCPU's own words through these, by offset (Sprint 313) or by guest address (`private`, Sprint 328);
+/// vCPU 0's are the layout's, and `Guest::private_chain` puts each later vCPU's in its slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VcpuPages {
     pub monitor: u64,
     pub state: u64,
+    /// the runtime stack's first page, `RUNTIME_STACK_SIZE` bytes (Sprint 328)
+    pub stack: u64,
 }
 
 impl VcpuPages {
     pub const FIRST: VcpuPages = VcpuPages {
         monitor: guest_runtime::layout::MONITOR_DATA,
         state: guest_runtime::layout::MONITOR_SIZE + guest_runtime::layout::STATE_OFF,
+        stack: guest_runtime::layout::RUNTIME_STACK,
     };
+
+    /// The memory offset of guest address `va` when it lies in one of this vCPU's own pages: its monitor data page,
+    /// its state block (one page each) or its runtime stack (Sprint 328: the C runtime hands the host pointers into its
+    /// frames there, and `statsize`'s stat landed in vCPU 0's stack); None for any other address, which every vCPU
+    /// reaches alike.
+    pub fn private(&self, va: u64) -> Option<u64> {
+        use guest_runtime::layout::{
+            MONITOR_DATA, MONITOR_VA, PAGE, PROCESS_VA, RUNTIME_STACK, RUNTIME_STACK_SIZE, STATE_OFF,
+        };
+        let within = |start: u64, size: u64, at: u64| (start..start + size).contains(&va).then(|| at + (va - start));
+        within(MONITOR_VA + MONITOR_DATA, PAGE, self.monitor)
+            .or_else(|| within(PROCESS_VA + STATE_OFF, PAGE, self.state))
+            .or_else(|| within(MONITOR_VA + RUNTIME_STACK, RUNTIME_STACK_SIZE, self.stack))
+    }
 }
 /// AttrIndx 0 (MAIR byte 0 = 0xFF, Normal write-back), inner shareable, the access flag (vm_backend 352).
 pub const PAGE_ATTRIBUTES: u64 = (3 << 8) | (1 << 10);

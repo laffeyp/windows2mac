@@ -87,3 +87,38 @@ A host request's guest address resolves to the requesting vCPU's own pages, and 
 
 ## result
 
+- **The translation** (`crates/w2m_vm/src/lib.rs`, `guest.rs`): `VcpuPages` gains `stack`, vCPU 0's `RUNTIME_STACK`,
+  vCPU `k`'s its slot plus two pages, where `private_chain` places it; `VcpuPages::private(va)` resolves an address in
+  the vCPU's monitor data page, state block or runtime stack; `Layout::offset(va, vcpu)` asks it first, then the maps;
+  `Guest::offset(va)` passes the served vCPU's (`served.vcpu`, which the run loop's `serve` sets).
+- **The callers, held by the compiler:** the signature change named 42 calls, not the 17 in 7 files the card counted
+  by a one-line search: 29 in the library, 1 in `w2m-vm.rs`, 12 in tests, the calls split over two lines among them
+  (`KernelMemory`'s read and write, `read_guest`, `write_guest`, `GuestView::at`). Each holding a guest calls
+  `Guest::offset`. Files: `cases.rs`, `guest.rs`, `host_request.rs`, `lib.rs`, `model_step.rs`, `modules.rs`,
+  `run.rs`, `threads.rs`, `bin/w2m-vm.rs`, `tests/` (`bridges.rs`, `litmus.rs`, `private_chain.rs`, `run_loop.rs`).
+- **`GuestView`** (reviewer-3's Low 1 at 328, the review in Surfaced): it carries `vcpu: VcpuPages`, its eleven
+  builders passing their guest's `served.vcpu` and the one at load, in `Guest::new` before any vCPU runs,
+  `VcpuPages::FIRST`; the comment that stood for the parameter is gone. The two `lock.serve(VcpuPages::FIRST)` at
+  `run.rs` 1921 and 1931 are `a_served_exit_takes_the_lock_only_under_the_word`, a unit test of the lock on a guest of
+  one thread on one vCPU, where vCPU 0's pages are the served vCPU's.
+- **The judges:** `private_chain::a_guest_address_resolves_to_the_served_vcpus_own_page`, each of the three private
+  ranges and the stack's last word on vCPU 0 and vCPU 1, and a shared address alike on both, passing.
+  `run_loop::statsize_through_w2m_vm_on_two_vcpus_reads_its_own_stat`, `statsize` through the `w2m-vm` binary on one
+  vCPU and two, each ending `ExitProcess { code: 0 }` and printing "done\n", passing.
+- **The judge the card named, and why it moved:** the card named `statsize` in the in-process two-vCPU test, and plant
+  1 left that test passing. In-process `statsize` has no file bridge: a diagnostic test, removed before the commit,
+  read both runs, on one vCPU and two, with or without `program_path`, stopping "HostFailure { op: 24, ... why: \"a
+  file call in a run with no file-system root\" }" with no output, so the two-vCPU run matched the one-vCPU run with the
+  fix taken out. Through `w2m-vm`, five runs each way: the fix "done", plant 1 "sizes differ". The judge is the binary
+  test; the in-process test now holds each guest's one-vCPU run to `ExitProcess { code: 0 }` before it compares, and
+  `statsize` left it. A breach of WORKING_AGREEMENT's plant-judge rule (Sprint 284): the judge was named without a
+  lookup that it reaches the planted line.
+- **Plant 1,** `guest.rs` copied aside and restored by `cp`, checked by `cmp`: `vcpu.private(va).filter(|_| false)`,
+  every address through the maps; the translation test failed, "the monitor data page at 0x7f0000000008 on vCPU 1",
+  left `Some(8)`, vCPU 0's; the `statsize` test failed, "statsize's output on 2 vCPUs", left "sizes differ\n".
+- **Plant 2,** restored likewise: `private_chain`'s `stack: slot + 2 * PAGE` made `3 * PAGE`; the translation test
+  failed, "the stack's first page at 0x7f0004160010 on vCPU 1", left 176021520 against 176017424, a page apart.
+- **Every run as held:** `cargo nextest run -E 'rdeps(w2m_vm)'`, 200 tests passed in 434 s; `cargo clippy` with the
+  gates' flags clean.
+- **The gates:** GATES-LINE
+
