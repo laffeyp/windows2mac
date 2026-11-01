@@ -672,6 +672,8 @@ pub struct Guest {
     pub block_judge: Option<crate::block_judge::BlockJudge>,
     /// where the batch run ends, asked after each host request answered (`w2m-vm --game --log-lines`; Sprint 219)
     pub batch_stop: Option<crate::batch_stop::BatchStop>,
+    /// what a parked vCPU waits on, outside the run's lock (Sprint 319): every thread readied notifies it
+    pub sched: std::sync::Arc<crate::threads::Sched>,
     /// the part a served exit writes
     pub served: Served,
 }
@@ -952,6 +954,7 @@ impl Guest {
             exit_ledger: None,
             block_judge: None,
             batch_stop: None,
+            sched: Default::default(),
             served: Served {
                 process: process_area,
                 thunks,

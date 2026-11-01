@@ -25,6 +25,9 @@ use crate::run::{FCW_OFF, MXCSR_OFF, REG_UNDEFINED_FLAGS, RUN_END, fpcr_for};
 /// The run table's header and an entry's words (scheduler.py 42-47).
 pub const RT_COUNT: u64 = 0x00;
 pub const RT_BLOCKED: u64 = 0x20;
+/// the vCPUs waiting in the host with no thread to run (`threads.c` 51-52, `struct w2m_run_table`'s `waiting`; Sprint
+/// 319), which the guest's `readied()` reads to ask `THREAD_WAKE`
+pub const RT_WAITING: u64 = 0x28;
 pub const E_TID: u64 = 0x00;
 pub const E_STATUS: u64 = 0x08;
 pub const E_SUSPEND: u64 = 0x10;
@@ -533,6 +536,43 @@ pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
         write_u64(mem, RUN_TABLE + RT_BLOCKED, blocked);
     }
     write_u64(mem, at + E_STATUS, status);
+    // a thread readied in the host: a parked vCPU may take it (the run-loop design's "A vCPU with no thread", the host's
+    // one writer of a thread's status; Sprint 319)
+    if status == READY && was != READY {
+        guest.sched.notify();
+    }
+}
+
+/// What a parked vCPU waits on (the run-loop design's "A vCPU with no thread"; Sprint 319): a count of changes that may
+/// let a vCPU take a thread, which every readying notifies, outside the run's lock so a parked vCPU waits holding none.
+#[derive(Default, Debug)]
+pub struct Sched {
+    changes: std::sync::Mutex<u64>,
+    changed: std::sync::Condvar,
+}
+
+impl Sched {
+    /// A change: a thread readied, or a wake the guest asked for.
+    pub fn notify(&self) {
+        let mut changes = self.changes.lock().unwrap_or_else(|e| e.into_inner());
+        *changes += 1;
+        self.changed.notify_all();
+    }
+
+    /// The count of changes so far, read before a park so a change after it is not missed.
+    pub fn changes(&self) -> u64 {
+        *self.changes.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Waits until the count is past `seen` or `timeout` passes; the count then.
+    pub fn wait_change(&self, seen: u64, timeout: std::time::Duration) -> u64 {
+        let changes = self.changes.lock().unwrap_or_else(|e| e.into_inner());
+        let (changes, _) = self
+            .changed
+            .wait_timeout_while(changes, timeout, |c| *c == seen)
+            .unwrap_or_else(|e| e.into_inner());
+        *changes
+    }
 }
 
 /// What a hand-over leaves to run.
@@ -546,6 +586,10 @@ pub enum Switch {
     /// no thread is ready in a process of a machine (`IDLE`, vm_backend 3565-3571): the turn goes to the machine, and
     /// `resume_idle` goes on from here
     Idle,
+    /// no thread this vCPU may take is ready while another vCPU holds one (Sprint 319; the run-loop design's "A vCPU
+    /// with no thread"): this vCPU's thread put down and the vCPU counted in the run table's `waiting`; it waits on
+    /// `Sched` holding neither the word nor the lock, then `take`s a thread
+    Parked,
 }
 
 unsafe extern "C" {
@@ -788,7 +832,7 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     // is another vCPU's is loaded there, and the pick passes it by, as `held_elsewhere` does (`threads.c` 64-68;
     // Sprint 316)
     let own = read_u64(mem, guest.served.vcpu.monitor + LOCK_OWNER);
-    let here = |t: &Thread| matches!(word(t, E_VCPU), v if v == 0 || v == own);
+    let here = |t: &Thread| free_for(mem, t, own);
     let order: Vec<&Thread> = guest.served.threads.values().collect();
     let i = order.iter().position(|t| t.tid == cur.tid).unwrap();
     let rotation = order[i + 1..].iter().chain(order[..=i].iter());
@@ -796,6 +840,13 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
         .clone()
         .find(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0 && here(t))
         .map(|t| (*t).clone());
+    // none here ready while another vCPU holds a thread, which can ready one: this vCPU parks, its thread put down and
+    // itself counted in `waiting` (the run-loop design's "A vCPU with no thread"; Sprint 319); one vCPU never parks
+    if next.is_none() && order.iter().any(|t| !here(t)) {
+        save(guest, x, cur);
+        write_u64(mem, RUN_TABLE + RT_WAITING, read_u64(mem, RUN_TABLE + RT_WAITING) + 1);
+        return Ok(Switch::Parked);
+    }
     if next.is_none() && guest.served.link.is_some() {
         return Ok(Switch::Idle);
     }
@@ -833,9 +884,22 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     if next.tid == cur.tid {
         return Ok(Switch::Go { vectors: None });
     }
-    // `_save_thread` (3467-3479)
+    let (executed, pauses) = save(guest, x, cur);
+    load(guest, x, &next, own, executed, pauses)?;
     let mem = crate::guest::memory_view(&guest.memory);
-    let (from, to) = (entry(cur.index), entry(next.index));
+    let vectors = (
+        read_u64(mem, entry(cur.index) + E_VSLOT),
+        read_u64(mem, entry(next.index) + E_VSLOT),
+    );
+    Ok(Switch::Go { vectors: Some(vectors) })
+}
+
+/// `_save_thread` (3467-3479): `cur`, the thread on the served vCPU, put down: its registers `x`, its instructions and
+/// pauses since its slice began, its per-thread monitor words and the state block into its run entry, its `vcpu` word
+/// cleared; the vCPU's count and pauses, which the next load's slice begins from.
+fn save(guest: &Guest, x: &[u64; 31], cur: &Thread) -> (u64, u64) {
+    let mem = crate::guest::memory_view(&guest.memory);
+    let from = entry(cur.index);
     let (executed, pauses) = (
         read_u64(mem, guest.served.vcpu.monitor),
         read_u64(mem, guest.served.vcpu.monitor + PAUSE_COUNT),
@@ -867,10 +931,15 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
     let data = bytes(mem, state, STATE_SIZE);
     put(mem, from + E_STATE, &data);
     write_u64(mem, from + E_VCPU, 0);
-    // `set_current` (3323-3326)
-    write_u64(mem, guest.served.vcpu.monitor + CURRENT, next.index);
-    write_u64(mem, guest.served.vcpu.monitor + CURRENT_ENTRY, MONITOR_VA + to);
-    // `_load_thread` (3487-3498)
+    (executed, pauses)
+}
+
+/// `set_current` and `_load_thread` (3323-3326, 3487-3498): `next` loaded onto the served vCPU, whose owner is `own`:
+/// the vCPU's current thread, its per-thread monitor words and state block from the run entry, its slice begun at
+/// `executed` and `pauses`, its `vcpu` word `own`, and its registers into `x`. A thread another vCPU holds is refused.
+fn load(guest: &Guest, x: &mut [u64; 31], next: &Thread, own: u64, executed: u64, pauses: u64) -> Result<(), String> {
+    let mem = crate::guest::memory_view(&guest.memory);
+    let to = entry(next.index);
     let held = read_u64(mem, to + E_VCPU);
     if held != 0 && held != own {
         return Err(format!(
@@ -878,20 +947,57 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
             next.tid
         ));
     }
+    write_u64(mem, guest.served.vcpu.monitor + CURRENT, next.index);
+    write_u64(mem, guest.served.vcpu.monitor + CURRENT_ENTRY, MONITOR_VA + to);
     for (p, (a, b)) in E_MONITOR_AT.iter().zip(PER_THREAD_MONITOR) {
         let data = bytes(mem, to + E_MONITOR + p, b - a);
         put(mem, guest.served.vcpu.monitor + a, &data);
     }
     let data = bytes(mem, to + E_STATE, STATE_SIZE);
-    put(mem, state, &data);
+    put(mem, guest.served.vcpu.state, &data);
     write_u64(mem, guest.served.vcpu.monitor + SLICE_COUNT, executed);
     write_u64(mem, guest.served.vcpu.monitor + SLICE_PAUSES, pauses);
     write_u64(mem, to + E_VCPU, own);
     for (i, r) in x.iter_mut().enumerate() {
         *r = read_u64(mem, to + E_X + 8 * i as u64);
     }
-    let vectors = (read_u64(mem, from + E_VSLOT), read_u64(mem, to + E_VSLOT));
-    Ok(Switch::Go { vectors: Some(vectors) })
+    Ok(())
+}
+
+/// Whether `t` may be loaded on the vCPU whose owner is `own`: no vCPU holds it, or that one does, the C runtime's
+/// `held_elsewhere` negated (`threads.c` 68).
+fn free_for(mem: ConcurrentGuestMemory<'_>, t: &Thread, own: u64) -> bool {
+    matches!(read_u64(mem, entry(t.index) + E_VCPU), v if v == 0 || v == own)
+}
+
+/// A thread for a vCPU with none, after its park (Sprint 319; the run-loop design's "A vCPU with no thread"): the
+/// first ready, unsuspended thread in id order that no other vCPU holds, loaded with no thread put down, and the vCPU
+/// taken off the run table's `waiting`; its id and its vector slot, for the vectors' load. None when none is ready:
+/// the vCPU parks again, still counted.
+pub fn take(guest: &mut Guest, x: &mut [u64; 31]) -> Result<Option<(u64, u64)>, String> {
+    let mem = crate::guest::memory_view(&guest.memory);
+    let own = read_u64(mem, guest.served.vcpu.monitor + LOCK_OWNER);
+    let word = |t: &Thread, off: u64| read_u64(mem, entry(t.index) + off);
+    let Some(next) = guest
+        .served
+        .threads
+        .values()
+        .find(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0 && free_for(mem, t, own))
+        .cloned()
+    else {
+        return Ok(None);
+    };
+    let (executed, pauses) = (
+        read_u64(mem, guest.served.vcpu.monitor),
+        read_u64(mem, guest.served.vcpu.monitor + PAUSE_COUNT),
+    );
+    load(guest, x, &next, own, executed, pauses)?;
+    write_u64(
+        mem,
+        RUN_TABLE + RT_WAITING,
+        read_u64(mem, RUN_TABLE + RT_WAITING).saturating_sub(1),
+    );
+    Ok(Some((next.tid, word(&next, E_VSLOT))))
 }
 
 /// `_stack_grow` (vm_backend 3161-3188; Sprint 213): thread `tid`'s stack committed down to `address`'s page, as
@@ -1268,6 +1374,80 @@ pub(crate) mod tests {
         switch(&mut g, &mut x, &ts[0], 0).unwrap();
         assert_eq!(current_tid(&g), ts[1].tid);
         assert_eq!(vcpu(&g, &ts[1]), 2, "the loaded thread claimed with this vCPU's owner");
+    }
+
+    /// A vCPU parks and is woken (Sprint 319; the run-loop design's "A vCPU with no thread"): vCPU 1, on its own pages
+    /// with owner 2, finds nothing it may take while vCPU 0 holds a thread, parks with its thread put down and counted
+    /// in `waiting`; vCPU 0 readies a blocked thread through `set_status`, and vCPU 1, waiting on `Sched` on another
+    /// host thread, wakes before its bound and takes it.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_parked_vcpu_is_woken_by_a_readied_thread_and_takes_it() {
+        use super::{BLOCKED, E_DEADLINE, E_VCPU, E_VSLOT, READY, RT_WAITING, Switch, entry, read_u64, set_status};
+        use super::{switch, take, write_u64};
+        use guest_runtime::layout::{CURRENT, CURRENT_ENTRY, LOCK_OWNER, MONITOR_VA, RUN_TABLE};
+        use std::time::Duration;
+
+        let (mut g, _) = guest_with_a_thread();
+        let start = g.served.threads.values().next().unwrap().start;
+        super::create_thread(&mut g, start, 0, 0, 0, &mut || Ok(())).unwrap();
+        let ts: Vec<super::Thread> = g.served.threads.values().cloned().collect();
+        let first = g.served.vcpu;
+        let (_, second) = g.private_chain(1).unwrap();
+        // vCPU 0, owner 1, holds the first thread; vCPU 1, owner 2, the third; the second and third blocked, no deadline
+        let mem = g.memory_view();
+        write_u64(mem, first.monitor + LOCK_OWNER, 1);
+        write_u64(mem, second.monitor + LOCK_OWNER, 2);
+        write_u64(mem, entry(ts[2].index) + E_VCPU, 2);
+        write_u64(mem, second.monitor + CURRENT, ts[2].index);
+        write_u64(mem, second.monitor + CURRENT_ENTRY, MONITOR_VA + entry(ts[2].index));
+        for t in [&ts[1], &ts[2]] {
+            set_status(&mut g, t.index, BLOCKED);
+            write_u64(g.memory_view(), entry(t.index) + E_DEADLINE, u64::MAX);
+        }
+        g.served.vcpu = second;
+        assert_eq!(switch(&mut g, &mut [0u64; 31], &ts[2], 0), Ok(Switch::Parked));
+        let mem = g.memory_view();
+        fn waiting(mem: crate::concurrent_memory::ConcurrentGuestMemory<'_>) -> u64 {
+            read_u64(mem, RUN_TABLE + RT_WAITING)
+        }
+        assert_eq!(
+            (read_u64(mem, entry(ts[2].index) + E_VCPU), waiting(mem)),
+            (0, 1),
+            "the parked vCPU's thread put down and the vCPU counted waiting"
+        );
+
+        let (sched, seen) = (g.sched.clone(), g.sched.changes());
+        let guest = std::sync::Mutex::new(g);
+        let (woken, taken) = std::thread::scope(|s| {
+            let parked = s.spawn(|| {
+                let woken = sched.wait_change(seen, Duration::from_secs(5)) != seen;
+                let mut g = guest.lock().unwrap();
+                g.served.vcpu = second;
+                (woken, take(&mut g, &mut [0u64; 31]).unwrap())
+            });
+            let mut g = guest.lock().unwrap();
+            g.served.vcpu = first;
+            set_status(&mut g, ts[1].index, READY);
+            drop(g);
+            parked.join().unwrap()
+        });
+        let g = guest.into_inner().unwrap();
+        let mem = g.memory_view();
+        assert!(
+            woken,
+            "the parked vCPU's wait ran its whole bound, the readying not seen"
+        );
+        assert_eq!(
+            taken,
+            Some((ts[1].tid, read_u64(mem, entry(ts[1].index) + E_VSLOT))),
+            "the thread the parked vCPU took"
+        );
+        assert_eq!(
+            (read_u64(mem, entry(ts[1].index) + E_VCPU), waiting(mem)),
+            (2, 0),
+            "the taken thread claimed by owner 2, the vCPU no longer waiting"
+        );
     }
 
     /// With no thread ready, a timed waiter is readied as `_switch` and `warp_to_deadline` ready one (Sprint 234): on the

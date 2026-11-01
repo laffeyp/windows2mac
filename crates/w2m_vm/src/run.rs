@@ -598,6 +598,10 @@ pub fn flush_through_stub(vcpu: &Vcpu, counts: &FlushCounts) -> Result<(), Strin
     Ok(())
 }
 
+/// The stop of a run whose one vCPU the scheduler parks (Sprint 319): only a second vCPU holding a thread parks a vCPU,
+/// and the run loop parks none until the threads card (the run-loop design's 4c3b2).
+const PARKED_ALONE: &str = "a vCPU parked with no other vCPU to wake it";
+
 /// The runtime word taken for the host, by the vCPU whose monitor data page is at `monitor`, a hold found outside the
 /// word counted in `outside`; true when the host took it.
 fn take_word(mem: ConcurrentGuestMemory<'_>, monitor: u64, outside: &mut u64) -> bool {
@@ -1140,6 +1144,12 @@ fn run(
             match switched {
                 Err(why) => break Stop::Handover { pc, why },
                 Ok(Switch::Idle) => unreachable!(),
+                Ok(Switch::Parked) => {
+                    break Stop::Handover {
+                        pc,
+                        why: PARKED_ALONE.into(),
+                    };
+                }
                 Ok(Switch::Ended(code)) => break Stop::ExitProcess { code },
                 Ok(Switch::Go { vectors }) => {
                     if let Some((save, load)) = vectors {
@@ -1254,6 +1264,12 @@ fn run(
                 Err(stop) => break stop,
                 Ok(None) => continue,
                 Ok(Some(Switch::Idle)) => unreachable!(),
+                Ok(Some(Switch::Parked)) => {
+                    break Stop::Handover {
+                        pc,
+                        why: PARKED_ALONE.into(),
+                    };
+                }
                 Ok(Some(Switch::Ended(code))) => break Stop::ExitProcess { code },
                 Ok(Some(Switch::Go { vectors })) => {
                     if let Some((save, load)) = vectors {

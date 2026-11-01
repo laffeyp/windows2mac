@@ -123,9 +123,10 @@ a second vCPU.
 | `unimplemented` | Served | `host_request.rs` and `run.rs`, at a stop; the first stop's |
 | `splits` | Served | `guest.rs` `page_descriptor`, a valid block made a table (Sprint 304) |
 | `vcpu` | Served | `run.rs` `GuestLock::serve`, the served exit's vCPU's pages (Sprint 313) |
+| `sched` | View | `threads.rs` `set_status` and `host_request.rs` `THREAD_WAKE` notify it; a parked vCPU waits on it outside the lock (Sprint 319) |
 
-19 Load, 24 Served (`splits` from Sprint 304, `vcpu` from Sprint 313), 1 View, 3 Diagnostic, counted from the
-table. `memory` stays one mapping; `Guest` becomes three values the run loop's threads hold: the load part, shared by reference; `served`, a host mutex over the 22; and the
+19 Load, 24 Served (`splits` from Sprint 304, `vcpu` from Sprint 313), 2 View (`sched` from Sprint 319), 3
+Diagnostic, counted from the table. `memory` stays one mapping; `Guest` becomes three values the run loop's threads hold: the load part, shared by reference; `served`, a host mutex over the 22; and the
 mapping, from which each thread takes its view.
 
 **The run loop's own state** (`run.rs`, `run`): `HostCompiler`'s tables are Served, reached at `hvc #1` and `#13`

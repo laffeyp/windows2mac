@@ -661,8 +661,11 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -
         }
         // vm_backend 3196-3199: threads.c readied a thread while a vCPU waits; the frozen host counts the wake and
         // notifies the vCPUs that wait, and one vCPU has none to notify (Sprint 219: found by comparing the two hosts'
-        // request lists, not by a run)
-        HOST_THREAD if a0 == THREAD_WAKE => 0,
+        // request lists, not by a run); the notify wakes a parked vCPU to take the readied thread (Sprint 319)
+        HOST_THREAD if a0 == THREAD_WAKE => {
+            guest.sched.notify();
+            0
+        }
         HOST_THREAD => {
             return Err(HostError::NotServed(format!(
                 "thread request {a0}: not served by the Rust host yet"
