@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 313
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -106,5 +106,5 @@ The host reads each vCPU's own state through that vCPU's base, so a second vCPU'
   Linux; it moved to the crate root.
 - **Changed from the card:** the files named in context plus the design's table row and count and
   `guest_parts.rs`' count; `host_request.rs`, `compile.rs` and `block_judge.rs` held no fixed-offset read.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 736 s, kept in `store/gates/passes.tsv` as sprint 313 at 96939301f with root=76a327741 and "rust=crates python=0 samples=0", 186 tests, 651 ns an exit at load 4.22, base=b137bd162, Sprint 312's close; multi-vCPU: not run (Python gates not run)
 
