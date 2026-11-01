@@ -163,7 +163,7 @@ each served exit, its acquire asserting the word in debug builds, card 2's plant
 
 ## The second vCPU's preconditions
 
-The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each with where it sits:
+The step 6 sequence Decision's eight, the eighth from Sprint 294's close, and a ninth from Sprint 311's, each with where it sits:
 
 1. The reconstruction count read Acquire: met (Sprint 282).
 2. **FEAT_LSE2**: the run refuses a second vCPU unless `hw.optional.arm.FEAT_LSE2` reads 1, the dispatch pair's single
@@ -197,6 +197,16 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
 7. The lock order: the word outermost (the guest-memory design's choice 6); `served` inside it, here.
 8. **A model step of a form x86 locks**, run with every other vCPU stopped (above, "A model step of a locked form"),
    the stop complete before the step's load; the batch run counts such steps.
+9. **Each vCPU's own pages** (found at Sprint 311's close, Observation 5). The monitor code reaches its data at one
+   address, `MONITOR_VA + MONITOR_DATA` (`monitor_code.rs` 116, 811-874: the count and limit, `LOCK_OWNER`, the save
+   area, the spill words), the C runtime its state block and transport page at fixed process-area offsets, and the
+   runtime's C frames one stack; `compile.rs` 6-7: "One vCPU: no private tables". Two vCPUs would share them. The
+   Python host gave each vCPU its own level-0 table, every lower table shared but the chain to the per-vCPU pages,
+   whose leaves point at each vCPU's own physical pages, and wrote every page-table change into each private copy
+   (`docs/design-several-vcpus-2026-10-17.md`, Sprint 103, "Choice: B"; built at Sprint 104); the process-wide words
+   on those pages moved to a process page (Sprint 106). The litmus test (Sprint 274) runs several vCPUs on one monitor
+   data page because its threads make no service, fault or switch, Sprint 105's condition. Card 4c2 decides the
+   Rust host's form from today's inventory before card 4c3 runs a second thread.
 
 ## The cards
 
@@ -238,7 +248,10 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, each w
    Sprint 309's reading), and `turn` letting the guard go, then the word, around the link's wait (Sprint 310's Observation 2,
    the inversion choice 6 forbids); 4c2, the threads inside `std::thread::scope`, so none outlives the borrows the lock
    holds (reviewer-3 at 310), the stop, the kick, the merged outcome, the stop flag, and the turn's start's reads
-   measured, the link being out of `Guest` while another vCPU's turn waits.)*
+   measured, the link being out of `Guest` while another vCPU's turn waits.)* *(4c2 split at Sprint 312's card, for
+   precondition 9: 4c2, each vCPU's own pages, a design: the per-vCPU state the Rust host reaches today, by word and
+   address, the process-wide words among it, and the form, Sprint 103's B carried or replaced, with the cards it
+   shapes; 4c3, the threads as 4c2 was written above.)*
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 
