@@ -75,3 +75,20 @@ file's against another's; `bridges.rs`, `cpuid_in_vm.rs`, `dispatch_hash_planted
 
 ## result
 
+- **The change** (WORK-COMMIT): `tests/all.rs` `ONE_VM` and `one_vm()`, macOS-only like `common`, the poisoned lock taken
+  regardless; `run_loop.rs` and `litmus.rs` import it in place of their own; `bridges`, `cpuid_in_vm`,
+  `dispatch_hash_planted`, `first_decline`, `monitor_code_in_vm` and `unmapped_image_faults` take it first; and the case
+  runner's test, which the card's list lacked; WORKING_AGREEMENT 142.
+- **A VM-maker the card's list missed, found by the first run:** `cargo test` ran 80 passed and 1 failed,
+  `unmapped_image_faults` holding the lock and `hv_vm_create` refused, `case_runner`'s
+  `every_judged_case_agrees_with_windows_with_the_rust_translator` running then: it makes its VM through
+  `case_inputs::with_case_vm` (`case_inputs.rs` 230), which the card's search, by `Vm::new`, `Guest::new` and
+  `guest_for` in the tests, did not name. Searched again by the place a VM is made: the library calls `Vm::new` at
+  `case_inputs.rs` 230 and in `w2m-vm`'s binary alone, and only the case runner's test reaches the first; `Guest::new`,
+  which the library's unit tests call, maps memory and makes no VM. The two runs left of that three were stopped, their
+  answer known.
+- **Expected values:** `cargo test -q -p w2m_vm --test all`, three runs: exit 0, 81 passed, in 199, 186 and 186 s.
+- **The gates:** GATES-LINE
+- **Plant 1,** restored by `cp` and checked by `cmp`: the card named `unmapped_image_faults`' lock, a short test whose
+  collision is chance; the plant took the case runner's off instead, a 170 s test any other VM test overlaps; the first of up to three runs failed, 80 passed and 1 failed, `unmapped_image_faults` at "HvError { call: \"hv_vm_create\", code: -85377016 }".
+

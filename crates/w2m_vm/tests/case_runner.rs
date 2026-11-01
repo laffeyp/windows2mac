@@ -74,6 +74,7 @@ fn missing(what: &str) {
 /// differences but the pinned open ones.
 #[test]
 fn every_judged_case_agrees_with_windows_with_the_rust_translator() {
+    let _one = crate::one_vm(); // `with_case_vm` makes a VM (`case_inputs.rs` 230)
     let root = root();
     let runs = runs(&root);
     if runs.is_empty() {

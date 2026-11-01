@@ -33,7 +33,7 @@ use w2m_vm::run::{JUDGE_KIND, Outcome, Stop, run_compiling};
 use w2m_vm::tables::{block_descriptor, page_descriptor};
 
 /// One VM per process (Hypervisor.framework): the tests here each make one, in turn.
-static ONE_VM: std::sync::Mutex<()> = std::sync::Mutex::new(());
+use crate::ONE_VM; // one VM at a time across the binary (Sprint 306)
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

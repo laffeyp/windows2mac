@@ -23,6 +23,7 @@ const SAVE: u64 = MONITOR_DATA + SAVE_AREA;
 
 #[test]
 fn the_monitor_code_dispatches_misses_and_takes_faults() {
+    let _one = crate::one_vm();
     let (mut area, code) = area();
     insert(area.memory.as_mut_slice(), TARGET_FIRST, MONITOR_VA + CODE_A, false);
     insert(area.memory.as_mut_slice(), TARGET_SECOND, MONITOR_VA + CODE_B, true);

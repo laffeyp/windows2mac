@@ -25,6 +25,7 @@ fn root() -> PathBuf {
 
 #[test]
 fn qpc_runs_to_its_first_declined_block() {
+    let _one = crate::one_vm();
     let root = root();
     let data = fs::read(root.join("tests/data/timed_waits/qpc.exe")).unwrap();
     let loaded = load(&data, None, "probe.exe").unwrap();

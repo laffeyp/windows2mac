@@ -9,6 +9,17 @@
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod common;
 
+/// One VM at a time in this binary (Sprint 306): Hypervisor.framework allows one VM a process, and `cargo test` runs a
+/// binary's tests as threads of one; every test that makes a VM holds this for its life. nextest, a process a test,
+/// takes it uncontended. A test that panicked holding it leaves it poisoned, which the next taker takes regardless.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+static ONE_VM: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn one_vm() -> std::sync::MutexGuard<'static, ()> {
+    ONE_VM.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 mod batch_record;
 mod batch_run;
 mod block_judge;

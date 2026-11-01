@@ -359,8 +359,8 @@ fn a_misaligned_xchg_raced_on_two_vcpus_keeps_its_values() {
     assert_eq!(values, [1, 2, 100], "a value lost or doubled by the exchange");
 }
 
-/// One VM a process at a time (`Vm::new`), so the tests take turns.
-static ONE_VM: Mutex<()> = Mutex::new(());
+// One VM a process at a time (`Vm::new`), so the tests take turns, the binary's lock (Sprint 306).
+use crate::ONE_VM;
 
 /// The model steps the harness served, read by the misaligned XCHG's test to know its exchanges reached the model.
 static MODEL_STEPS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);

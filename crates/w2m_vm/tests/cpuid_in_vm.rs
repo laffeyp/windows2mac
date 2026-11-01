@@ -61,6 +61,7 @@ fn lookup(table: &[Row], eax: u64, ecx: u64) -> [u64; 4] {
 
 #[test]
 fn the_runtimes_cpuid_answers_equal_the_oracles_from_a_rust_vm() {
+    let _one = crate::one_vm();
     let root = root();
     let (_, image) = guest_runtime::build(&root, &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
     let query = image.symbols["w2m_cpuid_query"];

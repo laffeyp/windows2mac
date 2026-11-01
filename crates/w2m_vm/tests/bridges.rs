@@ -73,6 +73,7 @@ fn run_to_hvc(vcpu: &Vcpu<'_>) -> Result<u16, Exit> {
 
 #[test]
 fn a_bridged_call_returns_through_the_dispatcher() {
+    let _one = crate::one_vm();
     let (mut g, no_such) = guest();
     let data = fs::read(root().join("tests/data/timed_waits/qpc.exe")).unwrap();
     let names: Vec<(u64, String)> = load(&data, None, "probe.exe")

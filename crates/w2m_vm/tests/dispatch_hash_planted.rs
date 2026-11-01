@@ -23,6 +23,7 @@ fn planted_slot(t: u64) -> u64 {
 
 #[test]
 fn a_changed_shift_misses_the_inserted_target() {
+    let _one = crate::one_vm();
     assert_ne!(
         dispatch_slot(TARGET),
         planted_slot(TARGET),

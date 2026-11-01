@@ -14,6 +14,7 @@ use w2m_vm::{NATIVE_OPERANDS, VECTOR_HVC_BASE};
 
 #[test]
 fn a_call_into_an_unmapped_image_takes_the_abort_vector() {
+    let _one = crate::one_vm();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
