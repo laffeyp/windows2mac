@@ -1149,11 +1149,11 @@ pub fn slice_until(guest: &Guest) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     /// A guest of qpc.exe with one created thread; the runtime image clang builds, so the tests that use it run on the
     /// Mac.
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    fn guest_with_a_thread() -> (crate::guest::Guest, u64) {
+    pub(crate) fn guest_with_a_thread() -> (crate::guest::Guest, u64) {
         use crate::guest::{Guest, vm_compiler_symbols};
         use crate::process::Start;
         use guest_runtime::layout::{RUNTIME_IMAGE_VA, runtime_defines};

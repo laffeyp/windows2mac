@@ -627,6 +627,49 @@ pub struct Traced {
     pub strings: String,
 }
 
+/// The whole guest behind one lock (Sprint 310; the run-loop design's "How the threads share `Guest`", Sprint 309):
+/// taken once per served exit, inside the runtime word, which `serve` asserts in debug builds before it locks (card 2's
+/// guard). The lock holds the run's borrow of the guest, so `run`'s callers keep theirs and get it back when the lock
+/// is dropped. The word lives in guest memory, so the lock keeps the mapping's pointer, taken once at its creation: the
+/// guest's own `mmap` (`GuestMemory::as_ptr`), not reached through the borrow, live while the borrow is.
+pub struct GuestLock<'a> {
+    guest: std::sync::Mutex<&'a mut Guest>,
+    mapping: (*mut u8, usize),
+}
+
+impl<'a> GuestLock<'a> {
+    pub fn new(guest: &'a mut Guest) -> GuestLock<'a> {
+        let mapping = (guest.memory.as_ptr(), guest.memory.len());
+        GuestLock {
+            guest: std::sync::Mutex::new(guest),
+            mapping,
+        }
+    }
+
+    /// The mapping through the view, without the lock.
+    pub fn view(&self) -> ConcurrentGuestMemory<'_> {
+        // SAFETY: the guest's own mapping, writable, live while the borrowed guest is, which outlives the lock
+        unsafe { ConcurrentGuestMemory::from_raw_parts(self.mapping.0, self.mapping.1) }
+    }
+
+    /// The guest for a served exit: the runtime word asserted held, by the host or by this vCPU, before the lock is
+    /// taken (the guest-memory design's choice 6: the word outermost). A lock its holder left poisoned by a panic is
+    /// taken as that holder left it, the panic reported where it happened.
+    pub fn serve(&self) -> std::sync::MutexGuard<'_, &'a mut Guest> {
+        let mem = self.view();
+        debug_assert!(
+            crate::monitor_code::runtime_word_held(mem, crate::monitor_code::vcpu_owner(mem)),
+            "a served exit's lock taken without the runtime word"
+        );
+        self.guest.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The guest outside a served exit, with no other thread able to hold the lock (one vCPU, or the threads joined).
+    pub fn get_mut(&mut self) -> &mut Guest {
+        self.guest.get_mut().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
 /// The flush a block split calls between making the block invalid and writing its table (Sprint 305): the run loop's
 /// run of the requesting vCPU through `FLUSH_STUB`, every vCPU's TLB invalidated; at load, before any vCPU ran, none.
 pub type Flush<'a> = &'a mut dyn FnMut() -> Result<(), String>;
@@ -1582,5 +1625,26 @@ mod tests {
         let mut traced = [word(0), body, word(1), tail].concat();
         traced.extend([0xff, 0x25, 0x18, 0, 0, 0]);
         assert_eq!(init_stub_code(base, entry, failed, Some(trace)), traced);
+    }
+
+    /// A served exit's lock is taken only under the runtime word (Sprint 310): with the word free, `serve` fails its
+    /// assertion before it locks, and the lock is left free; with the host holding the word, it gives the guest.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_served_exit_takes_the_lock_only_under_the_word() {
+        use crate::monitor_code::{host_release_runtime_word, host_take_runtime_word};
+
+        let (mut g, tid) = crate::threads::tests::guest_with_a_thread();
+        let lock = super::GuestLock::new(&mut g);
+        host_release_runtime_word(lock.view());
+        let free = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(lock.serve())));
+        let why = free.expect_err("a served exit with the word free");
+        assert_eq!(
+            why.downcast_ref::<&str>(),
+            Some(&"a served exit's lock taken without the runtime word")
+        );
+        assert!(lock.guest.try_lock().is_ok(), "the lock left taken by a refused serve");
+        assert!(host_take_runtime_word(lock.view(), 0));
+        assert!(lock.serve().served.threads.contains_key(&tid));
     }
 }

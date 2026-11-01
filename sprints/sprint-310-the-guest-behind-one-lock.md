@@ -78,3 +78,30 @@ without locking, ready for 4c.
 
 ## result
 
+- **The lock** (`guest.rs` 635-671): `GuestLock<'a>`, a `Mutex<&'a mut Guest>` and the mapping's pointer and length,
+  taken from `GuestMemory::as_ptr` at creation; `view()`, the mapping without the lock; `serve()`, which asserts in debug
+  builds `runtime_word_held(view, vcpu_owner(view))` before it locks and takes a poisoned lock as its holder left it;
+  `get_mut()`. **Changed from the scope:** the lock holds the run's borrow, not the guest, and has no `into_inner`:
+  `Guest` has no `Default`, so `run` could not move it out of its `&mut Guest` with its callers unchanged; dropping the
+  lock (run.rs 1253) gives the borrow back. A `Mutex<&mut Guest>` is `Sync` where `Guest` is `Send`, which 4c's scoped
+  threads need.
+- **The run loop** (`run.rs`): the lock made before the loop (773), `get_mut` at its top (775); `take_word` takes the
+  lock's view (627), so the word is taken before the lock; `serve()` at `hvc #13` (932, a temporary dropped before the
+  word's release), `#8` (950, under the guest's own hold, the loop's `mem` shadowed by the lock's view), `#12` (1033),
+  `#4` (1124) and `#1` (1211); at `#12`, `#4` and `#1` the guard dropped before the word is released (1044, 1158,
+  1244: the lock let go first, the word outermost) and `get_mut` taken again for the reads after. `threads.rs`' test
+  module and its `guest_with_a_thread` made `pub(crate)` for the unit test, a third file.
+- **Found for 4c:** `turn` (run.rs 639-648) releases the word for `hand_over`'s wait on the other processes and takes it
+  again after, called at `#12` and `#4` with the guard held. With two vCPUs that is a lock-order inversion: a second
+  vCPU takes the word in the gap and waits on the lock, while the first holds the lock and waits on the word. On one
+  vCPU no second taker exists. 4c drops the guard across the wait or refuses a machine link on two vCPUs.
+- **The unit test** `guest::tests::a_served_exit_takes_the_lock_only_under_the_word`: the word free, `serve()` panics
+  "a served exit's lock taken without the runtime word" and leaves the lock free; the host holding it, the guard gives
+  the guest, its second thread present.
+- **Plant 1,** restored by `cp` and checked by `cmp`: `hvc #12`'s `serve()` moved before its `take_word`;
+  `run_loop::sleeper_creates_and_ends_its_thread_as_the_python_host` failed, panicked at `guest.rs:657:9`, "a served
+  exit's lock taken without the runtime word" (the assertion, 660 once formatted).
+- **Plant 2,** restored likewise: the assertion removed; the unit test failed, "a served exit with the word free: ()".
+- **Deferred (Sprint 298),** read at the start: no change to `struct w2m_state` or a monitor-data slot, G4 not met; the
+  three cards stay deferred.
+- **The gates:** GATES-LINE
