@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 329
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -117,5 +117,5 @@ No service reads the word's state once its run has stopped: `take_word` finds th
   "assertion `left == right` failed: the guest's word let go".
 - **Every run as held:** `cargo nextest run -E 'rdeps(w2m_vm)'`, 202 tests passed in 433 s, the two-vCPU runs among
   them; `cargo clippy` with the gates' flags clean.
-- **The gates:** GATES-LINE
+- **The gates:** `scripts/gates.sh` exit 0 in 882 s, kept in `store/gates/passes.tsv` as sprint 329 at e780b6afb with root=92a62522b and "rust=crates python=0 samples=0", 215 tests, 657 ns an exit at load 3.97, base=7342c4e42, Sprint 328's close; multi-vCPU: not run (Python gates not run)
 
