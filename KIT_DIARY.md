@@ -8,11 +8,12 @@
 
 | # | Hypothesis | Verdict | Evidence |
 |---|---|---|---|
-| H1 | The research direction's discrepancy report (§11) and the kit's Signal Report are the same artifact; one vocabulary serves both the w2m runtime trace and the sprint loop. | _pending_ | — |
+| H1 | The research direction's discrepancy report (§11) and the kit's Signal Report are the same artifact; one vocabulary serves both the w2m runtime trace and the sprint loop. | not supported | 2026-11-24: one vocabulary (0.12) serves the runtime record and the reports' grading, but the two artifacts parted: discrepancy reports are `DISCREPANCY_REPORTED` events on substrate records (the planted chain's 34, `scripts/gates.sh`), while Signal Reports are generated from cards and, for 117 of 131 sprints since 200 and all of 269-330, carry no trace. Verdict given 52 days after the row was opened (reviewer-4's Medium 2 at 331). |
 | H2 | Resolve-and-record holds up on a project whose key facts (TSO access, oracle behavior) can only be settled by probes: the agent records the decision provisionally and a probe sprint confirms or supersedes it, with no wait state. | partially | 2026-10-03: four same-day agent decisions superseded cleanly by the v0.2 user decision; but two of them were scope (intent), not probe-settleable facts. OQ-1 is still the first probe test. |
 | H3 | The ≤2-files sprint rule fits a compiler/runtime project if contracts are one file each. | refuted | Sprints 023-033: ten of eleven cards recorded an exception; Sprints 029-032 touched 27-55 files each. The checkable unit is one path from input to verdict. Project override recorded 2026-10-09. |
 | H4 | A correctness check that passes on zero observed failures needs a same-run control that fails. | confirmed | Sprint 011: the native MP check passed with no power until the plain control was required to fail. |
 | H5 | A lesson reaches new code only as a check in code; a lesson held in prose recurs. | supported | 2026-10-28: the Emits rule (126, 131, 162), multi-line edits outside the Edit tool (128-158), a skipping judge (149, 154) recurred in prose; Signal Reports (a gate since 127) and planted samples (read from 162) have not. |
+| H6 | A builder that does not grade its own work, and a supervisor that reruns its contracts before committing, catch defects self-grading missed. | _pending_ | Opened 2026-11-24 with the user's split of the three roles (reviewer-4's Low 3 at 331). Evidence: the count of the supervisor's findings per sprint on a builder's tree, against the self-graded sprints 269-331. |
 
 ---
 
@@ -1032,4 +1033,56 @@ reflog names six passes so made, Sprints 267 to 272. Sprint 272's changed the C 
 tests of `signal_report`; the full gates then failed three times, on the batch run's held stop, its call stream and
 its exit ledger, before they passed. Nothing in the gates' output was false, "the change since 05ae6da85: 4 paths",
 and nothing read it. The question for a selective gate: since what, and is that the last thing a gate passed.
+
+**Synthesis, step 5 (Sprints 251-268, written 2026-11-24, 56 sprints late; reviewer-4's Medium 2 at 331):** the step
+met its gate on the Rust host on one vCPU (`docs/step-5-close-2026-10-30.md`): the batch run conforms with
+UnityPlayer.dll's blocks installed from the cache file, 80,307,872,496 instructions in every cached run; compiles fall
+from 274,837 to 125,515, none of them in UnityPlayer.dll; card 5's compile time falls from 1,285-1,296 ms to 678-694
+ms; the most compiles in a frame of 53,500,000 instructions from 54,996 to 19,201. Two of its findings carry: a timed
+run lists every piece of host work done at an exit, not the one caught (#109, Sprint 262, where the exit ledger left
+in a timed run turned a 3.0% gain into a 1.1% loss), and a second path for one decision lists the first path's
+declines before it is written (#110, Sprint 263). The step's figures all came off records under `store/runs/`, read
+by named judges; it is the last step that did.
+
+### 2026-11-24 — Sprints 273-331 (step 6, several vCPUs): the findings left unwritten for 59 sprints
+
+*Written by the supervisor on 2026-11-24 (reviewer-4's Medium 2 at 331: the diary's last entry was Sprint 272).*
+
+**Finding (#112):** a judge that runs the planted code may still not test what the plant breaks. Sprint 330's kick
+waits until the suspended thread's vCPU leaves guest code; with the wait taken out, the threads probe passed, because
+its second SuspendThread, itself a host request, covered the window. Sprint 331's locked step waits the same way, and
+`locked_race` passed with that wait taken out, 20 runs of 20. A replacement plant holding each wait to the run's stop
+failed both tests, so both judges reach the wait; neither holds its length. WORKING_AGREEMENT's rule (Sprint 284) asks
+that a judge reach the planted line and assert what the plant breaks; the second half is the one these broke, the
+seventh time since 281. The question for a wait: what in the test's own timing already covers the window the wait
+closes.
+
+**Finding (#113):** a plant that passes can mean the planted code does nothing. Sprint 331's first build held each
+vCPU at its entry to guest code while another's locked step was on; the gate opened, 20 runs of 20 still read
+Windows' rows. Read, not guessed: `hv_vcpu.h` 377-378 ("If a vcpu is not running, the next time hv_vcpu_run is called
+for the corresponding vcpu, it will return immediately without entering the guest") and the turn's start's take of the
+runtime word already kept a cancelled vCPU out; the gate, its mark and its guard came out. Before naming a passed plant
+a test's gap, ask whether the code under it is needed.
+
+**Finding (#114):** a gate that selects tests by the crates a change reaches misses a test that reads the whole tree.
+Sprint 320's two upper time bounds in `w2m_vm` passed its gates and failed CI on its close (101ce0f55): `hypervisor`'s
+`no_wall_clock_bound` scans every crate's source but runs only when `hypervisor` changes (Sprint 321, Deferred
+(Sprint 321)). Sprint 322 named the class: every test that reads the tree's source runs on every change.
+
+**Finding (#115):** a step can run off the record for 63 sprints with every gate green. Cards 269-331 all declare
+`Emits: None`, Signal Reports 269-330 all read "(no record)", and no two-vCPU run has written a substrate record; what
+step 6 measured went to stderr (the turn's start against an exit's service, Sprint 324; the locked-step count, Sprint
+331) and to the batch stop file. No check failed, because none asks a card to emit: H5's lesson, a rule held in prose
+recurs, met again. Cards 333 and 334 put step 6 on a record before G2 (Decision "The order after Sprint 331").
+
+**Finding (#116):** the record kept a tool's form against the user's decision. The user cut "bookkeeping as separate
+commits (each closure folds into its sprint's commit)" on 2026-10-16; `signal_report`'s close rules and
+WORKING_AGREEMENT then required a separate close commit, and 63 step-6 sprints closed so, each with a full gates run.
+An agent-resolved practice cannot supersede a user cut; card 332 folds the close back into its sprint's commit.
+
+**Phase note, the roles split (user, 2026-11-24):** the user moved the project from one agent wearing the three roles
+to a supervisor that writes cards and grades and a builder subagent that does each sprint, given the full kit and its
+card. Two corrections the same day: a builder reads neither BLACKBOARD nor its tail ("Just read the full kit"), and,
+from reviewer-4's second review, a builder stops at a gated working tree, the supervisor committing after its own
+grade. H6 tracks whether the split catches what self-grading missed.
 
