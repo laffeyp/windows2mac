@@ -1194,6 +1194,34 @@ fn a_thread_suspended_on_another_vcpu_stops_before_suspend_returns() {
     assert_eq!(said, said_one, "the threads probe's rows on two vCPUs as on one");
 }
 
+/// Sprint 331 (the run-loop design's 4d1): `probes/locked_race`, a misaligned `lock xadd` stepped in the model
+/// (`hvc #11`) on one vCPU against an aligned one, an exclusive pair in the VM, on another, the two sharing a byte. Its
+/// rows on one vCPU and on two are held to the Windows runner's (run 41326239822, three runs alike): A's sum 100,000,
+/// B's adds lost 0; and its count of locked steps to A's 100,000 adds.
+#[test]
+fn a_locked_model_step_loses_no_add_of_another_vcpus_aligned_lock() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let run = root.join("store/probe-runs/41326239822");
+    let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
+    let binary = fs::read_to_string(run.join("probe.sha256")).unwrap();
+    let program = root.join(format!("store/binaries/{}.exe", binary.trim()));
+    for vcpus in [1, 2] {
+        let (stopped, said, stderr) = program_through_w2m_vm("locked_race", &program, &[], vcpus);
+        assert_eq!(
+            stopped, "ExitProcess { code: 0 }",
+            "locked_race on {vcpus} vCPUs; stderr {stderr}"
+        );
+        assert_eq!(said, windows, "locked_race's rows on {vcpus} vCPUs as on Windows");
+        // thread A's 100,000 misaligned adds, each a locked model step (precondition 8's count; reviewer-3's Low 1 at
+        // 331); B's aligned adds run in the VM and count none
+        assert!(
+            stderr.contains("w2m-vm: 100000 model steps of a locked form"),
+            "locked_race's locked steps on {vcpus} vCPUs; stderr {stderr}"
+        );
+    }
+}
+
 /// Deferred (Sprint 329), met at Sprint 330: the single-process guests no other test runs on two vCPUs, through
 /// `w2m-vm`, each held to its stop and output in `store/batch_run/first-stop-2026-10-28.tsv` (`qpc2`'s clock reading by
 /// its form, as `batch_run.rs` holds it).

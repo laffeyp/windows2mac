@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-//! The walk's rules judged on every target (Sprint 254; Deferred (Sprint 253)): each of the 280 images under
-//! `store/binaries/` walks to its counts in `store/translation-cache/walk-fixtures-2026-10-30.json`, 641,041
-//! instructions and 116 switch tables in all, so a change to the walk fails CI as well as the depot's test.
+//! The walk's rules judged on every target (Sprint 254; Deferred (Sprint 253)): each of the 281 images under
+//! `store/binaries/` walks to its counts in `store/translation-cache/walk-fixtures-2026-10-30.json`, 641,343
+//! instructions and 116 switch tables in all, so a change to the walk fails CI as well as the depot's test. A binary
+//! added to `store/binaries/` adds its entry, the `image_walk` binary's counts (Sprint 331: `probes/locked_race`'s,
+//! the 281st; 280 and 641,041 before).
 
 use std::fs;
 use std::path::{Path, PathBuf};

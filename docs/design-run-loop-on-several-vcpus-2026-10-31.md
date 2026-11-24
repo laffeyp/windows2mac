@@ -344,6 +344,12 @@ The step 6 sequence Decision's eight, the eighth from Sprint 294's close, and a 
    it then takes the word again and writes the request's answer back into the transport page. A cancel without the
    run's stop is a kick: the vCPU goes back to its turn's start, which ends the suspended thread's slice
    (`slice_until`), and its switch puts the thread down. `hvc #4` is served for every process.)*
+   *(Sprint 331: 4d1 built. The `hvc #11` service, under the word and the lock, stops every other vCPU for a form x86
+   locks (`translator::lower::is_locked`): each cancelled through its handle, then a wait until none is in guest code
+   (`RunStop::stop_others`). No gate at the entry to guest code is needed: a vCPU not running when cancelled returns
+   from its next `hv_vcpu_run` without entering the guest (`hv_vcpu.h` 377-378), and its way back is its turn's
+   start, which waits on the word the step holds. `probes/locked_race` on two vCPUs reads the Windows runner's rows;
+   the batch run counts 0 locked steps to its stop ("model steps of a locked form").)*
 5. **G2**: the 273 family runs on two vCPUs. **G4**: Sprint 122's guests ending on two vCPUs in many runs, the count
    in the card. **G3**: the batch run on the wall clock on two vCPUs, conforming in several runs.
 

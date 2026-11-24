@@ -1237,6 +1237,15 @@ impl RuntimeCalls {
     }
 }
 
+/// Whether x86 locks `ins`'s memory access (1466-1468): a `_LOCK` form, or an XCHG with a memory operand, which x86
+/// locks "regardless of the presence or absence of the LOCK prefix" (Intel SDM vol. 2, XCHG; Sprint 272). The lowering
+/// runs such a form as an exclusive pair, or in the model when misaligned, whose step stops every other vCPU (Sprint
+/// 331).
+pub fn is_locked(ins: &Lifted) -> bool {
+    ins.iclass.ends_with("_LOCK")
+        || (ins.iclass == "XCHG" && ins.ops.iter().any(|op| matches!(op, Op::Ld { loc: Loc::M { .. }, .. })))
+}
+
 /// `compile_insn` (1417-1885): append `ins` to `a`. A taken branch puts the x86 target in x17 and jumps to `exit_va`.
 /// `nzcv_from`: the flags kind of the previous instruction's NZCV; `live_after`: the flags a later instruction reads;
 /// `nzcv_out`: the next instruction's Jcc branches on this one's NZCV. Returns true when control never falls through.
@@ -1286,11 +1295,9 @@ pub fn compile_insn(
     let mut nzcv_ready = false; // an ALU op fused with the flags op that follows
     let mut fused_store = false; // a load fused with the store that follows
     let mut constant: BTreeMap<Temp, u64> = BTreeMap::new(); // temporaries an `imm` of this instruction set
-    // 1466-1468: a locked form folds no address and fuses no move: its loads and stores are the exclusive pair. An XCHG
-    // with a memory operand is one (Sprint 272): x86 locks it "regardless of the presence or absence of the LOCK
-    // prefix" (Intel SDM vol. 2, XCHG), and its rule stores the memory operand before the register
-    let locked = ins.iclass.ends_with("_LOCK")
-        || (ins.iclass == "XCHG" && ops.iter().any(|op| matches!(op, Op::Ld { loc: Loc::M { .. }, .. })));
+    // 1466-1468: a locked form folds no address and fuses no move: its loads and stores are the exclusive pair; an XCHG
+    // with a memory operand is one, its rule storing the memory operand before the register (`is_locked`)
+    let locked = is_locked(ins);
     let folded = if locked { BTreeMap::new() } else { folded_addresses(ops) };
     let mut lock_retry: Vec<Target> = Vec::new();
     // 1469-1471: a locked form, or an instruction with an op outside OPERAND_SAFE (1198: model steps, REP, DIV, CPUID,

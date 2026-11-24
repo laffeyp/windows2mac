@@ -553,6 +553,9 @@ mod run {
             out.turn_start_ns.len(),
             at(&out.serve_ns, 50)
         );
+        // every run's count of locked model steps, each with every other vCPU stopped (Sprint 331), which a guest's test
+        // holds to its known count; the batch run's stop file holds the game's
+        eprintln!("w2m-vm: {} model steps of a locked form", out.locked_steps);
         Ok(out)
     }
 
@@ -964,6 +967,8 @@ mod run {
         for (number, n) in &out.exits {
             tsv += &format!("hvc {number}\t{n}\n");
         }
+        // the model steps of a locked form, each with every other vCPU stopped (Sprint 331; precondition 8)
+        tsv += &format!("model steps of a locked form\t{}\n", out.locked_steps);
         for (name, n) in &out.counts {
             tsv += &format!("{name}\t{n}\n");
         }

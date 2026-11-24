@@ -335,6 +335,10 @@ pub struct Outcome {
     /// the times the vCPU was resumed through `FLUSH_STUB` after a request split a block, each ending at `hvc #15`
     /// (Sprint 304): equal to `guest.served.splits` at the stop, every split followed by its flush
     pub flushes: u64,
+    /// the model steps of a form x86 locks, each taken with every other vCPU stopped (Sprint 331; the run-loop design's
+    /// precondition 8, "the batch run counts such steps"): on one vCPU the stop has no other vCPU, and the count is the
+    /// same
+    pub locked_steps: u64,
     /// the instructions retired at each in-VM compile and install, in its log's order (Sprint 266), from the words
     /// `Timing::instructions_at_compile` writes; all 0 without it
     pub instructions_at: InstructionsAt,
@@ -367,6 +371,7 @@ impl Outcome {
             instructions_at: InstructionsAt::default(),
             served_outside_word: 0,
             flushes: 0,
+            locked_steps: 0,
             runs_by_vcpu: Vec::new(),
         }
     }
@@ -386,6 +391,7 @@ impl Outcome {
         }
         self.served_outside_word += vcpu.served_outside_word;
         self.flushes += vcpu.flushes;
+        self.locked_steps += vcpu.locked_steps;
     }
 }
 
@@ -1110,6 +1116,28 @@ impl RunStop {
         self.in_guest[k as usize].store(running, std::sync::atomic::Ordering::SeqCst);
     }
 
+    /// Every vCPU but `own`'s out of guest code for a locked model step (Sprint 331; the run-loop design's precondition
+    /// 8): each cancelled through its handle, then a wait until none is in guest code or the run stops, since
+    /// `hv_vcpus_exit` only asks a running vCPU. A vCPU not running when cancelled returns from its next `hv_vcpu_run`
+    /// "immediately without entering the guest" (`hv_vcpu.h` 377-378), and its way back in is its turn's start, which
+    /// waits on the runtime word the step holds; so no vCPU runs guest code until the step's store is done.
+    fn stop_others(&self, own: u32) {
+        let others: Vec<u32> = {
+            let handles = self.handles.lock().unwrap_or_else(|e| e.into_inner());
+            for (owner, handle) in handles.iter() {
+                if *owner != own {
+                    let _ = handle.stop();
+                }
+            }
+            handles.iter().map(|(o, _)| *o).filter(|o| *o != own).collect()
+        };
+        for owner in others {
+            while self.in_guest(owner) && !self.stopped() {
+                std::thread::yield_now();
+            }
+        }
+    }
+
     /// Whether the vCPU whose owner is `owner` is running guest code now.
     fn in_guest(&self, owner: u32) -> bool {
         self.in_guest[(owner - 1) as usize].load(std::sync::atomic::Ordering::SeqCst)
@@ -1376,7 +1404,8 @@ fn vcpu_loop(
             }
         }
         let started = Instant::now();
-        // in guest code while it runs, for a kick's wait (Sprint 330); out again before any error is returned
+        // in guest code while it runs, for a kick's wait (Sprint 330) and a locked step's (Sprint 331); out again before
+        // any error is returned
         place.stopping.set_in_guest(place.k, true);
         let exit = vcpu.run();
         place.stopping.set_in_guest(place.k, false);
@@ -1709,6 +1738,13 @@ fn vcpu_loop(
                 let mut held = lock.serve(pages);
                 let guest = &mut *held.guest;
                 let code = code_at(guest, rip);
+                // a form x86 locks, stepped as a load and a store, with every other vCPU out of guest code from before the
+                // load to after the store (Sprint 331; precondition 8): the word excludes another vCPU's model steps, not
+                // its exclusive pairs, which take none
+                if translator::lift::lift(&code, rip).is_ok_and(|ins| translator::lower::is_locked(&ins)) {
+                    place.stopping.stop_others(owner_of(place.k));
+                    out.locked_steps += 1;
+                }
                 crate::model_step::model_step(guest, vcpu, &code, rip)
             };
             if took {
