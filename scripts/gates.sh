@@ -52,6 +52,25 @@ changed=$({ git diff --name-only "$base"; git ls-files --others --exclude-standa
 # touched PATTERN [EXCEPT]: some changed path matches PATTERN and not EXCEPT
 touched() { printf '%s\n' "$changed" | grep -E "$1" | grep -Ev "${2:-^$}" | grep -q .; }
 said() { echo "gates: $*"; }
+# each step timed (Sprint 334; Deferred (Sprint 332), "The gates' time not spent in `codesign -d`": about 50 minutes of
+# Sprint 332's run the log did not place): `timed NAME COMMAND...` prints "step NAME started", runs the command, and at
+# its end prints the step's seconds and keeps them, one row a step in store/gates/steps.tsv (the run's UTC start, the
+# sprint, the step, its seconds). A stage of several commands is a function run through it, so its end is stamped by
+# the same call that started it. A command that fails stops the gates (`set -e`) with its start the last step printed
+# and no row. At the end the run's seconds no step holds are printed and kept as the row `unplaced`.
+gates_started=$(date -u -r "$gates_start" +%Y-%m-%dT%H:%M:%SZ)
+steps_seconds=0
+timed() {
+  step_name=$1
+  shift
+  step_start=$(date +%s)
+  said "step $step_name started"
+  "$@"
+  step_seconds=$(( $(date +%s) - step_start ))
+  steps_seconds=$(( steps_seconds + step_seconds ))
+  said "step $step_name $step_seconds s"
+  printf '%s\tsprint %s\t%s\t%s\n' "$gates_started" "$gates_sprint" "$step_name" "$step_seconds" >> store/gates/steps.tsv
+}
 # a change to the gates themselves runs every stage, so no stage it changed is skipped (Sprint 198; reviewer-2's Low 2
 # of its review of 193-196)
 touched '^scripts/(gates|gated-tree|gates-base)\.sh$' && all=1
@@ -118,18 +137,24 @@ head=$(git -C substrate rev-parse HEAD)
 # dllimport, the SDK's does not (Sprint 053: a probe defines its own)
 win=/opt/homebrew/opt/mingw-w64/toolchain-x86_64/x86_64-w64-mingw32/include
 if [ -d "$win" ] && { [ $all = 1 ] || touched '^probes/.*\.(c|h)$'; }; then
+  windows_probes_compile() {
   for c in $(grep -l "include <windows.h>" probes/*/*.c); do
     clang --target=x86_64-w64-mingw32 -fms-extensions -fsyntax-only -Wall -Werror -Wno-unknown-attributes -Wno-inconsistent-dllimport -Dsmall=char -Dhyper=__int64 -isystem "$win" "$c" \
       || { echo "gates: $c does not compile for Windows"; exit 1; }
   done
+  }
+  timed windows-probes-compile windows_probes_compile
 fi
 # the Rust workspace (Sprint 125; docs/rust-port-plan-2026-10-21.md set-up): format, lints as errors, tests, and a
 # release build, then the session check under substrate: a Rust binary's events on a record, replayed
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings -D clippy::collection_is_never_read  # a gathered list never read (Sprint 235)
+timed cargo-fmt cargo fmt --check
+timed cargo-clippy cargo clippy --all-targets -- -D warnings -D clippy::collection_is_never_read  # a gathered list never read (Sprint 235)
 # the workspace type-checked as CI's Linux builds it, where the Mac-only modules (lib.rs's `cfg`s) are absent (Sprint
 # 211: CI run 40936387557 failed to compile record.rs, which named the Mac-only `run` module, after these gates passed)
+linux_check() {
 CARGO_TARGET_DIR=build/target-linux cargo check -q --target x86_64-unknown-linux-gnu --workspace --all-targets
+}
+timed linux-check linux_check
 # the case runner (crates/w2m_vm/tests/case_runner.rs) fails rather than skips when its inputs are missing: the
 # downloaded Windows results (build/probe-runs) and the Python words fixture (build/case_runner) (Sprint 149; the
 # review of link 3 found it could pass having judged nothing). CI, on Linux, does not compile it.
@@ -139,7 +164,8 @@ CARGO_TARGET_DIR=build/target-linux cargo check -q --target x86_64-unknown-linux
 # depot, ~/w2m-depots/hail-to-the-rainbow
 if [ $rust != none ]; then
   # call_compare, the harness's second Producer, judges the game's calls against Windows (Sprint 217)
-  cargo build --release --quiet --bin w2m-vm --bin check_records --bin call_compare
+  timed runner-binaries-build cargo build --release --quiet --bin w2m-vm --bin check_records --bin call_compare
+  batch_run() {
   mkdir -p build/batch_run
   rm -f build/batch_run/first-stop.tsv build/batch_run/guests.tsv build/batch_run/whole-blocks.tsv
   # with the exit ledger crates/w2m_vm/tests/exit_ledger.rs holds to the frozen host's (Sprint 206)
@@ -151,8 +177,17 @@ if [ $rust != none ]; then
   rm -rf build/batch_run/record-*
   record=build/batch_run/record-$(date +%s)000000000
   scripts/batch-run-record.sh "$record" > /dev/null  # the machine's state in its baseline (Sprint 240)
+  }
+  timed batch-run batch_run
+  batch_run_records_check() {
   target/release/check_records --since 2026-10-17 --show 3 "$record" > /dev/null || { echo "gates: the batch run's record breaks a rule"; target/release/check_records --since 2026-10-17 --show 3 "$record"; exit 1; }
+  }
+  timed batch-run-records-check batch_run_records_check
+  batch_run_replay() {
   uv run substrate replay "$record" --level 2 > /dev/null
+  }
+  timed batch-run-replay batch_run_replay
+  guests() {
   for p in tests/data/timed_waits/*.exe; do
     n=$(basename "$p" .exe)
     # w2m-vm writes the guest's stop by name (Sprint 191); a guest that fails before its run leaves none, and its
@@ -162,19 +197,25 @@ if [ $rust != none ]; then
       --stop "build/batch_run/guest-$n.stop" > /dev/null 2> "build/batch_run/guest-$n.stderr" || true
     printf '%s\t%s\n' "$n" "$(cat "build/batch_run/guest-$n.stop" 2>/dev/null)" >> build/batch_run/guests.tsv
   done
+  }
+  timed guests guests
   # twoproc on the instruction clock, the machine clock's run-level judge, as tests/test_timed_waits.py 152 runs it
   # (Sprint 199; reviewer-2's High 1 of its review of 196-198)
+  twoproc_instruction_clock_guest() {
   rm -f build/batch_run/guest-twoproc-ic.stop
   echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm tests/data/timed_waits/twoproc.exe \
     --output build/batch_run/guest-twoproc-ic.txt --stop build/batch_run/guest-twoproc-ic.stop --instruction-clock \
     > /dev/null 2> build/batch_run/guest-twoproc-ic.stderr || true
   printf '%s\t%s\n' twoproc-ic "$(cat build/batch_run/guest-twoproc-ic.stop 2>/dev/null)" >> build/batch_run/guests.tsv
+  }
+  timed twoproc-instruction-clock-guest twoproc_instruction_clock_guest
   # the module families on the Rust host (Sprint 196; census row 6): each runner binary a contract's evidence names,
   # run as probe.exe, its printed rows and stop under build/family_runs/, which crates/w2m_vm/tests/family_runs.rs
   # holds to its contract version's rows or to store/family_runs/sweep-held-2026-10-29.tsv. From Sprint 221 every run
   # the family index judged, 273 in 68 families, from the lookup store/family_runs/known-2026-10-29.tsv: the binary,
   # its beside DLL (name:sha256), an instruction budget so a hang ends by count; from Sprint 231 the family's start
   # options, the lookup's JSON object, as --start (`read -r` keeps the block's backslashes)
+  family_runs() {
   rm -rf build/family_runs
   mkdir -p build/family_runs
   tab=$(printf '\t')
@@ -188,21 +229,32 @@ if [ $rust != none ]; then
       --output "build/family_runs/$c-$run.txt" --stop "build/family_runs/$c-$run.stop" "$@" \
       --max-steps 20000000000 > /dev/null 2> "build/family_runs/$c-$run.stderr" || true
   done
+  }
+  timed family-runs family_runs
 fi
 if [ $rust = all ]; then
   # a process a test, so the case runner's two passes run side by side (Sprint 200: 347 s under `cargo test`, its two
   # passes taking turns behind one VM a process; 188 s under nextest, measured 2026-10-28), then the doc tests nextest
   # does not run
+  nextest() {
   W2M_REQUIRE_CASE_RUNS=1 cargo nextest run --cargo-quiet --status-level fail
-  cargo test --quiet --doc
+  }
+  timed nextest nextest
+  timed doc-tests cargo test --quiet --doc
 elif [ $rust = crates ]; then
   # the changed crates' dependents and the tests that read beyond their crate (Sprint 322), one place for both
+  nextest() {
   # shellcheck disable=SC2086
   filter=$(scripts/test-filter.sh $crates)
   W2M_REQUIRE_CASE_RUNS=1 cargo nextest run --cargo-quiet --status-level fail -E "$filter"
+  }
+  timed nextest nextest
+  doc_tests() {
   docs=$(for c in $crates; do [ -f "crates/$c/src/lib.rs" ] && printf -- '-p %s ' "$c"; done; true)
   # nextest does not run doc tests (a compile_fail doc test holds Vcpu to !Send, Sprint 157)
-  [ -n "$docs" ] && cargo test --quiet --doc $docs
+  if [ -n "$docs" ]; then cargo test --quiet --doc $docs; fi
+  }
+  timed doc-tests doc_tests
 fi
 # the timing stage (Sprint 224; reviewer-3's Medium 2 of its review at Sprint 222's close): the exit time, a wall-clock
 # bound ignored in the correctness run above, measured after it with the machine's one-minute load average; the figure,
@@ -211,6 +263,7 @@ fi
 # under 6, the performance cores of this Mac (6 of 18), and under load is reported; no-figure, the test did not run to
 # its figure (a build failure, hv_vm_create refused), which stops the gates at any load.
 if [ $rust != none ]; then
+  timing_stage() {
   load=$(sysctl -n vm.loadavg | awk '{print $2}')
   if cargo nextest run --cargo-quiet -p hypervisor --test exit_time --run-ignored only --no-capture \
     > build/gates-timing-last.txt 2>&1; then outcome=passed; else outcome=over-bound; fi
@@ -232,38 +285,62 @@ if [ $rust != none ]; then
     fi
     echo "gates: reported, not stopping (load $load, store/gates/timing.tsv)"
   fi
+  }
+  timed timing-stage timing_stage
 fi
-cargo build --release --quiet
+timed release-build cargo build --release --quiet
 # the Rust judges' discrepancy ledger is what their records say (Sprint 154; review of Sprints 151-152)
-target/release/case_runs --check-ledger
+timed case-runs-ledger-check target/release/case_runs --check-ledger
 # the planted discrepancy chain (Sprint 171; reviewer-2's Low 1): the Rust case runner with the first run's CF flipped
 # writes 32 discrepancies, each after its REDUCTION_COMPLETED and naming its case's hashes, which `check_records` holds
 # to rules S5 and E1 (Sprint 167); from Sprint 175 also FCOS's and FSIN's, the open pair this profile reports unplanted
 # (tests/test_class_runs.py 33), so 34
 if [ $rust != none ] && [ -d build/probe-runs ]; then
+  planted_chain() {
   chain=$(mktemp -d)/case-runs-planted-$(date +%s)000000000
   W2M_CASE_PROFILE="INTEL(R) XEON(R) PLATINUM 8573C; gha-windows-2022-x64-10.0.20348.5622-Server" \
     uv run substrate run --file harness/case-runs-planted.toml --root "$chain" --strict > /dev/null
   reports=$(cat "$chain"/events-*.jsonl | grep -c '"kind":"DISCREPANCY_REPORTED"' || true)
   [ "$reports" = 34 ] || { echo "gates: the planted chain holds $reports DISCREPANCY_REPORTED, not 34"; exit 1; }
+  }
+  timed planted-chain planted_chain
+  planted_chain_records_check() {
   target/release/check_records --since 2026-10-17 --show 3 "$chain" > /dev/null || { echo "gates: the planted chain breaks S5 or E1"; target/release/check_records --since 2026-10-17 --show 3 "$chain"; exit 1; }
+  }
+  timed planted-chain-records-check planted_chain_records_check
 fi
 # the vocabulary generated into Rust and substrate's schema file, byte for byte (Sprint 126)
+vocabulary_generator_check() {
 target/release/vocabulary_generator --check > /dev/null
+}
+timed vocabulary-generator-check vocabulary_generator_check
 # every sprint from 108 marked done has its Signal Report (Sprint 127: the reports stopped unnoticed three times)
+signal_report_check() {
 target/release/signal_report --check > /dev/null
+}
+timed signal-report-check signal_report_check
 # every plan and design from 2026-10-24 on states the goal's figures and names the systems that solved the same
 # problem, with sources (Sprint 128; Decision 2026-10-24 user, fix (a))
+design_check() {
 target/release/design_check > /dev/null
+}
+timed design-check design_check
 if [ $samples = 1 ]; then
+  session_check() {
   session=$(mktemp -d)/session-check
   uv run substrate run --file harness/session-check.toml --root "$session" --strict > /dev/null
   uv run substrate replay "$session" --level 2 > /dev/null
+  }
+  timed session-check session_check
   # its own name, so `samples` stays the stage's 0 or 1 for the pass line (Sprint 198: the column read the directory)
+  vocabulary_samples() {
   samples_root=$(mktemp -d)/vocabulary-samples
   uv run substrate run --file harness/vocabulary-samples.toml --root "$samples_root" --strict > /dev/null
   uv run substrate replay "$samples_root" --level 2 > /dev/null
+  }
+  timed vocabulary-samples vocabulary_samples
   # the planted sample: a version ending in a newline, refused by substrate as by the Rust type (Sprint 126)
+  planted_samples() {
   planted=$(mktemp -d)/vocabulary-samples-planted
   if uv run substrate run --file harness/vocabulary-samples-planted.toml --root "$planted" --strict > /dev/null 2>&1; then
     echo "gates: the planted sample was accepted"; exit 1
@@ -283,17 +360,26 @@ if [ $samples = 1 ]; then
     echo "gates: the planted guest_trace was accepted"; exit 1
   fi
   uv run substrate tail "$planted" --format jsonl --no-follow | grep '"kind":"substrate.ProducerFailed"' | grep -q 'at `$.guest_trace`' || { echo "gates: the planted failure does not name guest_trace"; exit 1; }
+  }
+  timed planted-samples planted_samples
 fi
 if [ $all = 1 ]; then
   # the vocabulary's rules over every record; records made from 2026-10-17 on are held to them (Sprint 109), by the
   # Rust port (Sprint 169), whose printed lines last equalled the Python's in Sprint 222's fourth gates run, 38,650
   # records; the Python is not run (2026-10-29)
-  target/release/check_records --since 2026-10-17 --show 0
+  timed records-check target/release/check_records --since 2026-10-17 --show 0
 elif [ -n "$records" ]; then
+  records_replay() {
   for r in $records; do uv run substrate replay "$r" --level 2 > /dev/null; done
+  }
+  timed records-replay records_replay
   # shellcheck disable=SC2086
-  target/release/check_records --since 2026-10-17 --show 0 $records
+  timed records-check target/release/check_records --since 2026-10-17 --show 0 $records
 fi
+# the run's seconds no step holds (Sprint 334), printed and kept as the row `unplaced`
+gates_seconds=$(( $(date +%s) - gates_start ))
+said "steps $steps_seconds s of the run's $gates_seconds s, unplaced $(( gates_seconds - steps_seconds )) s"
+printf '%s\tsprint %s\tunplaced\t%s\n' "$gates_started" "$gates_sprint" "$(( gates_seconds - steps_seconds ))" >> store/gates/steps.tsv
 echo "gates: all passed"
 # each passing run is kept, so `signal_report --check` can find the run a closed tail entry's gates line names
 # (Sprint 179; reviewer-2's Medium 3 of its review of 175-177: the close check read tokens, not the gates' state)
