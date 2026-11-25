@@ -11,11 +11,22 @@ shift
 # process a test), and `codesign -f` on a file another process is signing or running failed 11 of 20 such runs
 # (Sprint 168). A binary that already holds the entitlement is run as it is.
 signed() { codesign -d --entitlements - "$binary" 2> /dev/null | grep -q com.apple.security.hypervisor; }
-if ! signed; then
+# Checked once a build (Sprint 332): `codesign -d` took 9.78-9.96 s on a signed test binary on this Mac, idle, and the
+# runner starts each test binary in a process a test. Once the binary is found or made signed, the stamp beside it
+# records the binary's modification time to the nanosecond; a launch whose binary still has that time skips the check.
+# A relinked or replaced binary has another time and is checked and signed again. The time is compared for equality,
+# not by `-nt`: this /bin/sh, bash 3.2, compares whole seconds, and a binary relinked within the second its stamp was
+# written read as not newer.
+stamp="$binary.signed"
+stamped() { [ -f "$stamp" ] && read -r at < "$stamp" && [ "$at" = "$(stat -f %Fm "$binary")" ]; }
+if ! stamped; then
   lock="$binary.signing"
   until mkdir "$lock" 2> /dev/null; do sleep 0.05; done
   trap 'rmdir "$lock"' EXIT
-  signed || codesign -s - -f --entitlements "$(dirname "$0")/../tools/vm_monitor/entitlements.plist" "$binary" 2> /dev/null
+  if ! stamped; then
+    signed || codesign -s - -f --entitlements "$(dirname "$0")/../tools/vm_monitor/entitlements.plist" "$binary" 2> /dev/null
+    stat -f %Fm "$binary" > "$stamp"
+  fi
   rmdir "$lock"
   trap - EXIT
 fi
