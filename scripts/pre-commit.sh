@@ -15,13 +15,20 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 # the sprint is the one active card's; the record check is the last closed sprint's, one before it. Zero or two
 # active cards stop here, by name, rather than check against a guessed sprint (the gates refuse two the same way).
+# From Sprint 334 a sprint closes in its work commit (Sprint 333): with no card active and the newest card done or
+# closed-partial, the commit is that sprint's work and close, and the record check is its own.
 active=$(grep -l '^status: active$' sprints/sprint-*.md || true)
-if [ "$(printf '%s' "$active" | grep -c .)" -ne 1 ]; then
-  echo "pre-commit: not one card with status: active: ${active:-none}"
+newest=$(ls sprints/sprint-*.md | sort | tail -1)
+if [ "$(printf '%s' "$active" | grep -c .)" -eq 1 ]; then
+  sprint=$(printf '%s\n' "$active" | sed -E 's|.*/sprint-([0-9]{3})-.*|\1|')
+  closed=$(($(printf '%s' "$sprint" | sed 's/^0*//') - 1))
+elif [ -z "$active" ] && grep -Eq '^status: (done|closed-partial)$' "$newest"; then
+  sprint=$(printf '%s\n' "$newest" | sed -E 's|.*/sprint-([0-9]{3})-.*|\1|')
+  closed=$(printf '%s' "$sprint" | sed 's/^0*//')
+else
+  echo "pre-commit: not one card with status: active, nor a newest card closed: ${active:-none}"
   exit 1
 fi
-sprint=$(printf '%s\n' "$active" | sed -E 's|.*/sprint-([0-9]{3})-.*|\1|')
-closed=$(($(printf '%s' "$sprint" | sed 's/^0*//') - 1))
 echo "pre-commit: sprint $sprint, the record checked against sprint $closed"
 
 echo "pre-commit: format"

@@ -104,3 +104,29 @@ A sprint can close in one commit with its work, and the record check holds that 
 - [x] One concept: the close folded into the sprint's commit.
 
 ## result
+
+- **Found by test** (the folded fixture run on the unchanged tools before any change): the committed history was refused
+  by name, "sprint 335: sprint 334 has no close commit to base its gates on" and "sprint 334: its CI run 11 is cited,
+  and no commit \"Sprint 334 closed:\" is found to hold it to". Both came from `close_commit`, through `base_problem` and
+  `ci_held`. With the second close prepared on the tree, `trees_moved` added "sprint 335: no commit \"Sprint 335: ...\"
+  to compare its gates run's trees with". **Found by reading:** `scripts/gates-base.sh` (only "closed:" is a base) and
+  `scripts/pre-commit.sh` (refuses zero active cards, which is the folded commit's state). `commits_walked` and
+  `close_moved` already accepted the folded commit, and CI's workflow names no close.
+- **The work:** `close_commit` takes, from Sprint 334 (`FIRST_FOLDED_SPRINT`), the newest "Sprint N: " commit whose tree
+  holds card N done or closed-partial; `gates-base.sh` takes the same commit. `trees_moved` holds the gates' tree to the
+  working tree, staged as `gated-tree.sh` stages it, while a 334+ close is not committed. `commits_walked` names a
+  "Sprint N closed:" commit from 334. `pre-commit.sh` takes the sprint from the newest card when none is active and that
+  card is done or closed-partial. `binaries_unwalked` covers sprints from 254, when the walk fixture began; of those
+  sprints only 331 added a binary, and it changed the fixture too. WORKING_AGREEMENT gains "A sprint closes in its work
+  commit", in the folded order, and dated notes on lines 144, 247, 253, 255, 256, 257 and 259.
+- **Expected values:** `a_sprint_closes_in_its_work_commit`: two folded sprints exit 0, both committed and with 335's
+  close prepared on the tree; a "tidy" commit is named; a separate 335 close is named. `a_binary_added_needs_its_walk_fixture_entry`:
+  a binary alone is named, committed and prepared, and passes once the fixture changes. `signal_report --check` on the
+  tree exits 0.
+- **Plant 1** (`trees_moved` takes the card commit): the folded fixture is refused, "sprint 335: its gates ran on a tree
+  whose crates its work commit 837a826f8 does not hold".
+- **Plant 2** (the walk accepts any subject): the third-commit fixture is accepted, "left: Some(0) right: Some(1)".
+- **Plant 3** (the binaries rule taken out): the binary alone is accepted, "left: (Some(0), \"\")" against the named
+  refusal.
+- **Gates:** `exit 0 in 6243 s	all	2026-11-25T21:04:53Z	sprint 333	f3ff9047eef3850c3d6c9e9baadb8a306311eefe	766896834ea3da549306d7b00e3d8692e2c362bc85aa9dd90431fb3b5bea97ee	root=9292648da27ca817a81ff7892fefd8db5f28eafc	rust=all python=0 samples=1	base=b6a7e723c803bf1a01ad4ffe900b41eab596fb9d`
+  (copied from `tail -1 store/gates/passes.tsv`; --all, since `gates-base.sh` changed; 362 tests passed, 1 skipped).

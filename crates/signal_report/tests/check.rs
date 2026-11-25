@@ -550,6 +550,234 @@ fn a_change_to_the_gates_runs_every_stage() {
     }
 }
 
+/// `--check` on `root`, which is kept: the exit code and stderr.
+fn check_kept(root: &Path) -> (Option<i32>, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_signal_report"))
+        .args(["--check", "--root"])
+        .arg(root)
+        .env_remove("CI")
+        .output()
+        .unwrap();
+    (out.status.code(), String::from_utf8_lossy(&out.stderr).to_string())
+}
+
+/// A script of `scripts/` run in `dir`, its output trimmed.
+fn script(dir: &Path, name: &str) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts").join(name);
+    let out = Command::new("sh").arg(path).current_dir(dir).output().unwrap();
+    assert!(out.status.success(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// How `folded` builds sprint 335 (Sprint 333).
+#[derive(Default)]
+struct Shape {
+    /// a commit "tidy" between 334's close and card 335
+    stray: bool,
+    /// 335's close prepared on the working tree and not committed
+    uncommitted: bool,
+    /// 335 closes in a commit of its own after its work commit
+    separate_close: bool,
+    /// 335's work adds `store/binaries/new.exe`
+    binary: bool,
+    /// and changes the walk fixture
+    walked: bool,
+}
+
+const WALK_FIXTURE: &str = "store/translation-cache/walk-fixtures-2026-10-30.json";
+
+/// Sprint 333: a history whose sprints 334 and 335 each close in their work commit. After the previous sprint's close,
+/// each sprint is its card commit and one commit "Sprint N: ..." holding the work, the card done, its report, its tail
+/// entry headed closed and its gates row, made after the gates passed on the working tree: the row's `root=` is
+/// `scripts/gated-tree.sh`'s and its `base=` `scripts/gates-base.sh`'s, as `scripts/gates.sh` takes them. 335's entry
+/// cites 334's CI run, on file, whose head is 334's close.
+fn folded(name: &str, shape: &Shape) -> (PathBuf, String) {
+    let root = scratch_with_tail(name, &[], &[], "");
+    let card = |n: u32, status: &str| {
+        fs::write(
+            root.join(format!("sprints/sprint-{n}-x.md")),
+            format!("# card\n\n```yaml\n---\nstatus: {status}\n---\n```\n"),
+        )
+        .unwrap();
+    };
+    let entry = |n: u32, seconds: u32, more: &str| {
+        format!(
+            "### Sprint {n} (2026-11-24, closed)\n- **Dual contract:** artifact pass (`gates.sh` exit 0 in {seconds} s; \
+             multi-vCPU: not run (Python gates not run){more}).\n\n"
+        )
+    };
+    let board = |entries: &str| {
+        fs::write(
+            root.join("BLACKBOARD.md"),
+            format!("# BLACKBOARD\n\n## Sprint tail\n\n{entries}"),
+        )
+        .unwrap();
+    };
+    let mut passes = String::new();
+    let mut gates = |n: u32, seconds: u32| {
+        let ran = gates_root_tree(&root);
+        let base = script(&root, "gates-base.sh");
+        passes.push_str(&format!(
+            "exit 0 in {seconds} s\tdefault\t2026-11-24T07:00:00Z\tsprint {n}\th\td\troot={ran}\t\
+             rust=all python=0 samples=0\tbase={base}\n"
+        ));
+        fs::create_dir_all(root.join("store/gates")).unwrap();
+        fs::write(root.join("store/gates/passes.tsv"), &passes).unwrap();
+    };
+    fs::create_dir_all(root.join("crates/a")).unwrap();
+    fs::create_dir_all(root.join("store/translation-cache")).unwrap();
+    fs::write(root.join("crates/a/lib.rs"), "fn a() {}\n").unwrap();
+    fs::write(root.join(WALK_FIXTURE), "{}\n").unwrap();
+    git(&root, &["init", "-q"]);
+    commit(&root, "Sprint 333 closed: its Signal Report; BLACKBOARD");
+    card(334, "active");
+    commit(&root, "Sprint 334 card: x");
+    fs::write(root.join("crates/a/lib.rs"), "fn a() { let _ = 334; }\n").unwrap();
+    gates(334, 900);
+    card(334, "done");
+    fs::write(root.join("signal-reports/sprint-334-report.md"), "# report\n").unwrap();
+    let entry_334 = entry(334, 900, "");
+    board(&entry_334);
+    commit(&root, "Sprint 334: the work, and its close");
+    let close_334 = git(&root, &["rev-parse", "HEAD"]);
+    if shape.stray {
+        fs::write(root.join("docs/notes-2026-11-24.md"), "# notes\n").unwrap();
+        commit(&root, "tidy");
+    }
+    card(335, "active");
+    commit(&root, "Sprint 335 card: y");
+    fs::write(root.join("crates/a/lib.rs"), "fn a() { let _ = 335; }\n").unwrap();
+    if shape.binary {
+        fs::create_dir_all(root.join("store/binaries")).unwrap();
+        fs::write(root.join("store/binaries/new.exe"), "MZ\n").unwrap();
+    }
+    if shape.walked {
+        fs::write(root.join(WALK_FIXTURE), "{\"new.exe\": {}}\n").unwrap();
+    }
+    if shape.separate_close {
+        commit(&root, "Sprint 335: the work");
+    }
+    gates(335, 901);
+    fs::write(
+        root.join("store/gates/ci.tsv"),
+        format!("11\t{close_334}\tsuccess\t2026-11-24T08:00:00Z\tci\n"),
+    )
+    .unwrap();
+    card(335, "done");
+    fs::write(root.join("signal-reports/sprint-335-report.md"), "# report\n").unwrap();
+    board(&format!(
+        "{}{entry_334}",
+        entry(335, 901, "; Sprint 334's CI run 11 passed")
+    ));
+    if shape.separate_close {
+        commit(&root, "Sprint 335 closed: its Signal Report; BLACKBOARD");
+    } else if !shape.uncommitted {
+        commit(&root, "Sprint 335: the work, and its close");
+    }
+    (root, close_334)
+}
+
+/// Sprint 333 (the Decision "A sprint's close folds into its sprint's commit", 2026-11-24): two sprints each closed in
+/// its work commit pass `--check`, committed and with the second's close prepared on the working tree before its commit;
+/// a stray commit between a close and the next card is still named (plant 2 lets the walk accept any subject), and so,
+/// from Sprint 334, is a close apart from its work.
+#[test]
+fn a_sprint_closes_in_its_work_commit() {
+    let (root, _) = folded("folded", &Shape::default());
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(0), ""));
+    let _ = fs::remove_dir_all(&root);
+
+    let uncommitted = Shape {
+        uncommitted: true,
+        ..Shape::default()
+    };
+    let (root, _) = folded("prepared", &uncommitted);
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(0), ""));
+    let _ = fs::remove_dir_all(&root);
+
+    let (root, _) = folded(
+        "stray",
+        &Shape {
+            stray: true,
+            ..Shape::default()
+        },
+    );
+    let tidy = git(&root, &["log", "-1", "--format=%h", "--abbrev=9", "--grep=^tidy$"]);
+    let (code, stderr) = check_kept(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        format!(
+            "sprint 334: commit {tidy} \"tidy\" stands between its card and the next card, and is neither its work nor \
+             its close"
+        )
+    );
+    let _ = fs::remove_dir_all(&root);
+
+    let (root, _) = folded(
+        "separate",
+        &Shape {
+            separate_close: true,
+            ..Shape::default()
+        },
+    );
+    let close = git(&root, &["rev-parse", "--short=9", "HEAD"]);
+    let (code, stderr) = check_kept(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        format!(
+            "sprint 335: commit {close} \"Sprint 335 closed: its Signal Report; BLACKBOARD\" closes it apart from its \
+             work, and from Sprint 334 a sprint closes in its work commit"
+        )
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Sprint 333 (reviewer-4's Low 1 at its fifth review, Sprint 331): a sprint whose change adds a file under
+/// `store/binaries/` and leaves the walk fixture unchanged is named, committed or prepared on the working tree; with
+/// the fixture changed it passes (plant 3, the rule taken out, passes the binary alone).
+#[test]
+fn a_binary_added_needs_its_walk_fixture_entry() {
+    let alone = Shape {
+        binary: true,
+        ..Shape::default()
+    };
+    let named = format!(
+        "sprint 335: its change adds store/binaries/new.exe and leaves {WALK_FIXTURE} unchanged, so image_walk's count \
+         fails"
+    );
+    let (root, _) = folded("binary", &alone);
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(1), named.as_str()));
+    let _ = fs::remove_dir_all(&root);
+
+    let (root, _) = folded(
+        "binaryprepared",
+        &Shape {
+            uncommitted: true,
+            ..alone
+        },
+    );
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(1), named.as_str()));
+    let _ = fs::remove_dir_all(&root);
+
+    let (root, _) = folded(
+        "binarywalked",
+        &Shape {
+            binary: true,
+            walked: true,
+            ..Shape::default()
+        },
+    );
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(0), ""));
+    let _ = fs::remove_dir_all(&root);
+}
+
 /// Sprint 200's plants 1 and 2 (reviewer-2's Medium 4 of its review of 196-198): from Sprint 199 a tail entry's quoted
 /// `sed` commands are run through edit_guard's classifier: a quoted `a\` insertion the entry does not own as a
 /// multi-line edit fails, named; owned, it passes; a one-line substitution passes.

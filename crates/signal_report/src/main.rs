@@ -757,6 +757,10 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
                 }
             }
         }
+        // from Sprint 254 a binary the sprint adds comes with its walk fixture entry (Sprint 333)
+        if n >= FIRST_WALK_FIXTURE_SPRINT {
+            wrong.extend(binaries_unwalked(root, n)?);
+        }
         // from Sprint 199 the entry's quoted `sed` commands are held to what they do (Sprint 200)
         if n >= FIRST_QUOTED_EDIT_SPRINT {
             wrong.extend(quoted_edits(n, body));
@@ -807,6 +811,48 @@ fn closed_too_early(root: &Path) -> Result<Vec<String>, String> {
         }
     }
     Ok(wrong)
+}
+
+/// The counts of every image under `store/binaries/`, which `crates/image_walk/tests/fixtures.rs` compares with what
+/// it walks there, an image with no entry failing the count.
+const WALK_FIXTURE: &str = "store/translation-cache/walk-fixtures-2026-10-30.json";
+
+/// The first sprint whose change is held to `WALK_FIXTURE`: Sprint 254 made it, and of the sprints since only 331
+/// added a binary, its entry after its first gates run failed on the count (Sprint 333; reviewer-4's Low 1 at its
+/// fifth review, Sprint 331).
+const FIRST_WALK_FIXTURE_SPRINT: u32 = 254;
+
+/// Each file sprint `n`'s change adds under `store/binaries/` while `WALK_FIXTURE` is unchanged, named. The change runs
+/// from the previous sprint's close to this one's, or, while this close is not yet committed, to the working tree and
+/// its new files, as `scripts/gates.sh` takes it; with no previous close there is nothing to take it from, and
+/// `base_problem` names that from Sprint 273.
+fn binaries_unwalked(root: &Path, n: u32) -> Result<Vec<String>, String> {
+    let Some(base) = close_commit(root, n - 1) else {
+        return Ok(Vec::new());
+    };
+    let changed = match close_commit(root, n) {
+        Some(close) => git(root, &["diff", "--name-status", "--no-renames", &base, &close])?,
+        None => {
+            let mut changed = git(root, &["diff", "--name-status", "--no-renames", &base])?;
+            for path in git(root, &["ls-files", "--others", "--exclude-standard"])?.lines() {
+                changed.push_str(&format!("A\t{path}\n"));
+            }
+            changed
+        }
+    };
+    let rows: Vec<(&str, &str)> = changed.lines().filter_map(|l| l.split_once('\t')).collect();
+    if rows.iter().any(|(_, path)| *path == WALK_FIXTURE) {
+        return Ok(Vec::new());
+    }
+    Ok(rows
+        .iter()
+        .filter(|(status, path)| *status == "A" && path.starts_with("store/binaries/"))
+        .map(|(_, path)| {
+            format!(
+                "sprint {n:03}: its change adds {path} and leaves {WALK_FIXTURE} unchanged, so image_walk's count fails"
+            )
+        })
+        .collect())
 }
 
 /// The CI runs read with `gh run view` (run id, head, conclusion, time read), tracked from Sprint 212.
@@ -872,7 +918,8 @@ fn ci_held(
         // no close commit to hold the run to: named, not passed (Sprint 232; reviewer-3's Low 3 of its review of
         // 212-214)
         None => wrong.push(format!(
-            "sprint {n:03}: its CI run {digits} is cited, and no commit \"Sprint {n} closed:\" is found to hold it to"
+            "sprint {n:03}: its CI run {digits} is cited, and no commit \"Sprint {n} closed:\", or \"Sprint {n}: \" with \
+             its card done, is found to hold it to"
         )),
     }
     // the waiver: the clause that names the run's id says it failed (clauses end at ";", ". " or ")")
@@ -890,13 +937,48 @@ fn ci_held(
     wrong
 }
 
-/// Sprint `n`'s close commit, "Sprint N closed:" or "Sprint N closed-partial:", by `git log`; None before it is made.
+/// Sprint `n`'s close commit, "Sprint N closed:" or "Sprint N closed-partial:", by `git log`; from
+/// `FIRST_FOLDED_SPRINT`, when it has none, the newest "Sprint N: " commit whose tree holds card N done or
+/// closed-partial, the work commit its close folds into (Sprint 333); None before it is made.
 fn close_commit(root: &Path, n: u32) -> Option<String> {
     let log = git(root, &["log", "--format=%H%x09%s"]).ok()?;
-    log.lines()
-        .filter_map(|l| l.split_once('\t'))
-        .find(|(_, s)| is_close(s, n))
-        .map(|(h, _)| h.to_string())
+    let commits: Vec<(&str, &str)> = log.lines().filter_map(|l| l.split_once('\t')).collect();
+    if let Some((h, _)) = commits.iter().find(|(_, s)| is_close(s, n)) {
+        return Some(h.to_string());
+    }
+    let work = format!("Sprint {n}: ");
+    (n >= FIRST_FOLDED_SPRINT)
+        .then(|| {
+            commits
+                .iter()
+                .filter(|(_, s)| s.starts_with(&work))
+                .find(|(h, _)| card_closed_in(root, h, n))
+                .map(|(h, _)| h.to_string())
+        })
+        .flatten()
+}
+
+/// The first sprint that closes in its work commit, one commit "Sprint N: ..." holding the work, the card done, the
+/// report, the tail entry and the gates' row (Sprint 333; the Decision "A sprint's close folds into its sprint's
+/// commit", 2026-11-24, after the user's cut of 2026-10-16). Sprints through 333 closed in a commit of their own,
+/// pushed and not rewritten; from this one a close apart from its work is named.
+const FIRST_FOLDED_SPRINT: u32 = 334;
+
+/// Whether `commit`'s tree holds sprint `n`'s card with `status: done` or `status: closed-partial`.
+fn card_closed_in(root: &Path, commit: &str, n: u32) -> bool {
+    let prefix = format!("sprints/sprint-{n:03}-");
+    let Ok(names) = git(root, &["ls-tree", "--name-only", commit, "sprints/"]) else {
+        return false;
+    };
+    names
+        .lines()
+        .filter(|p| p.starts_with(&prefix) && p.ends_with(".md"))
+        .any(|p| {
+            git(root, &["show", &format!("{commit}:{p}")]).is_ok_and(|card| {
+                card.lines()
+                    .any(|l| matches!(l.trim(), "status: done" | "status: closed-partial"))
+            })
+        })
 }
 
 /// The first sprint whose gates run must name the base it selected from, the previous sprint's close (Sprint 273;
@@ -1230,7 +1312,8 @@ const BETWEEN_SPRINTS: [(&str, &str); 1] = [(
 
 /// Sprint `n`'s commits from its card's to the next card's (or HEAD), each named that is not its work ("Sprint N: "),
 /// its close ("Sprint N closed:", bookkeeping only, held by `close_moved`) or the card itself (Sprint 195; reviewer-2's
-/// Medium 4 of its review of 190-192: a commit under another subject between a pass and a close went unchecked).
+/// Medium 4 of its review of 190-192: a commit under another subject between a pass and a close went unchecked). From
+/// `FIRST_FOLDED_SPRINT` the close is the work commit, and a "Sprint N closed:" commit is named too (Sprint 333).
 fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
     let is_card =
         |s: &str, k: u32| s.starts_with(&format!("Sprint {k} card:")) || s.starts_with(&format!("Sprint {k}'s card:"));
@@ -1248,6 +1331,15 @@ fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
             break;
         }
         let named = BETWEEN_SPRINTS.iter().any(|(h, _)| hash.starts_with(h));
+        // from Sprint 334 the close folds into the work commit (Sprint 333): a close of its own is named
+        if n >= FIRST_FOLDED_SPRINT && is_close(subject, n) {
+            wrong.push(format!(
+                "sprint {n:03}: commit {} \"{subject}\" closes it apart from its work, and from Sprint \
+                 {FIRST_FOLDED_SPRINT} a sprint closes in its work commit",
+                &hash[..9]
+            ));
+            continue;
+        }
         if !(subject.starts_with(&work) || is_close(subject, n) || named) {
             wrong.push(format!(
                 "sprint {n:03}: commit {} \"{subject}\" stands between its card and the next card, and is neither its \
@@ -1281,7 +1373,9 @@ const BOOKKEEPING: [&str; 7] = [
 /// its review of 182-184: a pass line's HEAD and diff were written and never read). The pass line's seventh column is
 /// `gates.sh`'s list: from Sprint 192 "root=tree", the whole work tree less `BOOKKEEPING` (reviewer-2's Medium 3 of its
 /// review of 185-189), before it "dir=tree" for six directories; the commit's trees are taken the same way, from a
-/// temporary index, and a root that differs is named by its first differing top-level path.
+/// temporary index, and a root that differs is named by its first differing top-level path. From `FIRST_FOLDED_SPRINT`
+/// the work commit is the close (Sprint 333), and before it is made the working tree is taken in its place, staged as
+/// `scripts/gated-tree.sh` stages it, so the close's checks on the tree and on the commit judge the same thing.
 fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String> {
     let Some(trees) = line.split('\t').nth(6).filter(|t| !t.is_empty()) else {
         return Ok(Some(format!(
@@ -1289,16 +1383,26 @@ fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String
         )));
     };
     let subject = format!("Sprint {n}: ");
+    // from Sprint 334 the close folds into the work commit (Sprint 333): until that commit is made, the close is being
+    // prepared on the working tree, which is what the commit will hold, and the gates' tree is held to it
+    let prepared = n >= FIRST_FOLDED_SPRINT && close_commit(root, n).is_none();
     let log = git(root, &["log", "--format=%H%x09%s"])?;
-    let Some(commit) = log
+    let commit = log
         .lines()
         .filter_map(|l| l.split_once('\t'))
         .find(|(_, s)| s.starts_with(&subject))
-        .map(|(h, _)| h.to_string())
-    else {
-        return Ok(Some(format!(
-            "sprint {n:03}: no commit \"{subject}...\" to compare its gates run's trees with"
-        )));
+        .map(|(h, _)| h.to_string());
+    let (commit, holder) = match commit {
+        _ if prepared => (None, "the working tree, its close not yet committed,".to_string()),
+        Some(c) => {
+            let holder = format!("its work commit {}", &c[..9]);
+            (Some(c), holder)
+        }
+        None => {
+            return Ok(Some(format!(
+                "sprint {n:03}: no commit \"{subject}...\" to compare its gates run's trees with"
+            )));
+        }
     };
     let index = std::env::temp_dir().join(format!("signal-report-index-{}-{n}", std::process::id()));
     let _ = fs::remove_file(&index);
@@ -1319,7 +1423,11 @@ fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String
         }
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
-    with_index(&["read-tree", &commit])?;
+    match &commit {
+        Some(c) => with_index(&["read-tree", c])?,
+        // the work tree staged as `scripts/gated-tree.sh` stages it, less the session's own .claude/
+        None => with_index(&["add", "-A", "--", ".", ":!.claude"])?,
+    };
     let mut remove = vec!["rm", "-r", "-q", "-f", "--cached", "--ignore-unmatch", "--"];
     remove.extend(BOOKKEEPING);
     // from Sprint 195 the documents design_check reads stay in the gated tree, as `scripts/gated-tree.sh` keeps them
@@ -1341,8 +1449,7 @@ fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String
                     .and_then(|d| d.lines().next().map(str::to_string))
                     .unwrap_or_else(|| "a path".into());
                 moved = Some(format!(
-                    "sprint {n:03}: its gates ran on a tree whose {first} its work commit {} does not hold",
-                    &commit[..9]
+                    "sprint {n:03}: its gates ran on a tree whose {first} {holder} does not hold"
                 ));
                 break;
             }
@@ -1351,8 +1458,7 @@ fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String
         let held = with_index(&["write-tree", &format!("--prefix={dir}/")])?;
         if held != ran {
             moved = Some(format!(
-                "sprint {n:03}: its gates ran on {dir}/ {ran}, and its work commit {} holds {held}",
-                &commit[..9]
+                "sprint {n:03}: its gates ran on {dir}/ {ran}, and {holder} holds {held}"
             ));
             break;
         }
@@ -1735,7 +1841,7 @@ mod tests {
         // Sprint 232: a cited run with no close commit to hold it to is named
         let unclosed = ci_held(210, "an entry", tail, Some(ci), &|_: &str| None);
         assert!(
-            unclosed[0].contains("no commit \"Sprint 210 closed:\" is found"),
+            unclosed[0].contains("no commit \"Sprint 210 closed:\", or \"Sprint 210: \" with its card done, is found"),
             "{unclosed:?}"
         );
         let elsewhere = ci_held(211, "its run 22 passed; the gates failed once", tail, Some(ci), &holds);
