@@ -122,6 +122,31 @@ judges that build it.
 - [x] Observation contract: the counts, the lifetime rule, the cards; one numbered plant, its reach read.
 - [x] Sweet spot: one document, one concept, the split of two lock classes.
 
+## amendment (2026-11-26)
+
+Builder-350's reading found a defect that can leave a thread past its deadline, so it is fixed in this sprint (the
+user's Decision of 2026-10-18). A thread blocked in `wait_one` keeps its `waiters[]` entry with the object's index
+(`sync_objects.c` 394). CloseHandle of the object's last handle frees the slot and the object (`w2m_object_close`
+114-127) and readies no waiter. The woken wait's `!o` path (379-383) returns WAIT_FAILED with its entry and its
+`wait_deadline` left. The next object made reuses the index (`new_object` 69-72), and `grant` (214-230) hands its first
+release to the stale entry, so a thread waiting INFINITE on the new object may never wake.
+
+Microsoft Learn, WaitForSingleObject: "If this handle is closed while the wait is still pending, the function's
+behavior is undefined." The close is therefore the guest's error. The damage to a later, correct object is w2m's.
+
+- **The fix.** Implement the design's lifetime rule for this case: a waiter holds a reference on its object, so the
+  object outlives its last handle while any waiter holds it. Every path out of `wait_one` drops its entry and its
+  deadline; the `!o` path is among them. List every return path of `wait_one` and `wait_many` with what each drops,
+  and the same for WaitForMultipleObjects's stop at 421.
+- **The judge.** A probe, committed by the Supervisor as a "Sprint 350 card amendment:" commit (Sprint 349's kind). A
+  worker waits with a finite timeout on a semaphore. The main thread closes the semaphore's last handle, makes a new
+  semaphore, releases it once, and waits on it with a zero timeout. Windows defines that last wait, WAIT_OBJECT_0, and
+  the rows compare it. The worker's result is undefined, so record it but do not compare it. Write the probe in
+  `probes/` in the working tree and send its path. The Supervisor reviews, commits and pushes it, then you run it on
+  the Windows runner. A `run_loop.rs` test holds the defined rows on one vCPU and on two to Windows', and fails on
+  today's code.
+- **Plant 2.** The waiter's reference taken out. The test fails.
+
 ## result
 
 GATES-LINE
