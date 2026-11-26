@@ -1385,6 +1385,67 @@ fn a_locked_model_step_loses_no_add_of_another_vcpus_aligned_lock() {
     }
 }
 
+/// Sprint 344 (reviewer-4's thirteenth review, Medium 1): `probes/thread_values_race`, threads A and B each 200,000
+/// rounds at once, each round setting its own last error and TLS value and reading them back and reading its own thread
+/// id, all calls of lock class none (Sprint 342). Its rows on one vCPU and on two, but `overlap`, are held to the
+/// Windows runner's (run 45760720489, three runs alike but `overlap`): each mismatch count 0. `overlap` counts the
+/// rounds in which a thread saw the other's round count move: measured before the floor, 21 runs each way, 260 and 260
+/// in every run on one vCPU, where the two loops meet only at the time slices' switches, and 155,991 to 170,312 (A)
+/// and 158,350 to 170,509 (B) on two. On two vCPUs each is held above `OVERLAP_FLOOR`, which shows the loops ran at
+/// once. The two-vCPU run is held first, so a fault both runs show is named by this card's judge: a process-wide last
+/// error (the card's plant 2) also read 43 of A's rounds wrong on one vCPU, a time slice ending between its set and
+/// its read.
+#[test]
+fn each_threads_last_error_tls_value_and_id_stay_its_own_on_two_vcpus() {
+    const OVERLAP_FLOOR: u64 = 10_000;
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let run = root.join("store/probe-runs/45760720489");
+    let but_overlap = |body: &str| -> String {
+        body.lines()
+            .filter(|l| !l.starts_with("{\"s\":\"overlap\","))
+            .map(|l| format!("{l}\n"))
+            .collect()
+    };
+    let windows = but_overlap(&fs::read_to_string(run.join("body-1.jsonl")).unwrap());
+    for i in [2, 3] {
+        let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
+        assert_eq!(
+            but_overlap(&body),
+            windows,
+            "the Windows run's body-{i} but overlap against body-1"
+        );
+    }
+    let binary = fs::read_to_string(run.join("probe.sha256")).unwrap();
+    let program = root.join(format!("store/binaries/{}.exe", binary.trim()));
+    for vcpus in [2, 1] {
+        let (stopped, said, stderr) = program_through_w2m_vm("thread_values_race", &program, &[], vcpus);
+        assert_eq!(
+            stopped, "ExitProcess { code: 0 }",
+            "thread_values_race on {vcpus} vCPUs; stderr {stderr}"
+        );
+        eprintln!("thread_values_race on {vcpus} vCPUs:\n{said}");
+        assert_eq!(
+            but_overlap(&said),
+            windows,
+            "thread_values_race's rows but overlap on {vcpus} vCPUs as on Windows"
+        );
+        let overlap: serde_json::Value = said
+            .lines()
+            .find(|l| l.starts_with("{\"s\":\"overlap\","))
+            .map(|l| serde_json::from_str(l).unwrap())
+            .expect("thread_values_race's overlap row");
+        let seen = ["a_saw_b_move", "b_saw_a_move"].map(|k| overlap[k].as_u64().unwrap());
+        if vcpus == 2 {
+            assert!(
+                seen.iter().all(|&n| n > OVERLAP_FLOOR),
+                "thread_values_race's loops on 2 vCPUs overlapped too little to judge, {seen:?}, floor \
+                 {OVERLAP_FLOOR}"
+            );
+        }
+    }
+}
+
 /// Deferred (Sprint 329), met at Sprint 330: the single-process guests no other test runs on two vCPUs, through
 /// `w2m-vm`, each held to its stop and output in `store/batch_run/first-stop-2026-10-28.tsv` (`qpc2`'s clock reading by
 /// its form, as `batch_run.rs` holds it).

@@ -1943,6 +1943,15 @@
     "block_starts": 122,
     "undecodable": 0
   },
+  "c9b9847f83dfc33b9f6c27cf332257bd04d0c3ab1fbdcad823d24657bd1e7574.exe": {
+    "reachable_instructions": 551,
+    "walked": 551,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 137,
+    "undecodable": 0
+  },
   "cc344b3608f76dfe67851701a49772a4f967fb08ff02defe066c43367758c03d.exe": {
     "reachable_instructions": 1003,
     "walked": 1003,
