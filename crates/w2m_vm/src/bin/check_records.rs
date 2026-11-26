@@ -5,7 +5,8 @@
 //! Python holds in code). It reads each record's application events (`w2m_vm::ledger::frames`, without `substrate.*`
 //! kinds) and checks T1, T2, T3, T4 and T7 (`temporal_invariants`), S1 to S13 where their tags occur
 //! (`state_transitions`; a rule whose payload match is prose is checked for order alone, and its count says so), and E1,
-//! E6 and, from 0.13 (P29), E15 (`evidence_constraints`). T5, T6 and S14 are the guest trace's, enforced at ingest.
+//! E6, from 0.13 (P29) E15 and from 0.14 (P32) E16 (`evidence_constraints`). T5, T6 and S14 are the guest trace's,
+//! enforced at ingest.
 //!
 //! The rules come from `signals/rust-current.json`'s vocabulary. Its three rule sections equalled 0.9's, which the
 //! Python reads, until 0.12 (Sprint 170), whose T4 leaves out an execution with `guest_trace` false (P22); the two
@@ -180,9 +181,34 @@ fn strings(v: &Value, key: &str) -> Vec<String> {
 struct Checker {
     states: Vec<Value>,
     sha_fields: BTreeMap<String, Vec<String>>,
-    /// E15's metrics (0.13, P29): the `runtime_word_*` values of `enums.metric`, the only ones a MEASUREMENT_RECORDED
-    /// may give a `holder`; none when the vocabulary holds no E15
+    /// E15's metrics (0.13, P29): the values of `enums.metric` its spec names, the runtime word's four hold and wait
+    /// metrics, the only ones a MEASUREMENT_RECORDED may give a `holder`; none when the vocabulary holds no E15
     holder_metrics: Option<Vec<String>>,
+    /// E16's metrics (0.14, P32): the values of `enums.metric` its spec names, the five `lock_*` metrics, on which a
+    /// MEASUREMENT_RECORDED gives a `lock` and on no other; none when the vocabulary holds no E16
+    lock_metrics: Option<Vec<String>>,
+}
+
+/// The values of `enums.metric` that constraint `id`'s spec names, each as a whole word, in the enum's order; none when
+/// the vocabulary holds no such constraint. Read from the spec, not by a prefix: 0.14's `runtime_word_takings` has the
+/// prefix of E15's four metrics and is not one of them (P30).
+fn metrics_named(vocab: &Value, id: &str) -> Option<Vec<String>> {
+    let spec = vocab["evidence_constraints"]["constraints"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|c| c["id"] == id)?["spec"]
+        .as_str()
+        .unwrap_or("");
+    let words: Vec<&str> = spec
+        .split(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'))
+        .collect();
+    Some(
+        strings(&vocab["enums"], "metric")
+            .into_iter()
+            .filter(|m| words.contains(&m.as_str()))
+            .collect(),
+    )
 }
 
 impl Checker {
@@ -205,21 +231,11 @@ impl Checker {
                 .collect();
             sha_fields.insert(t["name"].as_str().unwrap_or("").to_string(), fields);
         }
-        let has_e15 = vocab["evidence_constraints"]["constraints"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .any(|c| c["id"] == "E15");
-        let holder_metrics = has_e15.then(|| {
-            strings(&vocab["enums"], "metric")
-                .into_iter()
-                .filter(|m| m.starts_with("runtime_word_"))
-                .collect()
-        });
         Checker {
             states,
             sha_fields,
-            holder_metrics,
+            holder_metrics: metrics_named(vocab, "E15"),
+            lock_metrics: metrics_named(vocab, "E16"),
         }
     }
 
@@ -301,6 +317,41 @@ impl Checker {
                             py_str(e.payload.get("metric"))
                         ),
                     ));
+                }
+            }
+            // E16 (0.14, P32): a lock names the leaf lock a lock_* metric measures, so it is present (not null) exactly
+            // on the five lock_* metrics: applied to every MEASUREMENT_RECORDED that gives a lock or a lock_* metric
+            if let Some(metrics) = &self.lock_metrics
+                && e.kind == "MEASUREMENT_RECORDED"
+            {
+                let metric = e.get("metric").and_then(Value::as_str).unwrap_or("");
+                let on_lock_metric = metrics.iter().any(|m| m == metric);
+                match (e.get("lock"), on_lock_metric) {
+                    (None, false) => {}
+                    (Some(_), true) => bump(applied, "E16"),
+                    (Some(lock), false) => {
+                        bump(applied, "E16");
+                        found.push((
+                            "E16".into(),
+                            format!(
+                                "{}: lock {} on metric {}",
+                                py_str(e.payload.get("measurement_id")),
+                                py_str(Some(lock)),
+                                py_str(e.payload.get("metric"))
+                            ),
+                        ));
+                    }
+                    (None, true) => {
+                        bump(applied, "E16");
+                        found.push((
+                            "E16".into(),
+                            format!(
+                                "{}: metric {} with no lock",
+                                py_str(e.payload.get("measurement_id")),
+                                py_str(e.payload.get("metric"))
+                            ),
+                        ));
+                    }
                 }
             }
         }

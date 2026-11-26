@@ -10,7 +10,7 @@
 
 [baseline]
 harness = "w2m"
-vocabulary = "0.13"
+vocabulary = "0.14"
 host = "w2m-vm"
 implementation = "the Rust host, w2m-vm, on one vCPU with the Rust translator for the blocks the VM's C declines"
 reference = "the frozen Python host's batch run of 2026-10-21, store/runs/frontier-643a6283510c-1792623423346201000"

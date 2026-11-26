@@ -584,6 +584,54 @@ mod tests {
         }
     }
 
+    /// Sprint 357 (vocabulary 0.14, P31): the vocabulary's enum `lock`, which MEASUREMENT_RECORDED's `lock` takes, names
+    /// `Lock`'s leaf classes, every variant but the runtime word, which keeps its own metrics, and none, which is no
+    /// lock, each as its snake case and in the enum's order; read from this file's text, so a class added to `Lock`
+    /// fails here until the vocabulary names it.
+    #[test]
+    fn the_vocabularys_lock_values_are_the_leaf_classes_of_lock() {
+        let source = include_str!("services.rs");
+        let body = source
+            .split_once("pub enum Lock {")
+            .and_then(|(_, rest)| rest.split_once('}'))
+            .map(|(body, _)| body)
+            .expect("services.rs defines `pub enum Lock`");
+        let snake = |camel: &str| {
+            let mut out = String::new();
+            for (i, c) in camel.chars().enumerate() {
+                if c.is_ascii_uppercase() && i > 0 {
+                    out.push('_');
+                }
+                out.push(c.to_ascii_lowercase());
+            }
+            out
+        };
+        let leaves: Vec<String> = body
+            .lines()
+            .map(|l| l.trim().trim_end_matches(','))
+            .filter(|l| !l.is_empty() && !l.starts_with("//"))
+            .filter(|l| *l != "RuntimeWord" && *l != "None")
+            .map(snake)
+            .collect();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let read = |p: &std::path::Path| -> serde_json::Value {
+            serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
+        };
+        let current = read(&root.join("signals/rust-current.json"));
+        let version = current["version"].as_str().expect("rust-current.json names a version");
+        let vocabulary = read(&root.join(format!("signals/{version}.json")));
+        let values: Vec<String> = vocabulary["enums"]["lock"]
+            .as_array()
+            .expect("the vocabulary has an enum lock")
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            leaves, values,
+            "Lock's leaf classes (services.rs) and vocabulary {version}'s enum lock"
+        );
+    }
+
     #[test]
     fn a_service_defined_twice_is_refused_by_name() {
         let t = texts(&[("a.c", "u64 k32_Beep(void) {\n"), ("b.c", "u64 k32_Beep(u64 x) {\n")]);

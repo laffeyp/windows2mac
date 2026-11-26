@@ -512,6 +512,8 @@ fn measurement(
         variant: variant.map(str::to_string),
         vcpus: vcpus.map(|n| HarnessU64::new(n.get()).expect("a vCPU count below 2^53")),
         holder: None,
+        // no leaf lock (0.14, P31): these lines measure the run and the runtime word, not a leaf lock (E16)
+        lock: None,
     })
 }
 

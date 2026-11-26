@@ -7,7 +7,7 @@
 
 [baseline]
 harness = "w2m"
-vocabulary = "0.13"
+vocabulary = "0.14"
 judge = "case-runner-rust-planted"
 implementation = "the Rust case runner with the first run's CF flipped, a planted fault"
 reference = "the Intel runs of store/case_runner/expected.tsv"

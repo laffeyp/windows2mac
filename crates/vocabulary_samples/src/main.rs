@@ -32,6 +32,12 @@ fn run() -> Result<(), String> {
     let mut input = String::new();
     io::stdin().lock().read_line(&mut input).map_err(|e| e.to_string())?;
     let vocab = load_current(&root)?;
+    let sample_lock = vocab
+        .enums
+        .get("lock")
+        .and_then(|values| values.last())
+        .ok_or("no lock enum")?
+        .clone();
     let mut out = io::stdout().lock();
     if plant_metric {
         // Sprint 162: a MEASUREMENT_RECORDED whose metric the vocabulary does not name; its Rust type must refuse it,
@@ -87,7 +93,9 @@ fn run() -> Result<(), String> {
     for tag in vocab.harness_tags() {
         for with_optional in [true, false] {
             let mut payload = sample_payload(tag, with_optional, &vocab);
-            runtime_word_holder_only(&mut payload);
+            if tag.name == "MEASUREMENT_RECORDED" {
+                holder_and_lock_by_metric(&mut payload, &sample_lock);
+            }
             let payload = Value::Object(payload);
             let event = HarnessEvent::from_kind(&tag.name, &payload).map_err(|e| e.to_string())?;
             writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
@@ -102,7 +110,7 @@ fn run() -> Result<(), String> {
     for metric in vocab.enums.get("metric").ok_or("no metric enum")? {
         let mut payload = sample_payload(measurement, true, &vocab);
         payload.insert("metric".to_string(), Value::from(metric.as_str()));
-        runtime_word_holder_only(&mut payload);
+        holder_and_lock_by_metric(&mut payload, &sample_lock);
         let event =
             HarnessEvent::from_kind("MEASUREMENT_RECORDED", &Value::Object(payload)).map_err(|e| e.to_string())?;
         writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
@@ -133,6 +141,17 @@ fn run() -> Result<(), String> {
         let mut payload = sample_payload(measurement, true, &vocab);
         payload.insert("metric".to_string(), Value::from("runtime_word_hold_ns_p50"));
         payload.insert("holder".to_string(), Value::from(holder.as_str()));
+        holder_and_lock_by_metric(&mut payload, &sample_lock);
+        let event =
+            HarnessEvent::from_kind("MEASUREMENT_RECORDED", &Value::Object(payload)).map_err(|e| e.to_string())?;
+        writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
+    }
+    // every `lock` value once (P31) on MEASUREMENT_RECORDED, on a lock_* metric as E16 holds it (P32)
+    for lock in vocab.enums.get("lock").ok_or("no lock enum")? {
+        let mut payload = sample_payload(measurement, true, &vocab);
+        payload.insert("metric".to_string(), Value::from("lock_hold_ns_p50"));
+        holder_and_lock_by_metric(&mut payload, &sample_lock);
+        payload.insert("lock".to_string(), Value::from(lock.as_str()));
         let event =
             HarnessEvent::from_kind("MEASUREMENT_RECORDED", &Value::Object(payload)).map_err(|e| e.to_string())?;
         writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
@@ -150,15 +169,23 @@ fn run() -> Result<(), String> {
     out.flush().map_err(|e| e.to_string())
 }
 
-/// A sample MEASUREMENT_RECORDED's `holder` left out unless its metric is the runtime word's (E15, 0.13, P29): the
-/// samples' payloads give every optional field, and `holder` on another metric is the fault the records check names.
-fn runtime_word_holder_only(payload: &mut events::Map<String, Value>) {
-    let on_word = payload
-        .get("metric")
-        .and_then(Value::as_str)
-        .is_some_and(|m| m.starts_with("runtime_word_"));
-    if !on_word {
+/// A sample MEASUREMENT_RECORDED's `holder` left out unless its metric is one of the runtime word's four hold and wait
+/// metrics (E15, 0.13, P29), and its `lock` given exactly when its metric is a `lock_*` one (E16, 0.14, P32), `lock`
+/// taken as the enum's last value, `sample_lock`, where the payload left it out: the samples' payloads give every
+/// optional field or none, and a `holder` or `lock` where its constraint forbids it, or a `lock_*` metric with no
+/// `lock`, is the fault the records check names. `runtime_word_takings` (0.14, P30) has the runtime word's prefix and
+/// is not one of E15's metrics, so the prefix alone does not decide.
+fn holder_and_lock_by_metric(payload: &mut events::Map<String, Value>, sample_lock: &str) {
+    let metric = payload.get("metric").and_then(Value::as_str).unwrap_or("").to_string();
+    if !(metric.starts_with("runtime_word_hold_ns_") || metric.starts_with("runtime_word_wait_ns_")) {
         payload.remove("holder");
+    }
+    if metric.starts_with("lock_") {
+        payload
+            .entry("lock".to_string())
+            .or_insert_with(|| Value::from(sample_lock));
+    } else {
+        payload.remove("lock");
     }
 }
 

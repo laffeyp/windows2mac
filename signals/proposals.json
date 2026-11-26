@@ -499,6 +499,58 @@
     "into": "0.13",
     "grounds": "project — reviewer-4's tenth review, Low 2; the Decision \"When step 6 ends, amended\" (2026-11-24); crates/w2m_vm/src/bin/check_records.rs (the records check holds E1 and E6, and now E15); SDD — PRINCIPLES.md proposal taxonomy (INVARIANT_PROPOSED, Layer 7), AGENTS.md hard rule 2; practice — a field whose meaning depends on another is checked where both are read, not left to prose (the vocabulary's E2 and E5, conditional on a field's value)"
    }
+  },
+  {
+   "id": "P30",
+   "kind": "ENUM_EXTENDED",
+   "layer": 2,
+   "candidate": [
+    "metric += lock_hold_ns_p50, lock_hold_ns_p99, lock_wait_ns_p50, lock_wait_ns_p99, lock_takings, runtime_word_takings"
+   ],
+   "source": "BLACKBOARD Decision 2026-11-25 \"The vocabulary for each lock's hold and wait\" (reviewer-4's fourteenth review, Medium 1: G6's \"each lock's hold and wait\", and 0.13 names the runtime word's alone); Decision 2026-11-26 \"A card that moves a service class between locks measures the runtime word\" (the per-lock metrics, each leaf lock's takings, hold and wait, are Sprint 357's); Sprint 356's Rubber Duck Pass, observation 2 (a record counts a lock's takings only inside a variant string); sprints/sprint-357-vocabulary-0-14.md",
+   "rationale": "Change 1 has built four leaf locks, the heap (Sprint 343), the TLS and FLS slots (345), the handle table (355) and the sync objects (356), and G6 asks for each lock's hold and wait on the record; 0.13's metric names the runtime word's hold and wait alone (runtime_word_hold_ns_p50/p99, runtime_word_wait_ns_p50/p99). Four values for a leaf lock's hold and wait, the median and 99th percentile in nanoseconds (unit 'ns', as the runtime word's are written), and lock_takings, the times a leaf lock was taken (unit 'count', as wfe_exits and locked_model_steps are written); and runtime_word_takings, the runtime word's takings as a figure, which 0.13's records carry only in variant (Sprint 356's 1,576,566 and 69,264 on semaphore_units). The vocabulary types unit as text and ties no metric to a unit.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-11-26",
+    "by": "agent-resolved",
+    "into": "0.14",
+    "grounds": "project — the Decisions \"The vocabulary for each lock's hold and wait\" (2026-11-25) and \"A card that moves a service class between locks measures the runtime word\" (2026-11-26); crates/guest_runtime/src/services.rs Lock; SDD — PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version; ENUM_EXTENDED the alias 0.13's grammar_growth declares), AGENTS.md hard rule 2; practice — a distribution reported as its quantiles and a count kept as a number, not in a label (Prometheus naming practice, as P19, P20, P24 and P26)"
+   }
+  },
+  {
+   "id": "P31",
+   "kind": "PAYLOAD_FIELD_PROPOSED",
+   "layer": 2,
+   "candidate": [
+    "MEASUREMENT_RECORDED gains optional lock (enum:lock)",
+    "enum lock = heap, slots, handles, sync_objects, the leaf classes of the service table's Lock (crates/guest_runtime/src/services.rs), named as the classes are; a test holds the two equal"
+   ],
+   "source": "BLACKBOARD Decision 2026-11-25 \"The vocabulary for each lock's hold and wait\" (a lock field, an enum of the service table's Lock classes, a test holding the two lists equal); crates/guest_runtime/src/services.rs `pub enum Lock` (RuntimeWord, None, Heap, Slots, Handles, SyncObjects; Sprints 342, 343, 345, 355, 356); sprints/sprint-357-vocabulary-0-14.md",
+   "rationale": "The four lock_* hold and wait metrics and lock_takings (P30) measure one leaf lock each, and a reader dispatches on which, so the lock needs a field with a closed set, as holder is for the runtime word (P27); variant stays free text. The values are Lock's leaf classes, as the service table names them: heap, slots, handles, sync_objects. Lock's RuntimeWord keeps its own metrics (runtime_word_*, split by holder), and None is no lock, so neither is a value; the Decision's first form named runtime_word among the values, and the card leaves it out for that reason. A test reads Lock's variants from services.rs and the enum from the vocabulary in force, so a class Change 1 adds fails it until the vocabulary names it. Optional: a measurement not of a leaf lock omits it (E16).",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-11-26",
+    "by": "agent-resolved",
+    "into": "0.14",
+    "grounds": "project — the Decision \"The vocabulary for each lock's hold and wait\" (2026-11-25); services.rs Lock; sprints/sprint-357-vocabulary-0-14.md; SDD — PRINCIPLES.md proposal taxonomy (a new field and its enum bump the minor version), AGENTS.md hard rule 2; practice — a dimension with a closed set of values as an enum, not free text, so a reader dispatches on it (P27's form)"
+   }
+  },
+  {
+   "id": "P32",
+   "kind": "INVARIANT_PROPOSED",
+   "layer": 7,
+   "candidate": [
+    "E16: MEASUREMENT_RECORDED.lock is present (not null) exactly when metric is lock_hold_ns_p50, lock_hold_ns_p99, lock_wait_ns_p50, lock_wait_ns_p99 or lock_takings"
+   ],
+   "source": "BLACKBOARD Decision 2026-11-25 \"The vocabulary for each lock's hold and wait\" (an E16, lock only on the lock_* metrics); sprints/sprint-357-vocabulary-0-14.md (lock present exactly when metric is one of the five lock_* values, checked as E15 is); P29 (E15, holder only on the runtime word's metrics)",
+   "rationale": "P31's type lets lock ride on any metric, where it means nothing, and leaves a lock_* metric free to name no lock, where the figure names no lock it measures. Both directions are held: a lock_* figure without its lock cannot be read, unlike a runtime_word_* figure, which is the word's whole when it names no holder. The Rust records check holds E16 (crates/w2m_vm/src/bin/check_records.rs), its metrics the values of enums.metric its spec names, as it now reads E15's: runtime_word_takings (P30) carries the runtime word's prefix and is not one of E15's four.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-11-26",
+    "by": "agent-resolved",
+    "into": "0.14",
+    "grounds": "project — the Decision \"The vocabulary for each lock's hold and wait\" (2026-11-25); sprints/sprint-357-vocabulary-0-14.md; check_records.rs (the records check holds E1, E6 and E15, and now E16); SDD — PRINCIPLES.md proposal taxonomy (INVARIANT_PROPOSED, Layer 7), AGENTS.md hard rule 2; practice — a field whose meaning depends on another is checked where both are read, not left to prose (P29's form)"
+   }
   }
  ]
 }

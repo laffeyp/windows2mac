@@ -8,7 +8,7 @@
 
 [baseline]
 harness = "w2m"
-vocabulary = "0.13"
+vocabulary = "0.14"
 judge = "class-judge"
 implementation = "the Rust translator (crates/translator), run by the Rust case runner"
 reference = "the 21 Intel runs the frozen class records name (store/runs/class-runs.json)"

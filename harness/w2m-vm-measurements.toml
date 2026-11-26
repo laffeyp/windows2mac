@@ -9,7 +9,7 @@
 
 [baseline]
 harness = "w2m"
-vocabulary = "0.13"
+vocabulary = "0.14"
 host = "w2m-vm"
 implementation = "the Rust host, w2m-vm, on one vCPU and, for locked_race and the rows that say vcpus 2, on two, measured by run_measurements"
 
