@@ -169,7 +169,6 @@ pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
     write_u64(mem, at + E_STATUS, READY);
     write_u64(mem, at + E_TEB, thread.teb);
     write_u64(mem, at + E_VCPU, 0);
-    write_u64(mem, RUN_TABLE + RT_COUNT, n + 1);
     write_u64(mem, at + E_VSLOT, VECTOR_SLOTS + VECTOR_SLOT * n);
     if n == 0 {
         // `set_current` (3323-3326) for vCPU 0
@@ -177,6 +176,13 @@ pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
         write_u64(mem, guest.served.vcpu.monitor + CURRENT_ENTRY, MONITOR_VA + at);
         write_u64(mem, at + E_VCPU, 1);
     }
+    // the entry published by a Release store of the count after its words (Sprint 348; reviewer-4's eighteenth review,
+    // Low 2): `thread_storage.c`'s `tls_clear_everywhere` reads the count with acquire (`ldapr`) holding the slots' lock
+    // alone, then an entry's TEB and status. Every other reader of the count holds the runtime word, as this writer
+    // does (a CreateThread request is served under its caller's hold; the first thread is added before any vCPU runs):
+    // `threads.c`'s nine and `current_tid` here. The rest of the entry, `create_thread`'s registers, monitor words,
+    // state and suspend count, is read only under the word.
+    mem.store_u64(RUN_TABLE + RT_COUNT, n + 1, std::sync::atomic::Ordering::Release);
     guest.served.threads.insert(thread.tid, Thread { index: n, ..thread });
     // a new thread is ready and no vCPU holds it: a parked vCPU may take it (Sprint 327: the status is written here,
     // not through `set_status`, and a parked vCPU slept through a thread's creation)
@@ -1425,6 +1431,76 @@ pub(crate) mod tests {
         super::create_thread(&mut g, loaded.entry, 0, 0, 0, &mut || Ok(())).unwrap();
         let tid = super::create_thread(&mut g, loaded.entry, 0, 0, 0, &mut || Ok(())).unwrap();
         (g, tid)
+    }
+
+    /// A new thread's run-table entry is published by a `Release` store of the count after the entry's words (Sprint
+    /// 348; reviewer-4's eighteenth review, Low 2): `thread_storage.c`'s `tls_clear_everywhere` reads the count with
+    /// acquire under the slots' lock alone, not the runtime word, then each entry's TEB and status. The view's stores
+    /// are recorded while CreateThread's host half makes a third thread, and the count's are held to one `Release`
+    /// store of 3, after the last store to each word `add_thread` writes in the entry.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_new_threads_entry_is_published_by_a_release_store_of_the_count_after_its_words() {
+        use super::{E_STATUS, E_TEB, E_TID, E_VCPU, E_VSLOT, RT_COUNT, entry, read_u64};
+        use crate::concurrent_memory::record::{self, Access};
+        use guest_runtime::layout::RUN_TABLE;
+        use std::sync::atomic::Ordering::Release;
+
+        let (mut g, _) = guest_with_a_thread();
+        let start = g.served.threads.values().next().unwrap().start;
+        record::start();
+        let tid = super::create_thread(&mut g, start, 0, 0, 0, &mut || Ok(())).unwrap();
+        let log = record::take();
+        let index = g.served.threads[&tid].index;
+        let count = RUN_TABLE + RT_COUNT;
+        let stores: Vec<(usize, Access)> = log
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| a.covers(count, 8))
+            .map(|(i, a)| (i, *a))
+            .collect();
+        assert_eq!(
+            stores.iter().map(|(_, a)| *a).collect::<Vec<_>>(),
+            vec![Access::Store {
+                offset: count,
+                order: Release
+            }],
+            "the run table's count stored by these, not one Release store"
+        );
+        let published = stores[0].0;
+        let at = entry(index);
+        let mut last = Vec::new();
+        for (word, name) in [
+            (E_TID, "tid"),
+            (E_STATUS, "status"),
+            (E_TEB, "teb"),
+            (E_VSLOT, "vslot"),
+            (E_VCPU, "vcpu"),
+        ] {
+            let stored = log.iter().rposition(|a| a.covers(at + word, 8));
+            assert!(
+                stored.is_some_and(|i| i < published),
+                "entry {index}'s {name} stored at {stored:?}, not before the count's Release store at {published}"
+            );
+            last.push(format!("{name} {}", stored.unwrap()));
+        }
+        let mem = g.memory_view();
+        assert_eq!(
+            (
+                read_u64(mem, count),
+                index,
+                read_u64(mem, at + E_TID),
+                read_u64(mem, at + E_TEB)
+            ),
+            (3, 2, tid, g.served.threads[&tid].teb),
+            "the count, the entry's index, its tid and its TEB"
+        );
+        println!(
+            "add_thread's publication: {} stores recorded in CreateThread's host half; the count's one, a Release \
+             store of 3, at {published}; the entry's last stores: {}",
+            log.len(),
+            last.join(", ")
+        );
     }
 
     /// A thread has ended by its run table state, not its exit code (Sprint 218; reviewer-3's Medium 1): an ended thread

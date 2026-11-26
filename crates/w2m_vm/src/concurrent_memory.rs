@@ -118,6 +118,11 @@ impl<'a> ConcurrentGuestMemory<'a> {
 
     /// Copies `bytes` to `offset`, by relaxed atomic stores.
     pub fn write(&self, offset: u64, bytes: &[u8]) {
+        #[cfg(test)]
+        record::note(record::Access::Copy {
+            offset,
+            len: bytes.len(),
+        });
         let to = self.at(offset, bytes.len());
         let (n, mut i) = (bytes.len(), 0);
         // SAFETY (each store): as `read`'s loads
@@ -217,6 +222,71 @@ impl<'a> ConcurrentGuestMemory<'a> {
         );
         // SAFETY: as `atomic_u32`'s
         unsafe { AtomicU64::from_ptr(p.cast()) }
+    }
+
+    /// `atomic_u64(offset).store(value, order)` (Sprint 348): a word another vCPU reads outside the lock its writer
+    /// holds, stored `Release` after the words it publishes, as the run table's count is (`threads::add_thread`). The
+    /// crate's tests record the store with its ordering, and every `write` before and after it.
+    pub fn store_u64(&self, offset: u64, value: u64, order: std::sync::atomic::Ordering) {
+        #[cfg(test)]
+        record::note(record::Access::Store { offset, order });
+        self.atomic_u64(offset).store(value, order);
+    }
+}
+
+/// The view's stores in the calling thread, in order, while a test records them (Sprint 348): a test reads the order
+/// of a function's stores through the code path itself, not its source text.
+#[cfg(test)]
+#[cfg_attr(
+    not(all(target_os = "macos", target_arch = "aarch64")),
+    allow(
+        dead_code,
+        reason = "its one reader, threads.rs' test, builds the runtime image with Xcode's clang"
+    )
+)]
+pub(crate) mod record {
+    use std::cell::RefCell;
+    use std::sync::atomic::Ordering;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) enum Access {
+        /// `write` (and `write_u32`, `write_u64`): relaxed stores of `len` bytes from `offset`
+        Copy { offset: u64, len: usize },
+        /// `store_u64`: one 8-byte atomic store of `order`
+        Store { offset: u64, order: Ordering },
+    }
+
+    impl Access {
+        /// Whether the access stores any of the `len` bytes from `offset`.
+        pub(crate) fn covers(&self, offset: u64, len: u64) -> bool {
+            let (at, n) = match *self {
+                Access::Copy { offset, len } => (offset, len as u64),
+                Access::Store { offset, .. } => (offset, 8),
+            };
+            at < offset + len && offset < at + n
+        }
+    }
+
+    thread_local! {
+        static LOG: RefCell<Option<Vec<Access>>> = const { RefCell::new(None) };
+    }
+
+    /// Recording begins on the calling thread, an empty log.
+    pub(crate) fn start() {
+        LOG.with(|l| *l.borrow_mut() = Some(Vec::new()));
+    }
+
+    /// Recording ends: the stores since `start`, in order.
+    pub(crate) fn take() -> Vec<Access> {
+        LOG.with(|l| l.borrow_mut().take().unwrap_or_default())
+    }
+
+    pub(super) fn note(access: Access) {
+        LOG.with(|l| {
+            if let Some(log) = l.borrow_mut().as_mut() {
+                log.push(access);
+            }
+        });
     }
 }
 
