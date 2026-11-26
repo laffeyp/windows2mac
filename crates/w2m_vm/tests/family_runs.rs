@@ -18,8 +18,10 @@
 //! build/family_runs/<family>-<run>-two-vcpus.txt and .stop, and each is held to its one-vCPU run's contract rows or
 //! held entry; a run the host refuses on two vCPUs is held instead by name to the refusal, in
 //! store/family_runs/two-vcpus-refused-2026-11-26.tsv: one that starts a child process to `MACHINE_ON_ONE` until the
-//! run-loop design's card 4f, and one whose family starts on the instruction clock to `vcpus_allowed`'s refusal, which
-//! `w2m-vm` writes as the run's stop, until the instruction clock's own card.
+//! run-loop design's card 4f. Until Sprint 360 a run whose family starts on the instruction clock was held to
+//! `vcpus_allowed`'s refusal of that clock; from Sprint 360 the clock stays on one vCPU and such a start runs on the wall
+//! clock above one (`w2m-vm`), and the two such runs, `processes`', start a child process too, so they are held to
+//! `MACHINE_ON_ONE`.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -1346,22 +1348,20 @@ fn state_of(root: &Path, c: &[&str], base: &Path, stop: &str) -> Option<String> 
 }
 
 /// The runs held on two vCPUs by name to the host's refusal (Sprint 351): of a child process until the run-loop
-/// design's card 4f, and of the instruction clock until its own card.
+/// design's card 4f (and of the instruction clock until Sprint 360, from which a family's start on it runs on the wall
+/// clock above one vCPU).
 const REFUSED: &str = "store/family_runs/two-vcpus-refused-2026-11-26.tsv";
 
-/// The two refusals a stop of `REFUSED` may be, as `w2m-vm --vcpus 2` writes them.
+/// The refusals a stop of `REFUSED` may be, as `w2m-vm --vcpus 2` writes them: one from Sprint 360, no family run
+/// reaching `vcpus_allowed`'s refusal of the instruction clock.
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-fn refusals() -> [String; 2] {
+fn refusals() -> [String; 1] {
     use w2m_vm::host_request::{HOST_KERNEL, MACHINE_ON_ONE};
-    [
-        // `Stop::HostRequest` of the kernel request (`HOST_KERNEL`) that would start a child
-        format!("HostRequest op {HOST_KERNEL}: {MACHINE_ON_ONE}"),
-        // `vcpus_allowed`'s refusal of a start on the instruction clock, written as the stop before any VM
-        w2m_vm::run::vcpus_allowed(2, Some(1), &[], false, true).unwrap_err(),
-    ]
+    // `Stop::HostRequest` of the kernel request (`HOST_KERNEL`) that would start a child
+    [format!("HostRequest op {HOST_KERNEL}: {MACHINE_ON_ONE}")]
 }
 
-/// Each stop `REFUSED` holds is one of the host's two refusals on two vCPUs, as `w2m-vm` names it (Sprint 351).
+/// Each stop `REFUSED` holds is one of the host's refusals on two vCPUs, as `w2m-vm` names it (Sprint 351).
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 #[test]
 fn the_refused_runs_are_held_to_the_hosts_refusals() {
@@ -1371,7 +1371,7 @@ fn the_refused_runs_are_held_to_the_hosts_refusals() {
     for ((family, run), stop) in refused {
         assert!(
             refusals.contains(&stop),
-            "{REFUSED}: {family} run {run} holds {stop:?}, neither of the host's refusals {refusals:?}"
+            "{REFUSED}: {family} run {run} holds {stop:?}, none of the host's refusals {refusals:?}"
         );
     }
 }
@@ -1455,7 +1455,7 @@ fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
         families.values().filter(|v| **v).count(),
         families.len()
     );
-    // each refused family by its refusal, the child process's naming card 4f, the instruction clock's the clock
+    // each refused family by its refusal, the child process's naming card 4f, any other by its stop
     let refused_count: usize = refused_by_family.values().sum();
     let by_family: Vec<String> = refused_by_family
         .iter()
@@ -1467,7 +1467,7 @@ fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
             let why = if stop.contains("card 4f") {
                 "a child process"
             } else {
-                "the instruction clock"
+                stop
             };
             format!("{f} {n}, {why}")
         })

@@ -420,8 +420,15 @@ mod run {
             Some(options) => family_options(&mut start, options)?,
             None => None,
         };
+        // a family's start on the instruction clock runs on the wall clock above one vCPU (Sprint 360): that clock stays
+        // on one vCPU (`vcpus_allowed`), as QEMU's icount runs its vCPUs in turn, and the batch run on several vCPUs is on
+        // the wall clock too (census G3); `--instruction-clock` asked by name is still refused below
+        if vcpus > 1 && !instruction_clock && start.instruction_clock.take().is_some() {
+            eprintln!("w2m-vm: the family's instruction clock runs on one vCPU; on {vcpus} vCPUs, the wall clock");
+        }
         // a refusal of the start's vCPUs, before any VM, is the run's stop when one is asked for (Sprint 351: the family
-        // runs on the instruction clock, refused on two vCPUs, held by name to it in the family test)
+        // runs on the instruction clock, refused on two vCPUs and held by name to it in the family test until Sprint 360,
+        // which runs them on the wall clock there)
         if let Err(why) = w2m_vm::run::vcpus_allowed(vcpus, lse2, &[], false, start.instruction_clock.is_some()) {
             if let Some(("--stop", file)) = measure {
                 fs::write(root().join(file), format!("{why}\n")).map_err(|e| format!("{file}: {e}"))?;

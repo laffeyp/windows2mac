@@ -1825,6 +1825,117 @@ fn the_lost_wakeup_guest_ends_inside_its_limit_on_two_vcpus() {
     );
 }
 
+/// The floor on each monotonic_clock thread's readings taken after the other's last reading moved, on two vCPUs (Sprint
+/// 360): a run below it read beside the other too little to judge the clock across vCPUs.
+const CLOCK_OVERLAP_FLOOR: u64 = 1_000;
+
+/// The monotonic_clock guest's instruction limit (Sprint 360): its two threads' 200,000 rounds each, about 30 x86
+/// instructions a round, well inside.
+const MONOTONIC_CLOCK_LIMIT: u64 = 200_000_000;
+
+/// Sprint 360 (its card's monotonicity judge, on the clock a run of several vCPUs takes, the wall clock):
+/// `tests/data/timed_waits/monotonic_clock`, two threads reading QueryPerformanceCounter 200,000 times each, each before
+/// every reading taking the other's last and its own, so a reading below one any thread took before counts in its
+/// `below`. QueryPerformanceCounter "does not go backward" and is "consistent across all processors in multi-core and
+/// multi-processor systems, even when measured on different threads or processes" (Microsoft Learn, "Acquiring
+/// high-resolution time stamps"). One run on one vCPU and 20 on two, each held to ExitProcess and "done" inside
+/// `MONOTONIC_CLOCK_LIMIT` and 60 s, both `below` 0; on two vCPUs both vCPUs ran and each thread saw the other's reading
+/// move at least `CLOCK_OVERLAP_FLOOR` times. Each run's figures are printed, and the failed runs counted before the
+/// assertion, so a plant's result says in how many of 21 it failed.
+#[test]
+fn the_wall_clock_never_reads_below_a_reading_taken_on_two_vcpus() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let data = fs::read(root.join("tests/data/timed_waits/monotonic_clock.exe")).unwrap();
+    let loaded = load(&data, None, "probe.exe").unwrap();
+    let program = &loaded.images[0];
+    let section = program
+        .pe
+        .sections
+        .iter()
+        .find(|s| s.name == ".clock")
+        .expect("monotonic_clock's .clock section");
+    let clock_va = program.base + u64::from(section.virtual_address);
+    let mut failed = Vec::new();
+    for (run, vcpus) in std::iter::once((0, 1)).chain((1..=20).map(|run| (run, 2))) {
+        let mut start = Start::console("probe.exe");
+        start.vcpus = vcpus;
+        let mut guest = guest_with(&root, &loaded, &start);
+        let vm = Vm::new(40).unwrap();
+        vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
+            .unwrap();
+        let out = run_compiling(
+            &mut guest,
+            &loaded,
+            &vm,
+            Some(Duration::from_secs(60)),
+            MONOTONIC_CLOCK_LIMIT,
+            &mut HostCompiler::default(),
+        )
+        .unwrap();
+        let at = guest.offset(clock_va).expect("the .clock section mapped");
+        // below, moved, first_low, first_seen, last: two words each, the main thread's first
+        let w: Vec<u64> = (0..10).map(|i| guest.memory_view().read_u64(at + 8 * i)).collect();
+        let (below, moved, first_low, first_seen, last) = (&w[0..2], &w[2..4], &w[4..6], &w[6..8], &w[8..10]);
+        let stdout = String::from_utf8_lossy(&guest.served.stdout).into_owned();
+        println!(
+            "monotonic_clock on {vcpus} vCPU(s), run {run}: stop {:?}, {} instructions, runs by vCPU {:?}, below \
+             {below:?}, moved {moved:?}, first reading below one seen {first_low:?} under {first_seen:?}, last \
+             readings {last:?}",
+            out.stop, out.executed, out.runs_by_vcpu
+        );
+        let ran_both = vcpus == 1 || (out.runs_by_vcpu.len() == 2 && out.runs_by_vcpu[1] > 0);
+        let overlapped = vcpus == 1 || moved.iter().all(|&m| m >= CLOCK_OVERLAP_FLOOR);
+        if out.stop != (Stop::ExitProcess { code: 0 })
+            || stdout != "done\n"
+            || below.iter().any(|&b| b != 0)
+            || !ran_both
+            || !overlapped
+        {
+            failed.push(format!(
+                "{vcpus} vCPU(s) run {run}: stop {:?}, output {stdout:?}, below {below:?} (first {first_low:?} under \
+                 {first_seen:?}), moved {moved:?} (floor {CLOCK_OVERLAP_FLOOR}), runs by vCPU {:?}",
+                out.stop, out.runs_by_vcpu
+            ));
+        }
+    }
+    assert!(
+        failed.is_empty(),
+        "monotonic_clock: {} of 21 runs failed (one on one vCPU, 20 on two): {failed:#?}",
+        failed.len()
+    );
+}
+
+/// Sprint 360: a family's start on the instruction clock, as the gates' two-vCPU family runs give it (`--start
+/// {"instruction_clock":true} --vcpus 2`), runs on the wall clock, which `w2m-vm` says on stderr; the instruction clock
+/// stays on one vCPU (`run::vcpus_allowed`). `monotonic_clock` so started, through the binary, 20 times: each run held
+/// to ExitProcess, its stderr naming the wall clock, and its output "done", no reading below one taken before. The
+/// failed runs are counted before the assertion.
+#[test]
+fn a_family_start_on_the_instruction_clock_reads_the_wall_clock_on_two_vcpus() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let program = root().join("tests/data/timed_waits/monotonic_clock.exe");
+    let start = ["--start".to_string(), r#"{"instruction_clock":true}"#.to_string()];
+    let mut failed = Vec::new();
+    for run in 1..=20 {
+        let (stopped, said, stderr) = program_through_w2m_vm("monotonic_clock", &program, &start, 2);
+        let wall = stderr.contains("the family's instruction clock runs on one vCPU; on 2 vCPUs, the wall clock");
+        println!(
+            "monotonic_clock through w2m-vm on 2 vCPUs, run {run}: stop {stopped:?}, output {said:?}, wall clock {wall}"
+        );
+        if stopped != "ExitProcess { code: 0 }" || said != "done\n" || !wall {
+            failed.push(format!(
+                "run {run}: stop {stopped:?}, output {said:?}, stderr {stderr:?}"
+            ));
+        }
+    }
+    assert!(
+        failed.is_empty(),
+        "monotonic_clock through w2m-vm on 2 vCPUs: {} of 20 runs failed: {failed:#?}",
+        failed.len()
+    );
+}
+
 /// The floor on each handle_values thread's rounds that saw the other's round count move, on two vCPUs (Sprint 355).
 const HANDLE_OVERLAP_FLOOR: u64 = 1_000;
 

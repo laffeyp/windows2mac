@@ -217,8 +217,9 @@ if [ $rust != none ]; then
   # options, the lookup's JSON object, as --start (`read -r` keeps the block's backslashes). From Sprint 351 (census
   # G2; reviewer-4's twentieth review, High 1) every run again on two vCPUs, `w2m-vm --vcpus 2`, its rows, stop and
   # stderr beside the one-vCPU run's as <family>-<run>-two-vcpus.*, which family_runs.rs holds to the one-vCPU run's
-  # rows or held entry, or by name to the host's refusal, of a child process until 4f or of the instruction clock
-  # until its card (store/family_runs/two-vcpus-refused-2026-11-26.tsv): `family_runs VCPUS SUFFIX`, the one-vCPU step first, as
+  # rows or held entry, or by name to the host's refusal of a child process until 4f (a family's start on the
+  # instruction clock runs on the wall clock on two vCPUs from Sprint 360)
+  # (store/family_runs/two-vcpus-refused-2026-11-26.tsv): `family_runs VCPUS SUFFIX`, the one-vCPU step first, as
   # before, and it alone clears the directory
   family_runs() {
   vcpus=$1

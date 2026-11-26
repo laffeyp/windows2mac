@@ -44,6 +44,7 @@ guest	handshake	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	heap_blocks	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	lost_wakeup	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	model_steps	ExitProcess { code: 0 }	ExitProcess	48743d4d4fd79694\nc00000917f800000\n
+guest	monotonic_clock	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	mutual_context	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	mutual	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	pingpong	ExitProcess { code: 0 }	ExitProcess	done\n

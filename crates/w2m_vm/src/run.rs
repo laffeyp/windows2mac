@@ -668,8 +668,11 @@ pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], child: boo
     if child {
         return Err(format!("{n} vCPUs refused: a child process runs on one"));
     }
-    // the C runtime's clock reads the running vCPU's own count (`process.c` 45; the per-vCPU pages design, "Not decided
-    // here"; Sprint 315)
+    // the C runtime's clock reads the running vCPU's own count (`process.c` 45; Sprint 315), and stays on one vCPU
+    // (Sprint 360, the per-vCPU pages design's "Not decided here" settled): the deterministic clock for tests, its
+    // threads taken in turn, as QEMU's `--icount` falls back to round robin ("System emulation will fall back to the
+    // original round robin approach if: ... enabling --icount mode", `docs/devel/multi-thread-tcg.rst`); a family's start
+    // on it runs on the wall clock above one vCPU (`w2m-vm`)
     if clock {
         return Err(format!(
             "{n} vCPUs refused: the instruction clock reads the running vCPU's own count"
