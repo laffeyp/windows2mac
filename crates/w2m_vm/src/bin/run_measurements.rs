@@ -9,25 +9,67 @@
 //!   that took it, as `runtime_word_hold_ns_p50/p99` and `runtime_word_wait_ns_p50/p99` (nearest rank over the exact
 //!   ticks), the takings an exit interrupted apart;
 //! - `--wfe-probe`: `wfe_exits` for `wfe` and `wfi`, the WFx traps of 1,000 each.
+//! - step 6's two-vCPU run (Sprint 337): `probes/locked_race`, the binary `store/probe-runs/41326239822/probe.sha256`
+//!   names, with `--vcpus 2 --vcpu-figures`: `locked_model_steps` (`count`) and `turn_start_ns_p50` and
+//!   `turn_start_ns_p99` (`ns`, nearest rank over each turn's start), each with `vcpus` 2;
+//! - the capabilities `vcpus_allowed` and the run-loop design read (Sprint 337), one CAPABILITY_PROBED each:
+//!   `feat_lse2` and `feat_bbm_level2` from `w2m-vm --capabilities`, `guest_wfe_exit` from the WFE probe's run.
 //!
-//! The record: SESSION_INIT (purpose measurement), a MEASUREMENT_RECORDED per number, SESSION_COMPLETED. A child that
-//! fails, a guest whose served exits do not add up to its own exit tally less its last, or a timed run with more
-//! takings than the timing area holds or a time that ran backward fails the Producer by name.
+//! The record: SESSION_INIT (purpose measurement), a MEASUREMENT_RECORDED per number, the three CAPABILITY_PROBED,
+//! SESSION_COMPLETED. A child that fails, a guest whose served exits do not add up to its own exit tally less its last,
+//! a timed run with more takings than the timing area holds or a time that ran backward, or a two-vCPU run whose rows
+//! are not the Windows run's, one of whose vCPUs never ran, or which timed no turn fails the Producer by name.
 
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
+use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::Instant;
 
 use events::{
-    FiniteF64, HarnessU64, Id, Metric, SessionCompleted, SessionInit, SessionOutcome, SessionPurpose, VOCAB_VERSION,
-    Version, harness_line,
+    Capability, CapabilityOutcome, CapabilityProbed, FiniteF64, HarnessU64, Id, Metric, SessionCompleted, SessionInit,
+    SessionOutcome, SessionPurpose, VOCAB_VERSION, Version, harness_line,
 };
 use w2m_vm::monitor_code::Site;
-use w2m_vm::record::{measurement_line, quantile};
+use w2m_vm::record::{measurement_line, measurement_line_on, quantile};
 
 const GUESTS: [&str; 2] = ["qpc", "sleeper"];
+/// The Windows run whose `locked_race` binary and rows the two-vCPU run is held to (Sprint 331).
+const LOCKED_RACE_RUN: &str = "store/probe-runs/41326239822";
+/// The vCPUs of step 6's run.
+const TWO: u32 = 2;
+
+/// This host as the frozen Python's probes named it (`scripts/litmus_mp.py` 59 at the tag frozen-python-2026-10-29):
+/// `mac-<hw.model>-macos-<build>`, the build `sw_vers -buildVersion`.
+fn host_id() -> Result<String, String> {
+    let said = |program: &str, args: &[&str]| -> Result<String, String> {
+        let out = Command::new(program)
+            .args(args)
+            .output()
+            .map_err(|e| format!("{program}: {e}"))?;
+        if !out.status.success() {
+            return Err(format!("{program} {args:?}: {}", out.status));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+    Ok(format!(
+        "mac-{}-macos-{}",
+        said("sysctl", &["-n", "hw.model"])?,
+        said("sw_vers", &["-buildVersion"])?
+    ))
+}
+
+/// One CAPABILITY_PROBED of this host.
+fn probed(capability: Capability, host: &str, outcome: CapabilityOutcome, detail: String) -> String {
+    harness_line(&CapabilityProbed {
+        capability,
+        host_id: Id::new(host).expect("not empty"),
+        outcome,
+        detail,
+        execution_id: None,
+    })
+}
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -93,20 +135,25 @@ fn run() -> Result<(), String> {
             v.sort_unstable();
             kinds.insert(kind.clone(), v);
         }
-        // the served hvc exits are the run's own tally less its last exit, which ended the run unserved
-        let tally: u64 = json["exits"]
-            .as_object()
-            .ok_or("no exits")?
-            .values()
-            .filter_map(|v| v.as_u64())
-            .sum();
+        // the served hvc exits are the run's own tally less its last exit, which ended the run unserved, and less each
+        // flush stub's `hvc #15` (Sprint 305), an exit inside a split's service that the run loop tallies (`run.rs`'s
+        // turn start) and times as that service's part, not as its own (Sprint 337: sleeper's three flushes failed the
+        // run, 22 served of a tally of 26)
+        let exits = json["exits"].as_object().ok_or("no exits")?;
+        let tally: u64 = exits.values().filter_map(|v| v.as_u64()).sum();
+        let flushes = exits
+            .get(&w2m_vm::monitor_code::HVC_TLB_FLUSHED.to_string())
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         let served: u64 = kinds
             .iter()
             .filter(|(k, _)| k.starts_with("hvc "))
             .map(|(_, v)| v.len() as u64)
             .sum();
-        if served + 1 != tally {
-            return Err(format!("{guest}: {served} served hvc exits, the run's tally {tally}"));
+        if served + 1 + flushes != tally {
+            return Err(format!(
+                "{guest}: {served} served hvc exits and {flushes} flushes, the run's tally {tally}"
+            ));
         }
         let application = format!("timed-waits-{guest}");
         for (kind, ns) in &kinds {
@@ -230,6 +277,135 @@ fn run() -> Result<(), String> {
             Some(which),
         ));
     }
+
+    // step 6's two-vCPU run (Sprint 337): locked_race, its rows held to the Windows run's as `run_loop.rs`'s test
+    // holds them, so a run that lost an add is not measured
+    let binary = std::fs::read_to_string(root.join(LOCKED_RACE_RUN).join("probe.sha256"))
+        .map_err(|e| format!("{LOCKED_RACE_RUN}/probe.sha256: {e}"))?;
+    let program = format!("store/binaries/{}.exe", binary.trim());
+    let (race_output, race_figures) = (
+        "build/measurements/locked_race-stdout.txt",
+        "build/measurements/locked_race-vcpus.json",
+    );
+    let two = TWO.to_string();
+    child(
+        &root,
+        &[
+            &program,
+            "--vcpus",
+            &two,
+            "--output",
+            race_output,
+            "--vcpu-figures",
+            race_figures,
+        ],
+    )?;
+    let windows = std::fs::read(root.join(LOCKED_RACE_RUN).join("body-1.jsonl")).map_err(|e| e.to_string())?;
+    if std::fs::read(root.join(race_output)).map_err(|e| format!("{race_output}: {e}"))? != windows {
+        return Err(format!(
+            "locked_race on {TWO} vCPUs: its rows are not Windows run {LOCKED_RACE_RUN}'s"
+        ));
+    }
+    let figures: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join(race_figures)).map_err(|e| format!("{race_figures}: {e}"))?,
+    )
+    .map_err(|e| format!("{race_figures}: {e}"))?;
+    // the count the run was given, which every two-vCPU row carries; nonzero by type (E14)
+    let vcpus = figures["vcpus"]
+        .as_u64()
+        .and_then(NonZeroU64::new)
+        .ok_or(format!("{race_figures}: no vCPU count above 0"))?;
+    let runs: Vec<u64> = serde_json::from_value(figures["runs_by_vcpu"].clone()).map_err(|e| e.to_string())?;
+    if runs.len() as u64 != vcpus.get() || runs.contains(&0) {
+        return Err(format!(
+            "locked_race on {vcpus} vCPUs: runs by vCPU {runs:?}, a vCPU that never ran"
+        ));
+    }
+    let locked = figures["locked_steps"]
+        .as_u64()
+        .ok_or(format!("{race_figures}: no locked steps"))?;
+    let mut turns: Vec<u64> = serde_json::from_value(figures["turn_start_ns"].clone()).map_err(|e| e.to_string())?;
+    if turns.is_empty() {
+        return Err(format!("locked_race on {vcpus} vCPUs: no turn's start timed"));
+    }
+    turns.sort_unstable();
+    let race = "locked-race";
+    lines.push(measurement_line_on(
+        vcpus,
+        "locked-race-locked-model-steps",
+        Metric::LockedModelSteps,
+        locked as f64,
+        "count",
+        race,
+        None,
+    ));
+    let n = turns.len();
+    for (metric, q, name) in [
+        (Metric::TurnStartNsP50, 0.5, "p50"),
+        (Metric::TurnStartNsP99, 0.99, "p99"),
+    ] {
+        lines.push(measurement_line_on(
+            vcpus,
+            &format!("locked-race-turn-start-ns-{name}"),
+            metric,
+            quantile(&turns, q) as f64,
+            "ns",
+            race,
+            Some(&format!("{n} turns")),
+        ));
+    }
+
+    // the capabilities `vcpus_allowed` and the run-loop design read (Sprint 337; vocabulary 0.13, P28)
+    let host = host_id()?;
+    let capabilities: serde_json::Value = serde_json::from_str(child(&root, &["--capabilities"])?.trim())
+        .map_err(|e| format!("w2m-vm --capabilities: {e}"))?;
+    let (outcome, detail) = match capabilities["feat_lse2"].as_i64() {
+        Some(1) => (CapabilityOutcome::Present, "hw.optional.arm.FEAT_LSE2 is 1".to_string()),
+        Some(v) => (CapabilityOutcome::Absent, format!("hw.optional.arm.FEAT_LSE2 is {v}")),
+        // a kernel that names no such feature shows no absence (v0.2 8.1)
+        None => (
+            CapabilityOutcome::NotEstablished,
+            "sysctlbyname names no hw.optional.arm.FEAT_LSE2".to_string(),
+        ),
+    };
+    lines.push(probed(
+        Capability::FeatLse2,
+        &host,
+        outcome,
+        format!("{detail} (sysctlbyname), which vcpus_allowed reads before it admits a second vCPU"),
+    ));
+    let level = capabilities["feat_bbm_level"]
+        .as_u64()
+        .ok_or("w2m-vm --capabilities: no FEAT_BBM level")?;
+    let register = capabilities["id_aa64mmfr2_el1"].as_str().unwrap_or("unread");
+    lines.push(probed(
+        Capability::FeatBbmLevel2,
+        &host,
+        if level >= 2 {
+            CapabilityOutcome::Present
+        } else {
+            CapabilityOutcome::Absent
+        },
+        format!(
+            "FEAT_BBM level {level}: ID_AA64MMFR2_EL1 {register}, bits 55:52, as a vCPU reads it; level 2 or more lets \
+             a change of block size alone go without a break"
+        ),
+    ));
+    let wfe = probe["wfe"]["exits"].as_u64().ok_or("the probe gave no wfe exits")?;
+    lines.push(probed(
+        Capability::GuestWfeExit,
+        &host,
+        if wfe > 0 {
+            CapabilityOutcome::Present
+        } else {
+            CapabilityOutcome::Absent
+        },
+        format!(
+            "the WFE probe's run of 1,000 WFE ended at its hvc #0 with {wfe} WFx traps (ESR EC 0x01) to the host; its \
+             run of 1,000 WFI with {}",
+            probe["wfi"]["exits"]
+        ),
+    ));
 
     let zero = HarnessU64::new(0).expect("0");
     lines.push(harness_line(&SessionCompleted {

@@ -41,6 +41,7 @@ mod layout_constants;
 mod ledger;
 mod litmus;
 mod loader_lists;
+mod measurements_record;
 mod monitor_code_in_vm;
 mod private_chain;
 mod process_area;

@@ -470,6 +470,35 @@ pub fn measurement_line(
     application: &str,
     variant: Option<&str>,
 ) -> String {
+    // absent, meaning one vCPU and no holder (0.13, P25 and P27): the batch run and `run_measurements`' one-vCPU
+    // measurements, this function's callers, run on one vCPU and split no hold by holder
+    measurement(measurement_id, metric, value, unit, application, variant, None)
+}
+
+/// A MEASUREMENT_RECORDED line as `measurement_line` writes one, of a run on `vcpus` vCPUs (Sprint 337): the one site
+/// that writes `vcpus`, its count taken as `NonZeroU64`, so a count of 0, which the field's `u64` admits and E14
+/// forbids (0.13, P25), cannot be written.
+pub fn measurement_line_on(
+    vcpus: std::num::NonZeroU64,
+    measurement_id: &str,
+    metric: events::Metric,
+    value: f64,
+    unit: &str,
+    application: &str,
+    variant: Option<&str>,
+) -> String {
+    measurement(measurement_id, metric, value, unit, application, variant, Some(vcpus))
+}
+
+fn measurement(
+    measurement_id: &str,
+    metric: events::Metric,
+    value: f64,
+    unit: &str,
+    application: &str,
+    variant: Option<&str>,
+    vcpus: Option<std::num::NonZeroU64>,
+) -> String {
     harness_line(&events::MeasurementRecorded {
         measurement_id: Id::new(measurement_id).expect("not empty"),
         metric,
@@ -481,9 +510,7 @@ pub fn measurement_line(
         artifact_state: events::ArtifactState::Cold,
         destination_profile_id: Id::new("w2m-vm").expect("not empty"),
         variant: variant.map(str::to_string),
-        // absent, meaning one vCPU and no holder (0.13, P25 and P27): the batch run and `run_measurements`, this
-        // function's callers, run on one vCPU and split no hold by holder
-        vcpus: None,
+        vcpus: vcpus.map(|n| HarnessU64::new(n.get()).expect("a vCPU count below 2^53")),
         holder: None,
     })
 }

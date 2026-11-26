@@ -1,6 +1,8 @@
 # Step 3's measurements (Sprint 163; docs/rust-port-plan-2026-10-24.md step 3, amended 2026-10-27): an exit's host time
 # by kind on qpc and sleeper, whether a guest WFE or WFI exits, and (Sprint 164) the runtime word's hold and wait times
-# from a second, timed run of each guest, as MEASUREMENT_RECORDED with vocabulary 0.11's metrics (P24). run_measurements makes no VM itself; it runs each measurement as a signed w2m-vm child. Run from the
+# from a second, timed run of each guest, as MEASUREMENT_RECORDED with vocabulary 0.11's metrics (P24); from Sprint 337
+# step 6's two-vCPU run of locked_race (locked_model_steps, turn_start_ns_p50/p99, vcpus 2) and three CAPABILITY_PROBED
+# (feat_lse2, feat_bbm_level2, guest_wfe_exit), vocabulary 0.13. run_measurements makes no VM itself; it runs each measurement as a signed w2m-vm child. Run from the
 # repository root after `cargo build --release`, on this Mac (Hypervisor.framework):
 #   uv run substrate run --file harness/w2m-vm-measurements.toml --root store/runs/w2m-vm-measurements-<ns> --strict
 
@@ -8,7 +10,7 @@
 harness = "w2m"
 vocabulary = "0.13"
 host = "w2m-vm"
-implementation = "the Rust host, w2m-vm, on one vCPU, measured by run_measurements"
+implementation = "the Rust host, w2m-vm, on one vCPU and, for locked_race and the rows that say vcpus 2, on two, measured by run_measurements"
 
 [[producer]]
 kind = "run_measurements"

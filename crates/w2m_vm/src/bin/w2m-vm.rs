@@ -16,6 +16,14 @@
 //!   prints `{"wfe": {"exits": n, "ended": bool}, "wfi": ...}`: the WFx traps (ESR EC 0x01, ISS bit 0 1 for WFE) the
 //!   framework gave, and whether the run reached its `hvc #0` before a one-second watchdog stopped it (a WFE or WFI that
 //!   does not exit and is not woken waits until then).
+//!
+//! Step 6's figures on a record (Sprint 337; `run_measurements` runs these too):
+//! - `w2m-vm <guest.exe> --vcpus <n> --output <file> --vcpu-figures <json>` also writes the run's vCPU count, each
+//!   vCPU's count of runs, its locked model steps and each turn's start in ns, as JSON: `{"vcpus": n, "runs_by_vcpu":
+//!   [r, ...], "locked_steps": s, "turn_start_ns": [ns, ...]}`.
+//! - `w2m-vm --capabilities` prints what `vcpus_allowed` and the run-loop design read of this host, as JSON:
+//!   `{"feat_lse2": v, "id_aa64mmfr2_el1": "0x...", "feat_bbm_level": l}`, `v` `hypervisor::feature("FEAT_LSE2")` (null
+//!   when the kernel names no such feature) and `l` bits 55:52 of the register as a vCPU reads it.
 
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
 fn main() {
@@ -143,6 +151,25 @@ mod run {
             result.insert(name.into(), entry.into());
         }
         println!("{}", serde_json::Value::Object(result));
+        Ok(())
+    }
+
+    /// `--capabilities` (Sprint 337): FEAT_LSE2 as `vcpus_allowed` reads it, and the FEAT_BBM level a vCPU reads in
+    /// `ID_AA64MMFR2_EL1.BBM`, bits 55:52, as Sprint 303's test reads it (`crates/hypervisor/tests/id_registers.rs`).
+    fn capabilities() -> Result<(), String> {
+        let vm = Vm::new(40).map_err(|e| format!("{e:?}"))?;
+        let vcpu = Vcpu::new(&vm).map_err(|e| format!("{e:?}"))?;
+        let mmfr2 = vcpu
+            .sys_reg(hypervisor::sys_reg::ID_AA64MMFR2_EL1)
+            .map_err(|e| format!("ID_AA64MMFR2_EL1: {e:?}"))?;
+        println!(
+            "{}",
+            serde_json::json!({
+                "feat_lse2": hypervisor::feature("FEAT_LSE2"),
+                "id_aa64mmfr2_el1": format!("{mmfr2:#018x}"),
+                "feat_bbm_level": (mmfr2 >> 52) & 0xF,
+            })
+        );
         Ok(())
     }
 
@@ -335,10 +362,14 @@ mod run {
         if args == ["--wfe-probe"] {
             return wfe_probe();
         }
-        let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json> | --stop \
-                     <tsv>] [--beside <name> <file>] [--exit-ledger <tsv>] [--instruction-clock] \
-                     | w2m-vm --game <directory> <program.exe> --output <file> --stop <tsv> [--log-lines <count> \
-                     --main-thread-calls <tsv>] [--time-compile] [--instructions-at-compile] | w2m-vm --wfe-probe";
+        if args == ["--capabilities"] {
+            return capabilities();
+        }
+        let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json> | \
+                     --vcpu-figures <json> | --stop <tsv>] [--vcpus <count>] [--beside <name> <file>] [--exit-ledger \
+                     <tsv>] [--instruction-clock] | w2m-vm --game <directory> <program.exe> --output <file> --stop \
+                     <tsv> [--log-lines <count> --main-thread-calls <tsv>] [--time-compile] [--instructions-at-compile] \
+                     | w2m-vm --wfe-probe | w2m-vm --capabilities";
         if let [flag, page_fd, memory_fd, slot] = args.as_slice()
             && flag == "--child"
         {
@@ -371,7 +402,10 @@ mod run {
             [guest, flag, output] if flag == "--output" => (guest, output, None),
             [guest, flag, output, which, file]
                 if flag == "--output"
-                    && (which == "--serve-times" || which == "--runtime-word" || which == "--stop") =>
+                    && (which == "--serve-times"
+                        || which == "--runtime-word"
+                        || which == "--vcpu-figures"
+                        || which == "--stop") =>
             {
                 (guest, output, Some((which.as_str(), file)))
             }
@@ -459,6 +493,15 @@ mod run {
                 let exits: serde_json::Map<String, serde_json::Value> =
                     out.exits.iter().map(|(k, v)| (k.to_string(), (*v).into())).collect();
                 serde_json::json!({ "kinds": kinds, "exits": exits })
+            } else if which == "--vcpu-figures" {
+                // step 6's figures (Sprint 337): the count the run was given, each vCPU's runs (a vCPU that never ran
+                // shows 0), the locked model steps and each turn's start
+                serde_json::json!({
+                    "vcpus": vcpus,
+                    "runs_by_vcpu": out.runs_by_vcpu,
+                    "locked_steps": out.locked_steps,
+                    "turn_start_ns": out.turn_start_ns,
+                })
             } else {
                 // the runtime word's takings (Sprint 164): each as [site, wait start, taken, released, the exit count
                 // at each of the three], counter ticks
