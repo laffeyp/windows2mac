@@ -47,6 +47,7 @@ guest	pingpong	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	qpc	ExitProcess { code: 0 }	ExitProcess	00001abcd9b5ed09\n
 guest	qpc2	ExitProcess { code: 0 }	ExitProcess	00001abcd9c0b5c6\n
 guest	readied	ExitProcess { code: 0 }	ExitProcess	done\n
+guest	shared_close	ExitProcess { code: 0 }	ExitProcess	closed\ndone\n
 guest	sleeper	ExitProcess { code: 0 }	ExitProcess	woke\ndone\n
 guest	spinchild	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	statsize	ExitProcess { code: 0 }	ExitProcess	done\n

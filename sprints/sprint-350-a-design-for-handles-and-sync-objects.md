@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 350
-status: active
+status: done
 phase: 6
 pass_kind: docs
 ---
@@ -149,4 +149,57 @@ behavior is undefined." The close is therefore the guest's error. The damage to 
 
 ## result
 
-GATES-LINE
+- **The design:** `docs/design-handles-and-sync-objects-2026-11-26.md`, its lines those of 23b860e79.
+  - The state: 17 items, eight arrays and words of `sync_objects.c` (45-48, 183-184, 238-239), each with its line.
+  - The services: 43 across 8 files (`sync_objects.c`, `file.c`, `runtime.c`, `console.c`, `processes.c`,
+    `threads.c`, `thread_queries.c`, `token.c`), each with its line, how it uses the table, the sync state it touches,
+    and whether it makes a host request. Each wait's way of blocking is stated.
+  - The lifetime rule: two counts, `handles` and `refs`. A lookup and every blocked wait's entry hold a reference, and
+    an entry is freed only at `refs` 0. Its grounds are quoted: Microsoft Learn's Life Cycle of an Object,
+    ObReferenceObjectByHandle and CloseHandle; ReactOS `ob/obwait.c` 398-437 at 3e6033a6; Wine `server/thread.c` 1102
+    and 1063 at 274fcfa9.
+  - The locks: one `handles_lock` and one `sync_lock`, both leaves; the order as built; the woken mark; the classes
+    `Lock::Handles` (10 services) and `Lock::SyncObjects` (8). Every other service stays on the runtime word.
+  - Cards 2 to 5 follow, with the judges and plants each needs.
+  - `target/release/design_check`: "design_check: 8 plans and designs state the goal and the systems", exit 0. The 8
+    are the 15 matching names under `docs/` less the 7 of `HISTORY`, the new design among them.
+- **The defect and its fix** (the amendment):
+  - `sync_objects.c`: `unref`, `waiter_add`, and the references in `waiter_drop`, `waiters_drop` and `all_drop`.
+  - `handles` counted apart, so the host's closes stay at the last handle's CloseHandle (reviewer-4's nineteenth
+    review, Medium 1).
+  - `signaled()` reads a SHARED_EVENT or PROCESS with no handle left as unsignaled.
+  - `wait_one`'s retry waits on its entry's object, and its WAIT_FAILED path clears the deadline.
+  - The return paths of `wait_one` and WaitForMultipleObjects, the stop at 421 among them, are listed in the comments
+    above each.
+  - `crates/guest_runtime/tests/python_image.rs` names `sync_objects.c` in `DEPARTURES`.
+- **The Windows run:** run 45797800625 (`windows-2025`, 10.0.26100.33828, an Intel Xeon Platinum 8573C),
+  `probes/wait_closed_handle` as committed 1decadd51, three runs, each exit 0 in 1.031, 1.023 and 1.031 s, the bodies
+  alike byte for byte:
+  `{"s":"main","closed":1,"made":1,"released":1,"previous":0,"wait":0,"ended":0}` and
+  `{"s":"worker","wait":258,"error":0}`. Its files are in `store/probe-runs/45797800625/` and its binary in
+  `store/binaries/f0ae78e5b964….exe`. The walk fixture gained its entry, 293 instructions, all walked, 69 block starts;
+  `fixtures.rs` now reads 286 images and 643,637 instructions.
+- **Before the fix:** the stored binary through the test on 23b860e79's `sync_objects.c`, in a scratch worktree, failed
+  "wait_closed_handle on 1 vCPUs, fields unlike Windows' [\"main.wait: 258 against 0\"]". Its rows read
+  `"wait":258` for main and `"wait":0` for the worker. A scratch mingw build gave the same rows on 1 vCPU and on 2.
+- **The tests:**
+  - `run_loop::a_semaphore_made_after_a_waited_handle_is_closed_keeps_its_unit_on_one_and_two_vcpus`: main's row held
+    to Windows' on 1 vCPU and on 2.
+  - `run_loop::the_hosts_close_of_a_shared_event_comes_at_its_last_handle_while_a_wait_holds_it`: the new guest
+    `tests/data/timed_waits/shared_close`, with the exit ledger's KERNEL_CLOSE row before the first HOST_WRITE row;
+    its stop and output are held in `store/batch_run/first-stop-2026-10-28.tsv`.
+  - Both pass.
+- **Plant 1** "docs/design-handles-and-sync-objects-2026-11-26.md: no \"## Against the systems that solved it\"
+  section": the section removed on a scratch copy of `docs/` and `BLACKBOARD.md`; `design_check --root` exit 1. Its
+  reach was first read on a scratch copy of `design-translation-cache-2026-10-30.md`.
+- **Plant 2** "wait_closed_handle on 1 vCPUs, fields unlike Windows' [\"main.wait: 258 against 0\"]": `waiter_add`'s
+  `o->refs++;` replaced by `(void)0;` in a scratch worktree's copy, one line for one. Run on the first fix and again
+  on the final one.
+- **Plant 3** "the host's close of the shared event (ledger row None) before the write of \"closed\" (row Some(24))":
+  the host's closes moved back from `w2m_object_close` into `unref`, in a scratch worktree's copy. The other test
+  passed.
+- **The gates:**
+  - The first run passed (10:14:12Z) on the tree before the nineteenth review's changes.
+  - The second failed at 10:36Z on `batch_run::the_batch_run_and_the_guests_stop_where_held`: shared_close's stop was
+    not yet held.
+  - The final run: `exit 0 in 364 s	default	2026-11-26T10:43:12Z	sprint 350	1decadd51d21963fecb7523c7ec27a0b22405f10	53c8ff87d490539daac0c75eda93c88583031ca210a30c03e31f08f6931a24ff	root=b68c9e35c661badc36997ec812f9b64c5fc64e5b	rust=all python=0 samples=0	base=068d573dab6b4e130b0af8317acf7133076a415a`

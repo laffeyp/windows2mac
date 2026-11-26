@@ -1610,6 +1610,114 @@ fn the_first_thread_uses_an_expansion_index_another_thread_allocated_on_one_and_
     }
 }
 
+/// Sprint 350 (reviewer-4's nineteenth review, Medium 1): `tests/data/timed_waits/shared_close`. A worker waits for all
+/// of a named event, the host's, and an unnamed one; the main thread closes the named event's only handle, writes
+/// "closed", sets the unnamed event, writes "done" and ends the process. The worker's entry still holds the named event,
+/// yet the host's close of it (W2M_HOST_KERNEL 33, W2M_KERNEL_CLOSE 6) comes at CloseHandle, before "closed" is written
+/// (W2M_HOST_WRITE 1), as it did before the sprint: the exit ledger's request rows hold the order. The set, which offers
+/// the wait-all its objects, asks the host nothing of the closed event (its id is no longer an event there), and the run
+/// ends.
+#[test]
+fn the_hosts_close_of_a_shared_event_comes_at_its_last_handle_while_a_wait_holds_it() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let (loaded, mut guest) = guest_for(&root, "shared_close");
+    let path = std::env::temp_dir().join(format!("w2m-shared-close-{}.tsv", std::process::id()));
+    guest.exit_ledger = Some(w2m_vm::exit_ledger::Ledger::create(&path).unwrap());
+    let out = run(&mut guest, &loaded, &mut HostCompiler::default());
+    let stdout = String::from_utf8_lossy(&guest.served.stdout).into_owned();
+    guest.exit_ledger = None;
+    let ledger = fs::read_to_string(&path).unwrap();
+    let _ = fs::remove_file(&path);
+    assert_eq!(
+        out.stop,
+        Stop::ExitProcess { code: 0 },
+        "shared_close's stop; stdout {stdout:?}"
+    );
+    assert_eq!(stdout, "closed\ndone\n", "shared_close's output");
+    let requests: Vec<(usize, &str, &str)> = ledger
+        .lines()
+        .enumerate()
+        .filter_map(|(n, l)| {
+            let f: Vec<&str> = l.split('\t').collect();
+            (f.len() > 6 && f[1] == "hvc 8").then(|| (n, f[5], f[6]))
+        })
+        .collect();
+    let close = requests
+        .iter()
+        .find(|(_, op, a0)| *op == "21" && *a0 == "6")
+        .map(|r| r.0);
+    let write = requests.iter().find(|(_, op, _)| *op == "1").map(|r| r.0);
+    assert!(
+        close.is_some() && write.is_some() && close < write,
+        "the host's close of the shared event (ledger row {close:?}) before the write of \"closed\" (row {write:?})"
+    );
+}
+
+/// Sprint 350's amendment (found by builder-350's reading of `sync_objects.c`): `probes/wait_closed_handle`. A worker
+/// waits 1000 ms on a semaphore; the main thread closes its only handle, makes a new semaphore, releases it once and
+/// waits on it with a zero timeout. The main thread's row, which Windows defines, is held on one vCPU and on two to the
+/// Windows runner's (run 45797800625, three runs alike), field by field, each unlike field named; the worker's row is
+/// recorded and not compared, Microsoft Learn calling a wait on a handle closed meanwhile undefined (the runner's worker
+/// timed out, 258, as w2m's now does, its entry holding the closed semaphore). Before the fix the closed semaphore
+/// was freed under the worker's waiter entry, the new one took its index, the release went to the stale entry, and the
+/// main thread's wait answered 258 on one vCPU and on two.
+#[test]
+fn a_semaphore_made_after_a_waited_handle_is_closed_keeps_its_unit_on_one_and_two_vcpus() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let run = root.join("store/probe-runs/45797800625");
+    let row_of = |body: &str, name: &str| -> serde_json::Map<String, serde_json::Value> {
+        let line = body
+            .lines()
+            .find(|l| l.starts_with(&format!("{{\"s\":\"{name}\",")))
+            .unwrap_or_else(|| panic!("no {name} row in {body}"));
+        match serde_json::from_str(line).unwrap() {
+            serde_json::Value::Object(m) => m,
+            other => panic!("a row not an object: {other}"),
+        }
+    };
+    let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
+    let expected = row_of(&windows, "main");
+    for i in [2, 3] {
+        let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
+        assert_eq!(
+            row_of(&body, "main"),
+            expected,
+            "the Windows run's body-{i} main row against body-1's"
+        );
+    }
+    let binary = fs::read_to_string(run.join("probe.sha256")).unwrap();
+    let program = root.join(format!("store/binaries/{}.exe", binary.trim()));
+    for vcpus in [1, 2] {
+        let (stopped, said, stderr) = program_through_w2m_vm("wait_closed_handle", &program, &[], vcpus);
+        eprintln!("wait_closed_handle on {vcpus} vCPUs:\n{said}");
+        assert_eq!(
+            stopped, "ExitProcess { code: 0 }",
+            "wait_closed_handle on {vcpus} vCPUs; its rows {said}; stderr {stderr}"
+        );
+        let names: Vec<&str> = said.lines().map(|l| l.split('"').nth(3).unwrap_or("?")).collect();
+        assert_eq!(names, ["main", "worker"], "wait_closed_handle's rows on {vcpus} vCPUs");
+        let seen = row_of(&said, "main");
+        let unlike: Vec<String> = expected
+            .iter()
+            .filter(|(k, v)| seen.get(*k) != Some(v))
+            .map(|(k, v)| {
+                let had = seen.get(k).map_or("none".into(), |x| x.to_string());
+                format!("main.{k}: {had} against {v}")
+            })
+            .collect();
+        assert!(
+            unlike.is_empty(),
+            "wait_closed_handle on {vcpus} vCPUs, fields unlike Windows' {unlike:?}"
+        );
+        assert_eq!(
+            seen, expected,
+            "wait_closed_handle's main row on {vcpus} vCPUs as on Windows"
+        );
+    }
+}
+
 /// Deferred (Sprint 329), met at Sprint 330: the single-process guests no other test runs on two vCPUs, through
 /// `w2m-vm`, each held to its stop and output in `store/batch_run/first-stop-2026-10-28.tsv` (`qpc2`'s clock reading by
 /// its form, as `batch_run.rs` holds it).

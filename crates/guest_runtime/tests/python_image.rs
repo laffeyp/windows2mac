@@ -67,7 +67,7 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 
 /// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
 /// is the frozen one with these changes, which their own tests judge (Sprint 272).
-const DEPARTURES: [(&str, &str); 7] = [
+const DEPARTURES: [(&str, &str); 8] = [
     (
         "tools/guest_runtime/block_compiler.c",
         "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
@@ -82,6 +82,13 @@ const DEPARTURES: [(&str, &str); 7] = [
         "Sprint 341: w2m_logged's counts by atomic add and each record at the index its add reserved, for callers on \
          several vCPUs at once; Sprint 342: w2m_unimplemented holds the runtime word before its host request, which \
          a service of lock class none makes without it",
+    ),
+    (
+        "tools/guest_runtime/sync_objects.c",
+        "Sprint 350: a blocked wait's entry holds a reference to its object, so CloseHandle of its last handle leaves \
+         it alive and its index unused until the wait ends, its handles counted apart so the host's closes stay at the \
+         last handle's close; a retried WaitForSingleObject waits on its entry's object; the WAIT_FAILED path clears \
+         the deadline",
     ),
     (
         "tools/guest_runtime/thread_storage.c",
