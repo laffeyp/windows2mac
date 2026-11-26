@@ -1454,14 +1454,15 @@ fn each_threads_last_error_tls_value_and_id_stay_its_own_on_two_vcpus() {
 /// Windows runner's (run 45763850660, three runs alike but `tls.overlap`): `duplicate` 0 and `stale` 0. `tls.overlap`
 /// counts the rounds in which a thread saw the other's round count move: measured before the floor on the slots' lock,
 /// 191 and 191 in each of 21 runs on one vCPU, where the loops meet only at the time slices' switches, and on two, in
-/// 71 runs, 3,072 to 19,633, with one run at 0 and 0 (one thread's 20,000 rounds done before the other's began). On
+/// 71 runs, 3,072 to 19,633, with one run at 0 and 0 (one thread's 20,000 rounds done before the other's began); with
+/// Sprint 346's code sync, 19,581 to 19,894 in 100 runs of this test and 18,726 to 19,900 in 100 runs of the probe. On
 /// two vCPUs each is held above `OVERLAP_FLOOR`, which shows the loops ran at once. With the seven
 /// services off the runtime word and no lock, five runs of five on two vCPUs stopped at TlsFree of an index the other
-/// thread had freed ("TlsFree argument form 0x5"), two threads given one index. Ignored until card 346: on two vCPUs
-/// the probe stops at a guest runtime fault inside the code cache ("ESR 0x2000000 (EC 0x0)") in some runs, on HEAD's
-/// C and service classes before this card as after it; it is run by hand, `--run-ignored only`.
+/// thread had freed ("TlsFree argument form 0x5"), two threads given one index. Ignored from Sprint 345 to 346: on two
+/// vCPUs the probe stopped at a guest runtime fault inside the code cache ("ESR 0x2000000 (EC 0x0)") in 30 of 100 runs,
+/// a vCPU branching to a new block's entry before the block's words reached its instruction fetch; Sprint 346 syncs the
+/// words before the entry is published and puts an ISB before the dispatcher's branch, and the test runs in the gates.
 #[test]
-#[ignore = "Sprint 346: the code-cache fault, ELR in MONITOR_VA + 0x640a0..0x68134, EC 0"]
 fn two_threads_taking_and_freeing_tls_and_fls_slots_at_once_never_share_one_on_two_vcpus() {
     const OVERLAP_FLOOR: u64 = 1_000;
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());

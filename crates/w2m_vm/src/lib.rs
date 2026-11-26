@@ -74,6 +74,12 @@ pub const RETURN_STUB: u64 = 0x02000;
 /// memory again; at `hvc #15` the host puts it back where it stopped.
 pub const FLUSH_STUB: u64 = 0x02010;
 pub const FLUSH_STUB_END: u64 = FLUSH_STUB + 4 * 5;
+/// The code sync a vCPU is run through on several vCPUs before the host publishes a block's dispatch entry (Sprint
+/// 346): the words in [x0, x1) cleaned to the point of unification and invalidated from every vCPU's instruction cache,
+/// each completed by `dsb ish`, then `isb; hvc #16`; at `hvc #16` the host puts the vCPU back where it stopped. In the
+/// same free area, before the tests' stubs at `RETURN_STUB + 0x100`.
+pub const CODE_SYNC_STUB: u64 = 0x02030;
+pub const CODE_SYNC_STUB_END: u64 = 0x02100;
 /// The native helper operands (vm_backend 126): 32 bytes the skeleton's calls write their results to.
 pub const NATIVE_OPERANDS: u64 = 0x300;
 

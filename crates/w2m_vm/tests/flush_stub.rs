@@ -9,7 +9,7 @@ use crate::common::*;
 use hypervisor::{Reg, Vcpu, Vm};
 use w2m_vm::CPSR_EL1H;
 use w2m_vm::monitor::{map, set_system_registers};
-use w2m_vm::run::{FlushCounts, flush_through_stub};
+use w2m_vm::run::{FlushCounts, flush_through_stub, sync_code_through_stub};
 
 /// x0 to x30 each a value of its own, so a register restored from another's slot is told apart (reviewer-3, by
 /// message at 306); CPSR EL1h with N, Z, C and V set; the PC one of the area's stubs.
@@ -87,5 +87,30 @@ fn a_pending_cancel_is_absorbed_and_reported() {
         (counts.flushes.get(), counts.cancelled.get()),
         (1, true),
         "the flush run once and the cancel noted for after the split"
+    );
+}
+
+/// Sprint 346: the code sync a publish runs on several vCPUs gives the vCPU back every register, CPSR and the PC as the
+/// flush does, x0 and x1 included though the stub is handed the range in them, and is counted as a sync, not a flush.
+#[test]
+fn the_code_sync_gives_back_every_register_cpsr_and_the_pc() {
+    let _one = crate::one_vm();
+    let (area, _) = area();
+    let vm = Vm::new(40).unwrap();
+    map(&vm, &area).unwrap();
+    let vcpu = Vcpu::new(&vm).unwrap();
+    set_system_registers(&vcpu, area.ttbr).unwrap();
+    let before = set(&vcpu);
+    let counts = FlushCounts::default();
+    let code = guest_runtime::layout::MONITOR_VA + CODE_A;
+    sync_code_through_stub(&vcpu, &counts, code, code + 0x180).unwrap();
+    assert_eq!(
+        first_wrong(&before, &read(&vcpu)),
+        None,
+        "the vCPU's state after the code sync"
+    );
+    assert_eq!(
+        (counts.syncs.get(), counts.flushes.get(), counts.cancelled.get()),
+        (1, 0, false)
     );
 }

@@ -99,6 +99,9 @@ pub const HVC_CODE_WRITE: u32 = 13;
 pub const HVC_FAULT_GIVE_BACK: u32 = 14;
 /// the flush stub's exit, after it invalidated every vCPU's TLB (`crate::FLUSH_STUB`; Sprint 304)
 pub const HVC_TLB_FLUSHED: u32 = 15;
+/// the code sync stub's exit, after the words it was given are visible to every vCPU's instruction fetch
+/// (`crate::CODE_SYNC_STUB`; Sprint 346)
+pub const HVC_CODE_SYNCED: u32 = 16;
 /// A level-3 permission fault on a write from the current EL (vm_backend 1131-1132).
 pub const CODE_WRITE_ESR_MASK: u64 = (0x3F << 26) | (1 << 6) | 0x3F;
 pub const CODE_WRITE_ESR: u64 = (0x25 << 26) | (1 << 6) | 0x0F;
@@ -398,6 +401,11 @@ pub struct Options {
     /// with a host range, the range's misses go to the installer inside the VM (Sprint 263), the host's `hvc 1` only
     /// for what it declines
     pub install_in_vm: bool,
+    /// on several vCPUs (Sprint 346): an `isb` between the dispatcher's read of a hit's entry and its `br`, the reading
+    /// side of Arm ARM K11.5.2.2 ("any other PE must perform its own ISB synchronization after it knows that the update
+    /// is visible"), since a vCPU that reads a new block's entry may have fetched the block's words before the host's
+    /// code sync (B2.7.4.2: "at any time since the last Context Synchronization event on that PE")
+    pub isb_before_entry: bool,
 }
 
 /// After the call of `w2m_vm_compile`, x26 holding the counter at the call: the compile's ticks added to the sum
@@ -774,10 +782,16 @@ pub fn dispatcher(symbols: &BTreeMap<String, u64>, options: Options) -> (Vec<u32
         a64::cmp(18, 17),
     ]);
     d.branch(|off| a64::bcond("ne", off), second);
+    if options.isb_before_entry {
+        d.emit(&[a64::ISB]);
+    }
     d.emit(&[a64::br(25)]);
     d.bind(second);
     d.emit(&[a64::ldp(18, 25, 16, 16), a64::cmp(18, 17)]);
     d.branch(|off| a64::bcond("ne", off), miss);
+    if options.isb_before_entry {
+        d.emit(&[a64::ISB]);
+    }
     d.emit(&[a64::br(25)]);
     d.bind(miss);
     // the compiler inside the VM first (Sprint 083; VMC_ENABLED)
@@ -951,6 +965,7 @@ pub fn write(mem: &mut [u8], symbols: &BTreeMap<String, u64>, options: Options) 
     let (e, exception_call_va) = exception_entry(symbols, dispatch_va, timed);
     write_words(mem, EXCEPTION_ENTRY, &e);
     write_words(mem, crate::FLUSH_STUB, &flush_stub());
+    write_words(mem, crate::CODE_SYNC_STUB, &code_sync_stub());
     MonitorCode {
         dispatch_va,
         miss_va,
@@ -969,6 +984,51 @@ fn flush_stub() -> [u32; 5] {
         a64::ISB,
         crate::hvc(HVC_TLB_FLUSHED as u16),
     ]
+}
+
+/// The code sync a vCPU is run through before the host publishes new code's dispatch entry on several vCPUs (Sprint
+/// 346): the writing agent's sequence of Arm ARM B2.2.5 over the guest addresses [x0, x1), each data line cleaned to the
+/// point of unification and the clean completed for the Inner Shareable domain, then each instruction line invalidated
+/// and the invalidation completed, the operations "broadcast to all PEs within the Inner Shareable domain of the PE
+/// running this sequence"; the line sizes from CTR_EL0, as the installer reads them. Run by a vCPU because the host's
+/// own maintenance, `sys_icache_invalidate` on its mapping, is not documented to reach a guest's instruction fetch.
+/// x16 to x18 are its scratch; the host gives every register back after `hvc #16`.
+pub fn code_sync_stub() -> Vec<u32> {
+    let mut a = Assembler::new(MONITOR_VA + crate::CODE_SYNC_STUB);
+    let (clean, cleaned, invalidate, invalidated) = (a.label(), a.label(), a.label(), a.label());
+    // x17 the data line, x16 the instruction line, each 4 << its log2 of words; x18 the line at hand
+    a.emit(&[
+        a64::mrs(16, a64::CTR_EL0),
+        a64::ubfx(17, 16, 16, 4),
+        a64::ubfx(16, 16, 0, 4),
+    ]);
+    a.emit(&a64::mov_imm(18, 4));
+    a.emit(&[
+        a64::lslv(17, 18, 17),
+        a64::lslv(16, 18, 16),
+        a64::subi(18, 17, 1),
+        a64::bic(18, 0, 18),
+    ]);
+    a.bind(clean);
+    a.emit(&[a64::cmp(18, 1)]);
+    a.branch(|o| a64::bcond("hs", o), cleaned);
+    a.emit(&[a64::dc_cvau(18), a64::add(18, 18, 17, a64::LSL, 0)]);
+    a.branch(a64::b, clean);
+    a.bind(cleaned);
+    a.emit(&[a64::DSB_ISH, a64::subi(18, 16, 1), a64::bic(18, 0, 18)]);
+    a.bind(invalidate);
+    a.emit(&[a64::cmp(18, 1)]);
+    a.branch(|o| a64::bcond("hs", o), invalidated);
+    a.emit(&[a64::ic_ivau(18), a64::add(18, 18, 16, a64::LSL, 0)]);
+    a.branch(a64::b, invalidate);
+    a.bind(invalidated);
+    a.emit(&[a64::DSB_ISH, a64::ISB, crate::hvc(HVC_CODE_SYNCED as u16)]);
+    let words = a.finish();
+    assert!(
+        crate::CODE_SYNC_STUB + 4 * words.len() as u64 <= crate::CODE_SYNC_STUB_END,
+        "the code sync stub overflows its area"
+    );
+    words
 }
 
 /// Puts `(target, code)` in a target's pair: its first slot, or its second (vm_backend's two-way table).
@@ -1114,6 +1174,68 @@ mod tests {
         assert!(
             !plain.contains(&a64::cmp(17, 16)),
             "the default dispatcher compares x17 with x16"
+        );
+    }
+
+    /// Sprint 346: off, the dispatcher is the Python's, its one `isb` the miss stub's after `hvc #1`; on (several
+    /// vCPUs), each hit's `br x25` has an `isb` just before it, after the `ldp` and the compare that found the entry,
+    /// and the miss stub moves by the two.
+    #[test]
+    fn the_isb_before_entry_is_off_by_default_and_before_each_hits_branch() {
+        let symbols: BTreeMap<String, u64> = [("w2m_vm_compile".to_string(), 0x7f00_0418_0000)].into();
+        let (plain, plain_miss) = dispatcher(&symbols, Options::default());
+        let (synced, synced_miss) = dispatcher(
+            &symbols,
+            Options {
+                isb_before_entry: true,
+                ..Options::default()
+            },
+        );
+        // the hits' branches are the first two `br x25`; the third is the in-VM compile's branch to the code it made,
+        // after its own `dsb ish; isb` (`block_compiler.c` `sync_code`, the installer)
+        let branches =
+            |words: &[u32]| -> Vec<usize> { (0..words.len()).filter(|&i| words[i] == a64::br(25)).take(2).collect() };
+        let isbs = |words: &[u32]| words.iter().filter(|&&w| w == a64::ISB).count();
+        assert_eq!(branches(&plain).len(), 2, "the default dispatcher's hits' branches");
+        assert!(
+            branches(&plain)[1] < (plain_miss - (MONITOR_VA + crate::DISPATCHER)) as usize / 4,
+            "the hits' branches before the miss path"
+        );
+        for i in branches(&plain) {
+            assert_ne!(
+                plain[i - 1],
+                a64::ISB,
+                "the default dispatcher's word before the br at {i}"
+            );
+        }
+        assert_eq!(branches(&synced).len(), 2, "the hits' branches");
+        for i in branches(&synced) {
+            assert_eq!(synced[i - 1], a64::ISB, "the word before the br at {i}");
+        }
+        assert_eq!(isbs(&synced), isbs(&plain) + 2, "the miss stub's own isb and the two");
+        assert_eq!(synced.len() - plain.len(), 2, "two isbs");
+        assert_eq!(synced_miss - plain_miss, 8, "the miss stub moves by the two");
+    }
+
+    /// Sprint 346: the code sync stub cleans and invalidates by line over [x0, x1), each loop completed by `dsb ish`, the
+    /// clean's before the first `ic ivau` and the invalidation's before the `isb` and the exit, which comes last.
+    #[test]
+    fn the_code_sync_stub_completes_the_clean_and_the_invalidation_before_its_exit() {
+        let words = super::code_sync_stub();
+        let at = |w: u32| {
+            words
+                .iter()
+                .position(|&x| x == w)
+                .unwrap_or_else(|| panic!("no {w:08x}"))
+        };
+        let (dc, ic) = (at(a64::dc_cvau(18)), at(a64::ic_ivau(18)));
+        let dsbs: Vec<usize> = (0..words.len()).filter(|&i| words[i] == a64::DSB_ISH).collect();
+        assert_eq!(dsbs.len(), 2, "two dsb ish");
+        assert!(dc < dsbs[0] && dsbs[0] < ic && ic < dsbs[1], "dc, dsb, ic, dsb");
+        let n = words.len();
+        assert_eq!(
+            &words[n - 3..],
+            &[a64::DSB_ISH, a64::ISB, crate::hvc(super::HVC_CODE_SYNCED as u16)]
         );
     }
 

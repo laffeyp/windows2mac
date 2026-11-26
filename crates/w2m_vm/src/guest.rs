@@ -931,6 +931,8 @@ impl Guest {
                 timing,
                 host_range: start.host_range,
                 install_in_vm: start.install_in_vm,
+                // one vCPU keeps the frozen host's dispatcher, its words and its miss stub's address (Sprint 346)
+                isb_before_entry: start.vcpus > 1,
             },
         );
         let switch = image.symbols["w2m_switch"];

@@ -637,6 +637,66 @@ pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], child: boo
 pub struct FlushCounts {
     pub flushes: std::cell::Cell<u64>,
     pub cancelled: std::cell::Cell<bool>,
+    /// the runs through `CODE_SYNC_STUB` before a publish on several vCPUs (Sprint 346), each ending at `hvc #16`
+    pub syncs: std::cell::Cell<u64>,
+}
+
+/// The requesting vCPU, exited for a request, run by the host through the stub at `entry` with `args` in its registers
+/// until the stub's `hvc #done`, then given back its PC, PSTATE and general registers as they were (Sprint 305's flush,
+/// made common at Sprint 346 for the code sync): a vtimer exit runs the stub again with the timer masked, as the run
+/// loop masks it; a cancel, which `hv_vcpus_exit` leaves pending for the next run when the vCPU is out ("it will return
+/// immediately without entering the guest", `hv_vcpu.h` 377-378), runs it again too, noted in `counts` and reported
+/// after; any other exit fails, named by `what`. x23, the budget, is not touched.
+fn run_through_stub(
+    vcpu: &Vcpu,
+    counts: &FlushCounts,
+    entry: u64,
+    done: u32,
+    args: &[(u8, u64)],
+    what: &str,
+) -> Result<(), String> {
+    let e = |e: HvError| format!("{what}: {e:?}");
+    let pc = vcpu.reg(Reg::Pc).map_err(e)?;
+    let cpsr = vcpu.reg(Reg::Cpsr).map_err(e)?;
+    let mut x = [0u64; 31];
+    for (i, v) in x.iter_mut().enumerate() {
+        *v = vcpu.reg(Reg::X(i as u8)).map_err(e)?;
+    }
+    for &(r, v) in args {
+        vcpu.set_reg(Reg::X(r), v).map_err(e)?;
+    }
+    vcpu.set_reg(Reg::Pc, MONITOR_VA + entry).map_err(e)?;
+    loop {
+        match vcpu.run().map_err(e)? {
+            exit if exit.hvc_immediate() == Some(done as u16) => break,
+            Exit::VtimerActivated => vcpu.set_vtimer_mask(true).map_err(e)?,
+            Exit::Canceled => counts.cancelled.set(true),
+            other => return Err(format!("{what} left by {other:?}, not hvc #{done}")),
+        }
+    }
+    vcpu.set_reg(Reg::Pc, pc).map_err(e)?;
+    vcpu.set_reg(Reg::Cpsr, cpsr).map_err(e)?;
+    for (i, v) in x.iter().enumerate() {
+        vcpu.set_reg(Reg::X(i as u8), *v).map_err(e)?;
+    }
+    Ok(())
+}
+
+/// The code at guest addresses [start, end) made visible to every vCPU's instruction fetch before its entry is
+/// published (Sprint 346): the requesting vCPU run through `CODE_SYNC_STUB`, Arm ARM B2.2.5's writer's sequence, its
+/// `dsb ish` completing the clean and the invalidation on every vCPU before the host's publish, which follows.
+pub fn sync_code_through_stub(vcpu: &Vcpu, counts: &FlushCounts, start: u64, end: u64) -> Result<(), String> {
+    use crate::monitor_code::HVC_CODE_SYNCED;
+    run_through_stub(
+        vcpu,
+        counts,
+        crate::CODE_SYNC_STUB,
+        HVC_CODE_SYNCED,
+        &[(0, start), (1, end)],
+        "the code sync stub",
+    )?;
+    counts.syncs.set(counts.syncs.get() + 1);
+    Ok(())
 }
 
 /// A block split's flush (Sprint 305; the design's precondition 4): the requesting vCPU, exited for the request, run by
@@ -647,27 +707,7 @@ pub struct FlushCounts {
 /// without entering the guest", `hv_vcpu.h` 377-378), runs it again too, noted in `counts` and reported after the split,
 /// so no block is left invalid; any other exit fails the split. x23, the budget, is not touched.
 pub fn flush_through_stub(vcpu: &Vcpu, counts: &FlushCounts) -> Result<(), String> {
-    let e = |e: HvError| format!("the flush stub: {e:?}");
-    let pc = vcpu.reg(Reg::Pc).map_err(e)?;
-    let cpsr = vcpu.reg(Reg::Cpsr).map_err(e)?;
-    let mut x = [0u64; 31];
-    for (i, v) in x.iter_mut().enumerate() {
-        *v = vcpu.reg(Reg::X(i as u8)).map_err(e)?;
-    }
-    vcpu.set_reg(Reg::Pc, MONITOR_VA + crate::FLUSH_STUB).map_err(e)?;
-    loop {
-        match vcpu.run().map_err(e)? {
-            exit if exit.hvc_immediate() == Some(HVC_TLB_FLUSHED as u16) => break,
-            Exit::VtimerActivated => vcpu.set_vtimer_mask(true).map_err(e)?,
-            Exit::Canceled => counts.cancelled.set(true),
-            other => return Err(format!("the flush stub left by {other:?}, not hvc #15")),
-        }
-    }
-    vcpu.set_reg(Reg::Pc, pc).map_err(e)?;
-    vcpu.set_reg(Reg::Cpsr, cpsr).map_err(e)?;
-    for (i, v) in x.iter().enumerate() {
-        vcpu.set_reg(Reg::X(i as u8), *v).map_err(e)?;
-    }
+    run_through_stub(vcpu, counts, crate::FLUSH_STUB, HVC_TLB_FLUSHED, &[], "the flush stub")?;
     counts.flushes.set(counts.flushes.get() + 1);
     Ok(())
 }
@@ -752,6 +792,10 @@ pub struct Records {
     pub handovers: Vec<Handover>,
     pub vm_compile_starts: Vec<u64>,
     pub instructions_at: InstructionsAt,
+    /// on several vCPUs, the code cache's guest address below which every word has been through the code sync
+    /// (Sprint 346): blocks, installs and bridges are all placed at the one cursor, so [this, cursor) is all that a
+    /// publish may need synced; 0 before the first sync, read as the code cache's start
+    pub code_synced: u64,
 }
 
 /// The run's shared state: the guest, the host's compiler and the records (Sprint 311).
@@ -1380,6 +1424,12 @@ fn vcpu_loop(
         if flushed > 0 {
             *out.exits.entry(HVC_TLB_FLUSHED as u16).or_default() += flushed;
         }
+        let synced = counts.syncs.take();
+        if synced > 0 {
+            *out.exits
+                .entry(crate::monitor_code::HVC_CODE_SYNCED as u16)
+                .or_default() += synced;
+        }
         // a cancel that came while a split's flush ran, reported once the split was done (Sprint 305); another vCPU's
         // stop, or the run's, found at the turn's start (Sprint 327)
         if place.stopping.stopped() {
@@ -1965,6 +2015,23 @@ fn vcpu_loop(
                     },
                 },
             };
+            // on several vCPUs the words reach every vCPU's instruction fetch before the entry is published (Sprint 346):
+            // another vCPU reads the table with no lock and may branch to the block at once, and before this it ran
+            // the zero words its instruction cache held from the line before the block (a fault with EC 0), the
+            // requester's own `ic ialluis` coming only after its resume
+            if place.vcpus > 1 {
+                let synced = records.code_synced.max(MONITOR_VA + CODE_CACHE);
+                let cursor = MONITOR_VA
+                    + guest
+                        .memory_view()
+                        .read_u64(VM_COMPILER + crate::monitor_code::VMC_CURSOR);
+                if va >= synced && cursor > synced {
+                    if let Err(why) = sync_code_through_stub(vcpu, &counts, synced, cursor) {
+                        break 'serve Err(Stop::Untranslated { target, why });
+                    }
+                    records.code_synced = cursor;
+                }
+            }
             dispatch_insert(guest.memory_view(), target, va);
             Ok(va)
         };
