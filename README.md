@@ -54,12 +54,16 @@ versioned Steam interface adapters, [DXMT](https://github.com/3Shain/dxmt) for a
 Apple's Metal Shader Converter for shader conversion. Wine, Rosetta and D3DMetal belong to the same field of work and
 are not dependencies of this design. These are references for ideas and comparison, not adopted implementations.
 
-## Status (2026-10-29)
+## Status (2026-11-26)
 
 - The test game, a Unity title, runs on the Rust host until the point its reference run on Windows stopped: its
   10,505 Windows calls equal the reference's, row for row.
-- 437 of 458 x86 instruction classes conform to Intel's results on the Rust host, and 143 of 273 runs of the Windows
-  function families conform to Windows.
+- 456 of 458 x86 instruction classes conform to Intel's results on the Rust host (Sprint 237), and all 273 runs of the
+  68 Windows function families conform to Windows on one vCPU (Sprint 234).
+- UnityPlayer.dll's code is translated ahead of time into a cache file that the host installs (Sprints 251-258).
+- Several vCPUs run a single-process guest. The guest runtime's services are moving off one shared lock onto locks of
+  their own: the calls that touch only a thread's own state (Sprint 342), the process heap (343), the TLS and FLS slots
+  (345), and the sync objects' waits, whose objects now outlive a handle closed during a wait (350).
 - No window, graphics or sound yet. `BLACKBOARD.md` and `sprints/` hold the running record.
 
 ---
