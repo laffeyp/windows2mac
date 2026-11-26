@@ -1495,22 +1495,54 @@ fn named_design_change(commit: &str, path: &str) -> bool {
 /// The commits made between one sprint's close and the next card, each named with why, which `commits_walked` lets
 /// pass; history on `main` is pushed and not rewritten, so a lapse stands here by name rather than by a looser rule.
 /// From Sprint 247 a review's dispositions between sprints go in the next sprint's card commit (WORKING_AGREEMENT).
-const BETWEEN_SPRINTS: [(&str, &str); 2] = [
-    (
-        "c2fe0bbc8",
-        "reviewer-3's review at 246, its dispositions, committed after 246's close and before card 247 (Sprint 247)",
-    ),
-    (
-        "003a0c1a9",
-        "card 347's amendment and its probe `tls_expansion_first`, pushed mid-sprint so the Windows runner could build \
-         it, for a run-stopping defect fixed in the card that found it (Sprint 347)",
-    ),
-];
+/// Sprint 347's card amendment, 003a0c1a9, stood here from Sprint 347 until Sprint 349's rule, `is_card_amendment`,
+/// covered it (it changes `probes/tls_expansion_first/` alone): a commit a rule admits is not a lapse.
+const BETWEEN_SPRINTS: [(&str, &str); 1] = [(
+    "c2fe0bbc8",
+    "reviewer-3's review at 246, its dispositions, committed after 246's close and before card 247 (Sprint 247)",
+)];
+
+/// Whether `subject` is sprint `n`'s card amendment, "Sprint N card amendment: ...": a commit inside sprint N that
+/// changes card N or a probe the Windows runner must build partway through the sprint, the runner building only pushed
+/// commits (Sprint 349; reviewer-4's eighteenth review, Low 1: Sprint 347's 003a0c1a9). Its subject opens neither
+/// "Sprint N: " nor "Sprint N closed", so `close_commit`, `trees_moved`, `close_moved` and `scripts/gates-base.sh` never
+/// take it for the work or the close.
+fn is_card_amendment(subject: &str, n: u32) -> bool {
+    subject.starts_with(&format!("Sprint {n} card amendment:"))
+}
+
+/// Each path sprint `n`'s card amendment `commit` changes against its parent that is neither card N
+/// (`sprints/sprint-NNN-*.md`) nor under `probes/` (Sprint 349).
+fn amendment_outside(root: &Path, n: u32, commit: &str) -> Result<Vec<String>, String> {
+    let card = format!("sprints/sprint-{n:03}-");
+    Ok(git(
+        root,
+        &[
+            "diff-tree",
+            "--no-commit-id",
+            "--name-only",
+            "--no-renames",
+            "-r",
+            commit,
+        ],
+    )?
+    .lines()
+    .filter(|p| {
+        let is_card = p
+            .strip_prefix(&card)
+            .is_some_and(|rest| !rest.contains('/') && rest.ends_with(".md"));
+        !(is_card || p.starts_with("probes/"))
+    })
+    .map(str::to_string)
+    .collect())
+}
 
 /// Sprint `n`'s commits from its card's to the next card's (or HEAD), each named that is not its work ("Sprint N: "),
 /// its close ("Sprint N closed:", bookkeeping only, held by `close_moved`) or the card itself (Sprint 195; reviewer-2's
 /// Medium 4 of its review of 190-192: a commit under another subject between a pass and a close went unchecked). From
-/// `FIRST_FOLDED_SPRINT` the close is the work commit, and a "Sprint N closed:" commit is named too (Sprint 333).
+/// `FIRST_FOLDED_SPRINT` the close is the work commit, and a "Sprint N closed:" commit is named too (Sprint 333). A card
+/// amendment of sprint N passes when it changes card N and `probes/` alone, and each other path it changes is named
+/// (Sprint 349); one of another sprint is named as any other subject.
 fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
     let is_card =
         |s: &str, k: u32| s.starts_with(&format!("Sprint {k} card:")) || s.starts_with(&format!("Sprint {k}'s card:"));
@@ -1535,6 +1567,17 @@ fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
                  {FIRST_FOLDED_SPRINT} a sprint closes in its work commit",
                 &hash[..9]
             ));
+            continue;
+        }
+        // from Sprint 349 a card amendment is a kind of commit inside its sprint, held to card N and probes/
+        if is_card_amendment(subject, n) {
+            for path in amendment_outside(root, n, hash)? {
+                wrong.push(format!(
+                    "sprint {n:03}: commit {} \"{subject}\" amends its card and changes {path}, outside card {n} and \
+                     probes/",
+                    &hash[..9]
+                ));
+            }
             continue;
         }
         if !(subject.starts_with(&work) || is_close(subject, n) || named) {

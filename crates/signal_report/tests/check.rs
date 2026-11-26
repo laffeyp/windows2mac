@@ -590,6 +590,11 @@ struct Shape {
     stale: bool,
     /// the second sprint's card's Emits names SESSION_INIT
     emits: bool,
+    /// after the second sprint's card, a commit "Sprint M card amendment: ..." changing that card and a probe, M the
+    /// sprint named (Sprint 349)
+    amendment: Option<u32>,
+    /// and the amendment also adds `crates/a/extra.rs`
+    amendment_crates: bool,
 }
 
 const WALK_FIXTURE: &str = "store/translation-cache/walk-fixtures-2026-10-30.json";
@@ -690,6 +695,17 @@ fn folded(name: &str, shape: &Shape) -> (PathBuf, String) {
     }
     card(b, "active");
     commit(&root, &format!("Sprint {b} card: y"));
+    if let Some(m) = shape.amendment {
+        let path = root.join(format!("sprints/sprint-{b}-x.md"));
+        let amended = format!("{}\n## amendment\n\nthe probe p\n", fs::read_to_string(&path).unwrap());
+        fs::write(&path, amended).unwrap();
+        fs::create_dir_all(root.join("probes/p")).unwrap();
+        fs::write(root.join("probes/p/p.c"), "int main(void) { return 0; }\n").unwrap();
+        if shape.amendment_crates {
+            fs::write(root.join("crates/a/extra.rs"), "fn extra() {}\n").unwrap();
+        }
+        commit(&root, &format!("Sprint {m} card amendment: the probe p"));
+    }
     fs::write(root.join("crates/a/lib.rs"), format!("fn a() {{ let _ = {b}; }}\n")).unwrap();
     if shape.binary {
         fs::create_dir_all(root.join("store/binaries")).unwrap();
@@ -871,6 +887,83 @@ fn a_sprint_closes_in_its_work_commit() {
         format!(
             "sprint 335: commit {close} \"Sprint 335 closed: its Signal Report; BLACKBOARD\" closes it apart from its \
              work, and from Sprint 334 a sprint closes in its work commit"
+        )
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Sprint 349 (reviewer-4's eighteenth review, Low 1): a commit "Sprint N card amendment: ..." inside sprint N that
+/// changes card N and a probe passes the walk, with the close committed and with it prepared on the working tree, and is
+/// taken for neither the work nor the close (plant 1, the rule taken out, names it "stands between its card and the next
+/// card"); an amendment that names another sprint is named as before.
+#[test]
+fn a_card_amendment_of_its_card_and_a_probe_passes_inside_its_sprint() {
+    let amended = Shape {
+        amendment: Some(335),
+        ..Shape::default()
+    };
+    let (root, _) = folded("amendment", &amended);
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(0), ""));
+    let _ = fs::remove_dir_all(&root);
+
+    let (root, _) = folded(
+        "amendmentprepared",
+        &Shape {
+            uncommitted: true,
+            ..amended
+        },
+    );
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(0), ""));
+    let _ = fs::remove_dir_all(&root);
+
+    let (root, _) = folded(
+        "amendmentother",
+        &Shape {
+            amendment: Some(336),
+            ..Shape::default()
+        },
+    );
+    let other = git(
+        &root,
+        &["log", "-1", "--format=%h", "--abbrev=9", "--grep=card amendment"],
+    );
+    let (code, stderr) = check_kept(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        format!(
+            "sprint 335: commit {other} \"Sprint 336 card amendment: the probe p\" stands between its card and the next \
+             card, and is neither its work nor its close"
+        )
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Sprint 349: a card amendment that also changes a path outside its card and `probes/` is named by that path (plant 2,
+/// the path limit taken out, passes it).
+#[test]
+fn a_card_amendment_that_changes_another_path_is_named() {
+    let (root, _) = folded(
+        "amendmentcrates",
+        &Shape {
+            amendment: Some(335),
+            amendment_crates: true,
+            ..Shape::default()
+        },
+    );
+    let amendment = git(
+        &root,
+        &["log", "-1", "--format=%h", "--abbrev=9", "--grep=card amendment"],
+    );
+    let (code, stderr) = check_kept(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        format!(
+            "sprint 335: commit {amendment} \"Sprint 335 card amendment: the probe p\" amends its card and changes \
+             crates/a/extra.rs, outside card 335 and probes/"
         )
     );
     let _ = fs::remove_dir_all(&root);

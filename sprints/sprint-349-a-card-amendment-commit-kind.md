@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 349
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -109,4 +109,43 @@ any other path in it is named, and no sprint needs a hand-named exception for a 
 
 ## result
 
-GATES-LINE
+- **Gates:** `scripts/gates.sh` exit 0 in 322 s, kept in `store/gates/passes.tsv` as sprint 349 at 2026-11-26T09:38:31Z on f93d38e38 with root=ac6a905ac and "rust=crates python=0 samples=0", base=c3ce9bb4d, Sprint 348's commit; 57 tests run, 57 passed, 104 skipped; multi-vCPU: not run (Python gates not run)
+- **The rule** (`crates/signal_report/src/main.rs`): `is_card_amendment(subject, n)` is a subject opening "Sprint N card
+  amendment:"; inside sprint N's walk `commits_walked` passes it and names each path `amendment_outside` finds, the
+  commit's `git diff-tree --no-commit-id --name-only --no-renames -r` against its parent less `sprints/sprint-NNN-*.md`
+  (no further `/`) and `probes/...`, as "sprint N: commit H \"S\" amends its card and changes P, outside card N and
+  probes/". A "Sprint M card amendment:" with M not N falls through to "stands between its card and the next card",
+  as before.
+- **`BETWEEN_SPRINTS`:** 003a0c1a9 passes under the rule (`git show --stat`: `probes/tls_expansion_first/probe.json`
+  and `tls_expansion_first.c`, nothing else) and is dropped, leaving c2fe0bbc8 alone; the constant's comment keeps that
+  003a0c1a9 stood there from 347 to 349. Grounds: the comment's own, "a lapse stands here by name rather than by a
+  looser rule", and a commit a rule admits is no lapse; and with it dropped the record itself judges the rule, plant 1
+  failing sprint 347 on the tree.
+- **The readers of a sprint's commits:**
+  - `commits_walked`: accepts the kind, held to card N and `probes/`.
+  - `close_commit`: takes "Sprint N closed:"/"closed-partial:", or from 334 the newest "Sprint N: " with card N done in
+    its tree; an amendment opens neither, so it is never the close.
+  - `trees_moved`: holds the gates' tree to the newest "Sprint N: " commit, or the working tree while the close is
+    prepared; never the amendment.
+  - `base_problem`: compares the row's `base=` with `close_commit(n - 1)`; never the amendment.
+  - `close_moved`, `ci_held`, `binaries_unwalked`, `working_tree_records`: find the close through `is_close` or
+    `close_commit`; `binaries_unwalked`'s change, base to close, holds the amendment's paths as the sprint's change.
+  - `sprint_commits` (the report's list and records): every "Sprint NNN" commit, the card's and the amendment's
+    alike; 347's committed report lists 003a0c1a9 and is its regeneration.
+  - `scripts/gates-base.sh`: greps `^Sprint [0-9]+(:| closed(-partial)?:)`; "Sprint N card amendment:" has " card"
+    after the number, so it is never a base. Unchanged.
+  - `scripts/pre-commit.sh`: reads the cards' status, no commit; an amendment made through `scripts/commit.sh` with
+    card N active checks the record against N-1, as any card commit. Unchanged.
+  - Searched: `scripts/*.sh`, `.github/workflows/*.yml` and every crate but `signal_report` for a subject read or
+    "Sprint {n}" formatted; none other.
+- **Fixtures** (`crates/signal_report/tests/check.rs`, `folded`'s `Shape` gains `amendment` and `amendment_crates`):
+  `a_card_amendment_of_its_card_and_a_probe_passes_inside_its_sprint` (card 335 and `probes/p/p.c` pass, close
+  committed and prepared; "Sprint 336 card amendment:" inside 335 named "stands between") and
+  `a_card_amendment_that_changes_another_path_is_named` (`crates/a/extra.rs` named): both passing; `signal_report`'s
+  tests 7, 13, 2, 19, 5 and 2 passed. Their reach before the work: the first failed on today's code, `left: (Some(1),
+  "sprint 335: commit 550318886 \"Sprint 335 card amendment: the probe p\" stands between its card and the next card,
+  and is neither its work nor its close")`.
+- **The whole record:** `target/release/signal_report --check` exit 0 on the tree, 347 included.
+- **Plant 1** (the rule taken out, line 1573 `if false && is_card_amendment(...)`): "sprint 335: commit 7b7a8f0f4 \"Sprint 335 card amendment: the probe p\" stands between its card and the next card, and is neither its work nor its close"; the record check on the tree failed too, "sprint 347: commit 003a0c1a9 \"Sprint 347 card amendment: the probe tls_expansion_first, ...\" stands between its card and the next card"; restored, `cmp` equal.
+- **Plant 2** (the path limit taken out, line 1534 `false && !(is_card || ...)`): `a_card_amendment_that_changes_another_path_is_named` failed, "left: Some(0) right: Some(1)", the `crates/` amendment passing; restored, `cmp` equal.
+- **The working agreement:** "A sprint closes in its work commit" gains one sentence, dated 2026-11-26.
