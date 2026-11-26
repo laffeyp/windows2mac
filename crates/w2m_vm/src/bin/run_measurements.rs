@@ -15,7 +15,14 @@
 //! - the runtime word on two vCPUs while the waits and releases run (Sprint 356, its amendment 2):
 //!   `tests/data/timed_waits/semaphore_units` with `--vcpus 2 --runtime-word`, its output "done": the word's hold and
 //!   wait per taking by site, each with `vcpus` 2, over the run's first `LOCK_TAKINGS` takings, the takings counted
-//!   named in each variant;
+//!   named in each variant; from Sprint 358 its waits trusted, each wait's start its vCPU's own word, and a wait or a
+//!   hold that ran backward fails the run; and `runtime_word_takings` for each timed run;
+//! - each leaf lock's takings, hold and wait (Sprint 358): `lock_takings`, `lock_hold_ns_p50/p99` and
+//!   `lock_wait_ns_p50/p99`, each with its `lock`, on the guest that drives it, on two vCPUs (`vcpus` 2) and on one:
+//!   the sync objects' on `semaphore_units`, the handle table's on `handle_values`, the heap's on `heap_blocks`, the
+//!   slots' on `probes/thread_slots_race`. A lock's takings below the bound its guest's own counts of its calls make, an
+//!   entry written with its lock let go, a wait or a hold that ran backward, a wait on one vCPU, or a lock its guest's
+//!   threads never met at on two vCPUs (its 99th-percentile wait 0) fails the run by name;
 //! - the capabilities `vcpus_allowed` and the run-loop design read (Sprint 337), one CAPABILITY_PROBED each:
 //!   `feat_lse2` and `feat_bbm_level2` from `w2m-vm --capabilities`, `guest_wfe_exit` from the WFE probe's run.
 //!
@@ -36,7 +43,7 @@ use events::{
     SessionOutcome, SessionPurpose, VOCAB_VERSION, Version, harness_line,
 };
 use w2m_vm::monitor_code::Site;
-use w2m_vm::record::{measurement_line, measurement_line_on, quantile};
+use w2m_vm::record::{lock_measurement_line, measurement_line, measurement_line_on, quantile};
 
 const GUESTS: [&str; 2] = ["qpc", "sleeper"];
 /// The Windows run whose `locked_race` binary and rows the two-vCPU run is held to (Sprint 331).
@@ -104,6 +111,161 @@ fn child(root: &Path, args: &[&str]) -> Result<String, String> {
         ));
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// The Windows run whose `thread_slots_race` binary and rows the slots' lock is measured on (Sprint 345).
+const SLOTS_RACE_RUN: &str = "store/probe-runs/45763850660";
+
+/// A probe's rows but `tls.overlap`, which counts how the two loops met and varies run to run (`run_loop.rs`,
+/// `two_threads_taking_and_freeing_tls_and_fls_slots_at_once_never_share_one_on_two_vcpus`).
+fn but_overlap(body: &str) -> String {
+    body.lines()
+        .filter(|l| !l.starts_with("{\"s\":\"tls.overlap\","))
+        .map(|l| format!("{l}\n"))
+        .collect()
+}
+
+/// One timed run (Sprint 358): `exe` on `vcpus` vCPUs with `--runtime-word`, which times the runtime word and the leaf
+/// locks; its output and its timing file.
+fn timed_run(root: &Path, exe: &str, vcpus: u32, name: &str) -> Result<(Vec<u8>, serde_json::Value), String> {
+    let (output, word) = (
+        format!("build/measurements/{name}-{vcpus}-stdout.txt"),
+        format!("build/measurements/{name}-{vcpus}-word.json"),
+    );
+    let n = vcpus.to_string();
+    child(
+        root,
+        &[exe, "--vcpus", &n, "--output", &output, "--runtime-word", &word],
+    )?;
+    let out = std::fs::read(root.join(&output)).map_err(|e| format!("{output}: {e}"))?;
+    let json = serde_json::from_str(&std::fs::read_to_string(root.join(&word)).map_err(|e| format!("{word}: {e}"))?)
+        .map_err(|e| format!("{word}: {e}"))?;
+    Ok((out, json))
+}
+
+/// A lock's takings as a timed run wrote them: [wait start, taken, released, the lock word at the entry's write].
+type LockEntries = Vec<[u64; 4]>;
+
+/// Every leaf lock's takings from a timed run's file, held to the judges every timed run meets (Sprint 358): as many
+/// written as the area holds of those counted; every entry written while its holder held the lock, its word read 1
+/// (a word of 0 is an entry written after its release); no wait and no hold that ran backward, each taker's three
+/// times its own vCPU's counter; and on one vCPU no wait at all, there being no other taker. The locks in
+/// `events::Lock::ALL`'s order, each with its count.
+fn leaf_locks(
+    json: &serde_json::Value,
+    label: &str,
+    vcpus: u32,
+) -> Result<Vec<(events::Lock, u64, LockEntries)>, String> {
+    let mut out = Vec::new();
+    for &lock in events::Lock::ALL {
+        let name = lock.as_str();
+        let area = &json["locks"][name];
+        let counted = area["counted"]
+            .as_u64()
+            .ok_or(format!("{label}: no takings counted for the {name} lock"))?;
+        let takings: LockEntries =
+            serde_json::from_value(area["takings"].clone()).map_err(|e| format!("{label}: the {name} lock: {e}"))?;
+        let n = takings.len();
+        if n as u64 != counted.min(w2m_vm::monitor_code::LOCK_AREA_TAKINGS) {
+            return Err(format!(
+                "{label}: the {name} lock counted {counted} takings and wrote {n}"
+            ));
+        }
+        let let_go = takings.iter().filter(|t| t[3] != 1).count();
+        if let_go != 0 {
+            return Err(format!(
+                "{label}: the {name} lock: {let_go} of its first {n} entries written with the lock let go, its word \
+                 not 1"
+            ));
+        }
+        let (waits_back, holds_back) = (
+            takings.iter().filter(|t| t[1] < t[0]).count(),
+            takings.iter().filter(|t| t[2] < t[1]).count(),
+        );
+        if waits_back + holds_back != 0 {
+            return Err(format!(
+                "{label}: the {name} lock: of its first {n} takings, {waits_back} waits and {holds_back} holds ran \
+                 backward"
+            ));
+        }
+        if vcpus == 1 {
+            let waited = takings.iter().filter(|t| t[1] != t[0]).count();
+            if waited != 0 {
+                return Err(format!(
+                    "{label}: the {name} lock: {waited} of its first {n} takings waited, with no other vCPU to take it"
+                ));
+            }
+        }
+        out.push((lock, counted, takings));
+    }
+    Ok(out)
+}
+
+/// A lower bound on the takings of the lock a guest drives, from the guest's own counts of the calls it made (Sprint
+/// 358), each call that answered taking the lock at least once:
+/// - semaphore_units (sync objects): every ReleaseSemaphore, TRUE or FALSE, and every wait on the semaphore, satisfied
+///   or timed out (`.counts` released, refused, satisfied, timed_out); each holds `sync_lock` once or more;
+/// - handle_values (handles): every value a create or a duplicate gave, and every close, TRUE or FALSE (`.counts`
+///   claimed, closed, refused); each publish, duplicate and close holds the table's lock once;
+/// - heap_blocks (heap): every HeapAlloc that gave a block and every HeapFree that answered TRUE (`.counts` allocated,
+///   freed); each `take` and `give_back` holds the heap once;
+/// - thread_slots_race (slots): each of threads A's and B's rounds' HOLD TlsAlloc and HOLD TlsFree (its rows' rounds,
+///   none out of indexes or range, HOLD from `probes/thread_slots_race/thread_slots_race.c`), and FlsAlloc, the
+///   FlsSetValue calls that answered TRUE and FlsFree (its row `fls`: allocated, set_ok, freed).
+fn takings_bound(lock: events::Lock, json: &serde_json::Value, output: &[u8], root: &Path) -> Result<u64, String> {
+    let counts: Vec<u64> = serde_json::from_value(json["counts"].clone()).map_err(|e| e.to_string())?;
+    let sum = |at: &[usize]| -> Result<u64, String> {
+        at.iter()
+            .map(|&i| {
+                counts
+                    .get(i)
+                    .copied()
+                    .ok_or(format!("the guest's .counts holds no word {i}"))
+            })
+            .sum()
+    };
+    match lock {
+        events::Lock::SyncObjects => sum(&[0, 1, 2, 3]),
+        events::Lock::Handles => sum(&[0, 2, 3]),
+        events::Lock::Heap => sum(&[0, 1]),
+        events::Lock::Slots => {
+            let source = std::fs::read_to_string(root.join("probes/thread_slots_race/thread_slots_race.c"))
+                .map_err(|e| e.to_string())?;
+            let hold: u64 = source
+                .lines()
+                .find_map(|l| l.strip_prefix("#define HOLD "))
+                .and_then(|v| v.trim().trim_end_matches('u').parse().ok())
+                .ok_or("thread_slots_race.c defines no HOLD")?;
+            let rows: Vec<serde_json::Value> = String::from_utf8_lossy(output)
+                .lines()
+                .map(serde_json::from_str)
+                .collect::<Result<_, _>>()
+                .map_err(|e| format!("thread_slots_race's rows: {e}"))?;
+            let row = |s: &str| {
+                rows.iter()
+                    .find(|r| r["s"] == s)
+                    .ok_or(format!("thread_slots_race: no {s} row"))
+            };
+            let mut bound = 0;
+            for s in ["tls.a", "tls.b"] {
+                let r = row(s)?;
+                if r["out_of_indexes"] != 0 || r["out_of_range"] != 0 {
+                    return Err(format!("thread_slots_race: its {s} row ran out of indexes: {r}"));
+                }
+                bound += 2
+                    * hold
+                    * r["rounds"]
+                        .as_u64()
+                        .ok_or(format!("thread_slots_race: {s} has no rounds"))?;
+            }
+            let fls = row("fls")?;
+            let alloc = row("fls.alloc")?;
+            for (r, k) in [(alloc, "allocated"), (fls, "set_ok"), (fls, "freed")] {
+                bound += r[k].as_u64().ok_or(format!("thread_slots_race: no {k}"))?;
+            }
+            Ok(bound)
+        }
+    }
 }
 
 fn run() -> Result<(), String> {
@@ -213,6 +375,16 @@ fn run() -> Result<(), String> {
         if backward != 0 {
             return Err(format!("{guest}: {counted} takings, {backward} backward"));
         }
+        // the leaf locks the same run timed (Sprint 358), held to their judges on one vCPU, and the takings counted
+        leaf_locks(&json, guest, 1)?;
+        lines.push(measurement_line(
+            &format!("{guest}-runtime-word-takings"),
+            Metric::RuntimeWordTakings,
+            counted as f64,
+            "count",
+            &application,
+            Some(&format!("{} written", takings.len())),
+        ));
         let ns_per_tick = 1e9 / w2m_vm::host_state::counter_frequency()? as f64;
         for site in Site::ALL {
             let at: Vec<&[u64; 7]> = takings.iter().filter(|t| t[0] == site as u64).collect();
@@ -395,17 +567,62 @@ fn run() -> Result<(), String> {
             takings.len()
         ));
     }
-    // a hold, taken to released, is written by the word's holder alone; a wait's start is the timing area's one header
-    // word (+0), which a second vCPU waiting writes over while the first holds the word, moving the start later: so on
-    // two vCPUs a wait figure is a lower bound, not trusted, a wait whose start passed its taking (the overwrite's
-    // evidence, counted in each variant) is left out, and the holds and the takings counted are the figures (a wait
-    // start a vCPU is the per-lock vocabulary card's)
-    if takings.iter().any(|t| t[3] < t[2]) {
-        return Err(format!("semaphore_units on {TWO} vCPUs: a hold's time ran backward"));
+    // a hold, taken to released, is written by the word's holder alone, and from Sprint 358 a wait's start is its vCPU's
+    // own word (`monitor_code::RUNTIME_WAIT_START`), which no other vCPU writes: so on two vCPUs a hold or a wait that
+    // ran backward is a fault, and fails the run by name, as on one (before, the one header word a second waiter wrote
+    // over left 4,349 of 16,384 waits, then 146, starting past their taking, and the waits were a lower bound)
+    let held_back = takings.iter().filter(|t| t[3] < t[2]).count();
+    let waited_back = takings.iter().filter(|t| t[2] < t[1]).count();
+    if held_back + waited_back != 0 {
+        return Err(format!(
+            "semaphore_units on {TWO} vCPUs: of the runtime word's first {} takings, {waited_back} waits and \
+             {held_back} holds ran backward",
+            takings.len()
+        ));
     }
-    let overwritten = takings.iter().filter(|t| t[2] < t[1]).count();
     let ns_per_tick = 1e9 / w2m_vm::host_state::counter_frequency()? as f64;
     let units = "timed-waits-semaphore-units";
+    // the runtime C's own takings among them (Sprint 358's amendment, `Site::Runtime`), held to a bound from the
+    // guest's own counts: every SetEvent of the manual-reset gate that let its wait through (`.counts` gated) readies
+    // that event's waiters under the word (`sync_objects.c` k32_SetEvent, `w2m_signal`), and every 1 ms wait on a
+    // thread's handle that timed out (`.counts` watched) checks one of the host's objects under the word
+    // (`wait_one_held`); each takes it once at least, in the C, the eight services' bridges taking none
+    let in_c = json["counted_in_c"]
+        .as_u64()
+        .ok_or(format!("{units_word}: no count of the C's takings"))?;
+    let guest_counts: Vec<u64> = serde_json::from_value(json["counts"].clone()).map_err(|e| e.to_string())?;
+    // `.counts` words 15 and 16 (`semaphore_units.c` struct judged: gated, watched; the section's size rounds the
+    // struct's 17 words up)
+    let (gated, watched) = match guest_counts.get(15..17) {
+        Some(&[g, w]) => (g, w),
+        _ => {
+            return Err(format!(
+                "semaphore_units: {} .counts words, not the 17 it counts",
+                guest_counts.len()
+            ));
+        }
+    };
+    if in_c < gated + watched || in_c > counted {
+        return Err(format!(
+            "semaphore_units on {TWO} vCPUs: the runtime C took the word {in_c} times, of {counted} takings, below \
+             the {} its {gated} gate releases and {watched} timed-out 1 ms waits make",
+            gated + watched
+        ));
+    }
+    lines.push(measurement_line_on(
+        vcpus,
+        "semaphore-units-runtime-word-takings",
+        Metric::RuntimeWordTakings,
+        counted as f64,
+        "count",
+        units,
+        Some(&format!(
+            "{} written, {waited_back} of them waits run backward; {in_c} of them the runtime C's, at least {} \
+             from the guest's {gated} gate releases and {watched} timed-out 1 ms waits",
+            takings.len(),
+            gated + watched
+        )),
+    ));
     for site in Site::ALL {
         let at: Vec<&[u64; 7]> = takings.iter().filter(|t| t[0] == site as u64).collect();
         for (which, [p50, p99], start, end) in [
@@ -422,26 +639,13 @@ fn run() -> Result<(), String> {
                 2,
             ),
         ] {
-            let mut ticks: Vec<u64> = at
-                .iter()
-                .filter(|t| t[end] >= t[start])
-                .map(|t| t[end] - t[start])
-                .collect();
+            let mut ticks: Vec<u64> = at.iter().map(|t| t[end] - t[start]).collect();
             if ticks.is_empty() {
                 continue;
             }
             ticks.sort_unstable();
-            let left_out = if which == "wait" {
-                format!(
-                    "; a lower bound, untrusted: another vCPU's wait writes the one wait start, {overwritten} of the \
-                     {} passing their taking, left out",
-                    takings.len()
-                )
-            } else {
-                String::new()
-            };
             let variant = format!(
-                "{}; {} of the run's first {} takings, of {counted} counted{left_out}",
+                "{}; {} of the run's first {} takings, of {counted} counted",
                 site.name(),
                 ticks.len(),
                 takings.len()
@@ -456,6 +660,129 @@ fn run() -> Result<(), String> {
                     units,
                     Some(&variant),
                 ));
+            }
+        }
+    }
+
+    // each leaf lock's takings, hold and wait (Sprint 358; vocabulary 0.14, P30-P32), on the guest that drives it, on two
+    // vCPUs and on one: the sync objects' on semaphore_units (its two-vCPU run the one above), the handle table's on
+    // handle_values, the heap's on heap_blocks, the slots' on probes/thread_slots_race
+    let slots_binary = std::fs::read_to_string(root.join(SLOTS_RACE_RUN).join("probe.sha256"))
+        .map_err(|e| format!("{SLOTS_RACE_RUN}/probe.sha256: {e}"))?;
+    let slots_program = format!("store/binaries/{}.exe", slots_binary.trim());
+    let rows: [(events::Lock, &str, &str, &str); 4] = [
+        (
+            events::Lock::SyncObjects,
+            "semaphore_units",
+            "tests/data/timed_waits/semaphore_units.exe",
+            units,
+        ),
+        (
+            events::Lock::Handles,
+            "handle_values",
+            "tests/data/timed_waits/handle_values.exe",
+            "timed-waits-handle-values",
+        ),
+        (
+            events::Lock::Heap,
+            "heap_blocks",
+            "tests/data/timed_waits/heap_blocks.exe",
+            "timed-waits-heap-blocks",
+        ),
+        (
+            events::Lock::Slots,
+            "thread_slots_race",
+            &slots_program,
+            "probe-thread-slots-race",
+        ),
+    ];
+    for (lock, name, exe, application) in rows {
+        for n in [TWO, 1] {
+            let label = format!("{name} on {n} vCPU(s)");
+            let (output, timed) = if lock == events::Lock::SyncObjects && n == TWO {
+                (b"done\n".to_vec(), json.clone())
+            } else {
+                timed_run(&root, exe, n, name)?
+            };
+            // the guest's own judge first: its rows, or "done"
+            if lock == events::Lock::Slots {
+                let windows = std::fs::read_to_string(root.join(SLOTS_RACE_RUN).join("body-1.jsonl"))
+                    .map_err(|e| format!("{SLOTS_RACE_RUN}/body-1.jsonl: {e}"))?;
+                if but_overlap(&String::from_utf8_lossy(&output)) != but_overlap(&windows) {
+                    return Err(format!(
+                        "{label}: its rows but tls.overlap are not Windows run {SLOTS_RACE_RUN}'s"
+                    ));
+                }
+            } else if output != b"done\n" {
+                return Err(format!(
+                    "{label}: its output is {:?}, not \"done\"",
+                    String::from_utf8_lossy(&output)
+                ));
+            }
+            let figures = leaf_locks(&timed, &label, n)?;
+            let (counted, takings) = figures
+                .iter()
+                .find(|(l, _, _)| *l == lock)
+                .map(|(_, c, t)| (*c, t.clone()))
+                .expect("every lock read");
+            let bound = takings_bound(lock, &timed, &output, &root)?;
+            if counted < bound {
+                return Err(format!(
+                    "{label}: the {} lock taken {counted} times, below the {bound} its own counts of its calls make",
+                    lock.as_str()
+                ));
+            }
+            let mut holds: Vec<u64> = takings.iter().map(|t| t[2] - t[1]).collect();
+            let mut waits: Vec<u64> = takings.iter().map(|t| t[1] - t[0]).collect();
+            holds.sort_unstable();
+            waits.sort_unstable();
+            if n == TWO && quantile(&waits, 0.99) == 0 {
+                return Err(format!(
+                    "{label}: the {} lock's waits are 0 at the 99th percentile of its first {} takings: its \
+                     threads never met at it",
+                    lock.as_str(),
+                    takings.len()
+                ));
+            }
+            let on = (n == TWO).then_some(vcpus);
+            let suffix = if n == TWO { "" } else { "-one-vcpu" };
+            let id = |what: &str| {
+                format!(
+                    "{}-lock-{}-{what}{suffix}",
+                    name.replace('_', "-"),
+                    lock.as_str().replace('_', "-")
+                )
+            };
+            let over = format!("the run's first {} takings, of {counted} counted", takings.len());
+            let mut push = |what: &str, metric: Metric, value: f64, unit: &str, variant: String| {
+                lines.push(
+                    lock_measurement_line(on, lock, &id(what), metric, value, unit, application, Some(&variant))
+                        .expect("a lock metric"),
+                );
+            };
+            push(
+                "takings",
+                Metric::LockTakings,
+                counted as f64,
+                "count",
+                format!(
+                    "{} written; at least {bound} from the guest's own counts of its calls",
+                    takings.len()
+                ),
+            );
+            for (what, metric, sorted, q) in [
+                ("hold-ns-p50", Metric::LockHoldNsP50, &holds, 0.5),
+                ("hold-ns-p99", Metric::LockHoldNsP99, &holds, 0.99),
+                ("wait-ns-p50", Metric::LockWaitNsP50, &waits, 0.5),
+                ("wait-ns-p99", Metric::LockWaitNsP99, &waits, 0.99),
+            ] {
+                push(
+                    what,
+                    metric,
+                    (quantile(sorted, q) as f64 * ns_per_tick).round(),
+                    "ns",
+                    over.clone(),
+                );
             }
         }
     }

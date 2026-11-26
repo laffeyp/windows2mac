@@ -75,16 +75,60 @@ static void hold_runtime_word(void) {
  * DuplicateHandle's look at the file table, card 4 of docs/design-handles-and-sync-objects-2026-11-26.md); 1 when this
  * call took it, 0 when this vCPU held it already (a traced call's bridge takes it whatever the service's class) and
  * keeps it. */
+#ifdef W2M_TIME_LOCKS
+/* The C's takings of the runtime word timed (Sprint 358's amendment; runtime.h W2M_WORD_TIMING_OFF), in an image
+ * built for a timed run alone, as the monitor code's `take_runtime` and `record_taking` time a site's: the wait's start
+ * and the exit count then to this vCPU's own words before the take; the taken time and the exit count then to the
+ * header after it; at the release, still holding the word, the entry at the takings' count, the C's own count and the
+ * area's raised (plain adds: only the word's holder writes them). */
+static volatile u64 *word_timing(void) { return (volatile u64 *)(W2M_MONITOR_VA + W2M_WORD_TIMING_OFF); }
+static volatile u64 *word_wait_start(void) { return (volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_WORD_WAIT_START_OFF); }
+static void word_waiting(void) {
+    word_wait_start()[0] = w2m_lock_clock();
+    word_wait_start()[1] = word_timing()[5];
+}
+static void word_taken(void) {
+    volatile u64 *h = word_timing();
+    h[1] = w2m_lock_clock();
+    h[3] = h[5];
+}
+static void word_released(void) {
+    volatile u64 *h = word_timing();
+    u64 released = w2m_lock_clock(), i = h[4];
+    if (i < W2M_WORD_TAKINGS) {
+        volatile u64 *e = h + 8 + 8 * i;
+        e[0] = word_wait_start()[0];
+        e[1] = h[1];
+        e[2] = released;
+        e[3] = W2M_WORD_SITE_RUNTIME;
+        e[4] = word_wait_start()[1];
+        e[5] = h[3];
+        e[6] = h[5];
+    }
+    h[4] = i + 1;
+    h[0] = h[0] + 1;
+}
+#endif
+
 int w2m_take_runtime_word(void) {
     u32 *word = (u32 *)(W2M_RUN_TABLE_VA + W2M_RUNTIME_LOCK_OFF);
     u32 own = (u32)*(const volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_LOCK_OWNER_OFF);
     if (__atomic_load_n(word, __ATOMIC_RELAXED) == own) return 0;
+#ifdef W2M_TIME_LOCKS
+    word_waiting();
     hold_runtime_word();
+    word_taken();
+#else
+    hold_runtime_word();
+#endif
     return 1;
 }
 
 /* The word let go when `taken`: a store of 0, release (STLR), as a bridge's `unlock_runtime`. */
 void w2m_let_runtime_word_go(int taken) {
+#ifdef W2M_TIME_LOCKS
+    if (taken) word_released();
+#endif
     if (taken) __atomic_store_n((u32 *)(W2M_RUN_TABLE_VA + W2M_RUNTIME_LOCK_OFF), 0, __ATOMIC_RELEASE);
 }
 

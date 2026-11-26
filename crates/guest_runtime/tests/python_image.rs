@@ -67,7 +67,7 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 
 /// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
 /// is the frozen one with these changes, which their own tests judge (Sprint 272).
-const DEPARTURES: [(&str, &str); 11] = [
+const DEPARTURES: [(&str, &str); 12] = [
     (
         "tools/guest_runtime/block_compiler.c",
         "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
@@ -80,7 +80,9 @@ const DEPARTURES: [(&str, &str); 11] = [
     (
         "tools/guest_runtime/heap.c",
         "Sprint 343: the process heap's own lock around its free list, bump pointer and set-up, for its five \
-         services, which take no runtime word",
+         services, which take no runtime word; Sprint 358: its take and release timed in an image built with \
+         W2M_TIME_LOCKS (runtime.h), and w2m_lock_timing_areas, the symbol by which the host knows that image; \
+         without the define the image is the one built before, byte for byte",
     ),
     (
         "tools/guest_runtime/processes.c",
@@ -93,7 +95,16 @@ const DEPARTURES: [(&str, &str); 11] = [
          several vCPUs at once; Sprint 342: w2m_unimplemented holds the runtime word before its host request, which \
          a service of lock class none makes without it; Sprint 355: w2m_take_runtime_word and \
          w2m_let_runtime_word_go, the word taken and let go by a service whose bridge holds none, for a named event's \
-         EVENT_OPEN and DuplicateHandle's look at the file table",
+         EVENT_OPEN and DuplicateHandle's look at the file table; Sprint 358's amendment: in an image built with \
+         W2M_TIME_LOCKS, w2m_take_runtime_word's takings timed and counted in the runtime word's timing area as the \
+         site runtime, their wait start in the vCPU's own monitor data words",
+    ),
+    (
+        "tools/guest_runtime/runtime.h",
+        "Sprint 358: the leaf locks' timed take and release (w2m_lock_take, w2m_lock_let_go) and their four timing \
+         areas at the monitor region's end, declared only under W2M_TIME_LOCKS, which the host defines for a run \
+         that times its runtime word: a taking's wait start and taken time in its vCPU's own monitor data words, its \
+         count by an atomic add, its whole entry written while the lock is held",
     ),
     (
         "tools/guest_runtime/sync_objects.c",
@@ -113,7 +124,8 @@ const DEPARTURES: [(&str, &str); 11] = [
          all naming one of the host's objects to check again, never taking for it; CloseHandle and w2m_object_kind \
          read a count only of the kinds fixed at creation; Sprint 356's amendment: a mutex whose owner thread ends \
          is abandoned (w2m_mutexes_abandoned), granted to its first waiter or taken by the next wait, which answers \
-         WAIT_ABANDONED (WAIT_ABANDONED_0 + index for several) once",
+         WAIT_ABANDONED (WAIT_ABANDONED_0 + index for several) once; Sprint 358: the handle table's and the sync \
+         objects' takes and releases timed in an image built with W2M_TIME_LOCKS (runtime.h)",
     ),
     (
         "tools/guest_runtime/thread_storage.c",
@@ -122,7 +134,8 @@ const DEPARTURES: [(&str, &str); 11] = [
          their index 0 in every live thread's TEB or expansion array, as Windows reads another thread's value, and \
          give the first thread its expansion array, so it can use an index past 63 another thread allocated; Sprint \
          348: the run table's count read with acquire (LDAPR), pairing with the host's release store of it after a new entry's \
-         words, since the slots' lock is not the runtime word the host's writer holds",
+         words, since the slots' lock is not the runtime word the host's writer holds; Sprint 358: the slots' take \
+         and release timed in an image built with W2M_TIME_LOCKS (runtime.h)",
     ),
     (
         "tools/guest_runtime/threads.c",

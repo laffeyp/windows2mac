@@ -79,15 +79,23 @@ static u32 handles_lock;
 /* The table held: compare-and-swap of 0 for 1, acquire, as thread_storage.c's `hold_slots` (CASA), a waiter reading the
  * word by plain loads until it reads 0 before it tries the swap. Nothing reenters it. */
 static void hold_handles(void) {
+#ifdef W2M_TIME_LOCKS
+    w2m_lock_take(&handles_lock, W2M_LOCK_HANDLES);      /* timed (Sprint 358, runtime.h) */
+#else
     for (;;) {
         while (__atomic_load_n(&handles_lock, __ATOMIC_RELAXED)) {}
         u32 free = 0;
         if (__atomic_compare_exchange_n(&handles_lock, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
     }
+#endif
 }
 
 /* The table let go: a store of 0, release (STLR), as `let_slots_go`. */
+#ifdef W2M_TIME_LOCKS
+static void let_handles_go(void) { w2m_lock_let_go(&handles_lock, W2M_LOCK_HANDLES); }
+#else
 static void let_handles_go(void) { __atomic_store_n(&handles_lock, 0, __ATOMIC_RELEASE); }
+#endif
 
 /* runtime.c (Sprint 355): the runtime word taken by a call whose bridge holds none, 1 when this call took it; and let
  * go when it did. A named event's EVENT_OPEN and DuplicateHandle's look at the file table and the standard handles take
@@ -330,15 +338,23 @@ static u32 sync_lock;
 /* The state held, in the form of `hold_handles`: compare-and-swap of 0 for 1, acquire (CASA), plain loads while
  * another vCPU holds it. Nothing reenters it. */
 static void hold_sync(void) {
+#ifdef W2M_TIME_LOCKS
+    w2m_lock_take(&sync_lock, W2M_LOCK_SYNC_OBJECTS);    /* timed (Sprint 358, runtime.h) */
+#else
     for (;;) {
         while (__atomic_load_n(&sync_lock, __ATOMIC_RELAXED)) {}
         u32 free = 0;
         if (__atomic_compare_exchange_n(&sync_lock, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
     }
+#endif
 }
 
 /* The state let go: a store of 0, release (STLR). */
+#ifdef W2M_TIME_LOCKS
+static void let_sync_go(void) { w2m_lock_let_go(&sync_lock, W2M_LOCK_SYNC_OBJECTS); }
+#else
 static void let_sync_go(void) { __atomic_store_n(&sync_lock, 0, __ATOMIC_RELEASE); }
+#endif
 
 /* The runtime word as a wait or a release holds it, taken with no leaf held: `held` while this call holds it, `taken`
  * when this call took it (a traced call's bridge holds it already, as does a run on the host's clock, `services.rs`

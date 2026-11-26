@@ -88,7 +88,10 @@ fn the_two_vcpu_run_is_on_the_record() {
     // with vcpus 2 and the four runtime-word metrics among them, a hold's median at most its 99th percentile
     let units: Vec<&Value> = measurements
         .iter()
-        .filter(|p| p["application_profile_id"] == "timed-waits-semaphore-units")
+        .filter(|p| {
+            p["application_profile_id"] == "timed-waits-semaphore-units"
+                && p["metric"].as_str().is_some_and(|m| m.starts_with("runtime_word_"))
+        })
         .collect();
     for metric in [
         "runtime_word_hold_ns_p50",
@@ -111,10 +114,22 @@ fn the_two_vcpu_run_is_on_the_record() {
             row["measurement_id"]
         );
     }
+    // Sprint 358: a leaf lock's rows carry vcpus 2 but those of its one-vCPU run, named so
+    for row in measurements.iter().filter(|p| !p["lock"].is_null()) {
+        let one = row["measurement_id"].as_str().unwrap().ends_with("-one-vcpu");
+        assert_eq!(
+            row["vcpus"],
+            if one { Value::Null } else { Value::from(2) },
+            "{}: {}'s vCPUs",
+            record.display(),
+            row["measurement_id"]
+        );
+    }
     let two_vcpu = ["locked_model_steps", "turn_start_ns_p50", "turn_start_ns_p99"];
-    for row in measurements.iter().filter(|p| {
-        !two_vcpu.iter().any(|m| p["metric"] == *m) && p["application_profile_id"] != "timed-waits-semaphore-units"
-    }) {
+    for row in measurements
+        .iter()
+        .filter(|p| !two_vcpu.iter().any(|m| p["metric"] == *m) && !units.contains(p) && p["lock"].is_null())
+    {
         assert!(
             row["vcpus"].is_null(),
             "{}: {} carries vcpus {}, where a one-vCPU measurement carries none",
@@ -164,6 +179,109 @@ fn the_three_capabilities_are_on_the_record() {
         one("guest_wfe_exit")["outcome"],
         present(wfe > 0.0),
         "{}: guest_wfe_exit with {wfe} WFE traps",
+        record.display()
+    );
+}
+
+/// Sprint 358: each leaf lock's takings, hold and wait on the record, on the guest that drives it, on two vCPUs and on
+/// one: the five metrics once each with its `lock`; its takings at least the bound its variant names, which
+/// `run_measurements` makes from the guest's own counts of its calls; on two vCPUs its wait at the 99th percentile
+/// above 0, the guest's threads meeting at it, and on one its waits 0, there being no other taker; each median at most
+/// its 99th percentile. And the runtime word's takings beside its figures on semaphore_units' two-vCPU run, none of its
+/// waits run backward.
+#[test]
+fn each_leaf_locks_takings_hold_and_wait_are_on_the_record() {
+    let record = record();
+    let measurements = of_kind(&w2m_events(&record), "MEASUREMENT_RECORDED");
+    for lock in ["heap", "slots", "handles", "sync_objects"] {
+        for two in [true, false] {
+            let rows: Vec<&Value> = measurements
+                .iter()
+                .filter(|p| p["lock"] == lock && p["vcpus"].is_null() != two)
+                .collect();
+            let value = |metric: &str| -> f64 {
+                let of: Vec<&&Value> = rows.iter().filter(|p| p["metric"] == metric).collect();
+                assert_eq!(
+                    of.len(),
+                    1,
+                    "{}: {lock}'s {metric} (two vCPUs {two}) {} times",
+                    record.display(),
+                    of.len()
+                );
+                of[0]["value"].as_f64().unwrap()
+            };
+            let takings = rows.iter().find(|p| p["metric"] == "lock_takings").unwrap();
+            let bound: f64 = takings["variant"]
+                .as_str()
+                .and_then(|v| v.split("at least ").nth(1))
+                .and_then(|v| v.split(' ').next())
+                .and_then(|n| n.parse().ok())
+                .unwrap_or_else(|| panic!("{}: {lock}'s takings name no bound: {takings}", record.display()));
+            assert!(
+                value("lock_takings") >= bound && bound > 0.0,
+                "{}: {lock} taken {} times, its bound {bound}",
+                record.display(),
+                value("lock_takings")
+            );
+            let (hold50, hold99) = (value("lock_hold_ns_p50"), value("lock_hold_ns_p99"));
+            let (wait50, wait99) = (value("lock_wait_ns_p50"), value("lock_wait_ns_p99"));
+            assert!(
+                hold50 <= hold99 && wait50 <= wait99,
+                "{}: {lock}'s medians and 99th percentiles",
+                record.display()
+            );
+            if two {
+                assert!(
+                    wait99 > 0.0,
+                    "{}: {lock}'s waits on two vCPUs, 99th percentile {wait99}",
+                    record.display()
+                );
+            } else {
+                assert_eq!(
+                    (wait50, wait99),
+                    (0.0, 0.0),
+                    "{}: {lock}'s waits on one vCPU",
+                    record.display()
+                );
+            }
+        }
+    }
+    let word: Vec<&Value> = measurements
+        .iter()
+        .filter(|p| {
+            p["metric"] == "runtime_word_takings" && p["application_profile_id"] == "timed-waits-semaphore-units"
+        })
+        .collect();
+    assert_eq!(
+        word.len(),
+        1,
+        "{}: semaphore_units' runtime word takings",
+        record.display()
+    );
+    assert_eq!(word[0]["vcpus"], 2);
+    let variant = word[0]["variant"].as_str().unwrap();
+    assert!(
+        variant.contains(" written, 0 of them waits run backward; ") && word[0]["value"].as_f64().unwrap() >= 16_384.0,
+        "{}: semaphore_units' runtime word takings {} and {variant:?}",
+        record.display(),
+        word[0]["value"]
+    );
+    // Sprint 358's amendment: the runtime C's takings among them, at least the bound the guest's counts make
+    let number_before = |marker: &str| -> f64 {
+        variant
+            .split(marker)
+            .next()
+            .and_then(|v| v.rsplit(' ').next())
+            .and_then(|n| n.parse().ok())
+            .unwrap_or_else(|| panic!("{}: no number before {marker:?} in {variant:?}", record.display()))
+    };
+    let (in_c, bound) = (
+        number_before(" of them the runtime C's"),
+        number_before(" from the guest's"),
+    );
+    assert!(
+        in_c >= bound && bound > 0.0 && in_c <= word[0]["value"].as_f64().unwrap(),
+        "{}: the runtime C's takings {in_c}, its bound {bound}",
         record.display()
     );
 }

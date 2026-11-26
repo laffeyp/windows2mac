@@ -184,6 +184,21 @@ const ORDINAL_NAMES: [(&str, &str, &str); 8] = [
     ("WS2_32.DLL", "#116", "WSACleanup"),
 ];
 
+/// The symbol only an image built with `W2M_TIME_LOCKS` defines (`heap.c`, Sprint 358): its leaf locks' takes and
+/// releases timed into `monitor_code::LOCK_AREAS`.
+pub const LOCKS_TIMED_SYMBOL: &str = "w2m_lock_timing_areas";
+
+/// The defines the runtime image is built with for a run that times its runtime word or not (Sprint 358): the layout's
+/// (`runtime_defines`), and with timing `W2M_TIME_LOCKS`, which times the four leaf locks. Without it the image is the
+/// one built before Sprint 358, byte for byte, so an untimed run's takes and releases are unchanged.
+pub fn runtime_defines_for(timed: bool) -> Vec<(String, u64)> {
+    let mut defines = guest_runtime::layout::runtime_defines();
+    if timed {
+        defines.push(("W2M_TIME_LOCKS".to_string(), 1));
+    }
+    defines
+}
+
 /// Why a guest could not be laid out.
 #[derive(Debug)]
 pub enum GuestError {
@@ -879,6 +894,17 @@ impl Guest {
         system_modules: &BTreeSet<String>,
         vm_compiler_symbols: &[String],
     ) -> Result<Guest, GuestError> {
+        // the leaf locks timed exactly when the run times the runtime word (Sprint 358): an image built for a timed run
+        // in an untimed one, or the other way about, is refused before any memory is made
+        let image_timed = image.symbols.contains_key(LOCKS_TIMED_SYMBOL);
+        if image_timed != start.time_runtime_word {
+            return Err(GuestError::Layout(format!(
+                "the runtime image's leaf locks are {} and the run's runtime word {}: build it with \
+                 guest::runtime_defines_for",
+                if image_timed { "timed" } else { "not timed" },
+                if start.time_runtime_word { "timed" } else { "not timed" }
+            )));
+        }
         let layout = Layout::new(loaded, start.host_range.is_some());
         let mut memory = match start.memory_fd {
             // a child's: the supervisor's unlinked file, sized here and mapped shared (Sprint 197)
@@ -1732,7 +1758,12 @@ impl Guest {
 
 #[cfg(test)]
 mod tests {
-    use super::{Assembler, CODE_CACHE, Lock, MONITOR_VA, THUNK_BASE, a64, bridge, init_stub_code};
+    use super::{
+        Assembler, CODE_CACHE, Guest, GuestError, Lock, MONITOR_SIZE, MONITOR_VA, Start, THUNK_BASE, a64, bridge,
+        init_stub_code,
+    };
+    use pe_loader::Loaded;
+    use std::collections::BTreeSet;
 
     /// A bridge's words for a service of `lock`, traced or not, timed or not.
     fn bridge_words(lock: Lock, traced: bool, timed: bool) -> Vec<u32> {
@@ -1769,6 +1800,145 @@ mod tests {
             Some(crate::monitor_code::RUNTIME_LOCK),
             "runtime.c's W2M_RUNTIME_LOCK_OFF"
         );
+    }
+
+    /// Sprint 358: the timed image's leaf-lock areas are where the host reads them (`runtime.h`'s `W2M_LOCK_AREA`,
+    /// `W2M_LOCK_TAKING_OFF`, its entry of four words and its locks' order, against `monitor_code::LOCK_AREA`,
+    /// `LOCK_TAKING`, `LOCK_AREA_ENTRY` and `events::Lock::ALL`), and the areas lie at the monitor region's end, past
+    /// the runtime word's.
+    #[test]
+    fn the_cs_leaf_lock_areas_are_the_hosts() {
+        use crate::monitor_code::{LOCK_AREA, LOCK_AREA_ENTRY, LOCK_AREAS, LOCK_TAKING};
+        let h = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tools/guest_runtime/runtime.h"
+        ))
+        .unwrap();
+        let hex = |name: &str| {
+            h.lines()
+                .find_map(|l| l.strip_prefix(&format!("#define {name} 0x")))
+                .map(|v| u64::from_str_radix(v.trim().trim_end_matches("ull"), 16).unwrap())
+        };
+        assert_eq!(hex("W2M_LOCK_AREA"), Some(LOCK_AREA), "runtime.h's W2M_LOCK_AREA");
+        assert_eq!(
+            hex("W2M_LOCK_TAKING_OFF"),
+            Some(LOCK_TAKING),
+            "runtime.h's W2M_LOCK_TAKING_OFF"
+        );
+        assert!(
+            h.contains("struct w2m_lock_entry { u64 wait_start, taken, released, held; };") && LOCK_AREA_ENTRY == 32,
+            "runtime.h's entry, four words"
+        );
+        assert!(
+            h.contains("#define W2M_LOCK_AREAS_VA (W2M_MONITOR_VA + W2M_MONITOR_SIZE - W2M_LOCKS * W2M_LOCK_AREA)")
+                && LOCK_AREAS == MONITOR_SIZE - 4 * LOCK_AREA,
+            "runtime.h's areas at the monitor region's end"
+        );
+        let order: Vec<&str> = events::Lock::ALL
+            .iter()
+            .map(|l| match l {
+                events::Lock::Heap => "W2M_LOCK_HEAP",
+                events::Lock::Slots => "W2M_LOCK_SLOTS",
+                events::Lock::Handles => "W2M_LOCK_HANDLES",
+                events::Lock::SyncObjects => "W2M_LOCK_SYNC_OBJECTS",
+            })
+            .collect();
+        assert!(
+            h.contains(&format!("enum {{ {}, W2M_LOCKS }};", order.join(", "))),
+            "runtime.h's locks in events::Lock::ALL's order, {order:?}"
+        );
+    }
+
+    /// Sprint 358's amendment: the runtime C times its takings of the runtime word where the monitor code does
+    /// (`runtime.h`'s `W2M_WORD_TIMING_OFF`, `W2M_WORD_WAIT_START_OFF`, `W2M_WORD_TAKINGS` and `W2M_WORD_SITE_RUNTIME`,
+    /// against `monitor_code::LOCK_TIMING`, `RUNTIME_WAIT_START`, `LOCK_TAKINGS` and `Site::Runtime`), its entry the
+    /// monitor code's eight words from `LOCK_ENTRIES` and its count `LOCK_C_TAKINGS`, the header's first word.
+    #[test]
+    fn the_cs_runtime_word_timing_is_the_monitor_codes() {
+        use crate::monitor_code::{
+            LOCK_C_TAKINGS, LOCK_ENTRIES, LOCK_ENTRY, LOCK_TAKINGS, LOCK_TIMING, RUNTIME_WAIT_START, Site,
+        };
+        let h = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tools/guest_runtime/runtime.h"
+        ))
+        .unwrap();
+        let c = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tools/guest_runtime/runtime.c"
+        ))
+        .unwrap();
+        let value = |name: &str| {
+            h.lines()
+                .find_map(|l| l.strip_prefix(&format!("#define {name} ")))
+                .map(|v| {
+                    let v = v.trim().trim_end_matches("ull");
+                    match v.strip_prefix("0x") {
+                        Some(x) => u64::from_str_radix(x, 16).unwrap(),
+                        None => v.parse().unwrap(),
+                    }
+                })
+        };
+        assert_eq!(value("W2M_WORD_TIMING_OFF"), Some(LOCK_TIMING), "W2M_WORD_TIMING_OFF");
+        assert_eq!(
+            value("W2M_WORD_WAIT_START_OFF"),
+            Some(RUNTIME_WAIT_START),
+            "W2M_WORD_WAIT_START_OFF"
+        );
+        assert_eq!(value("W2M_WORD_TAKINGS"), Some(LOCK_TAKINGS), "W2M_WORD_TAKINGS");
+        assert_eq!(
+            value("W2M_WORD_SITE_RUNTIME"),
+            Some(Site::Runtime as u64),
+            "W2M_WORD_SITE_RUNTIME"
+        );
+        assert!(
+            LOCK_ENTRIES == 8 * 8
+                && LOCK_ENTRY == 8 * 8
+                && LOCK_C_TAKINGS == 0
+                && c.contains("volatile u64 *e = h + 8 + 8 * i;")
+                && c.contains("h[0] = h[0] + 1;"),
+            "runtime.c's entry at word 8 + 8 * i and its count at word 0"
+        );
+    }
+
+    /// Sprint 358: an image built for an untimed run has no timed leaf lock and one built for a timed run has them
+    /// (`runtime_defines_for`, the symbol `LOCKS_TIMED_SYMBOL`), and a guest refuses an image of the other kind, so an
+    /// untimed run's takes and releases are the image built before the timing.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_run_times_its_leaf_locks_exactly_when_it_times_its_runtime_word() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let image = |timed: bool| {
+            guest_runtime::build(
+                &root,
+                &super::runtime_defines_for(timed),
+                guest_runtime::layout::RUNTIME_IMAGE_VA,
+            )
+            .unwrap()
+            .1
+        };
+        let (untimed, timed) = (image(false), image(true));
+        assert!(
+            !untimed.symbols.contains_key(super::LOCKS_TIMED_SYMBOL),
+            "the untimed image times its locks"
+        );
+        assert!(
+            timed.symbols.contains_key(super::LOCKS_TIMED_SYMBOL),
+            "the timed image does not time its locks"
+        );
+        let texts = guest_runtime::texts(&root).unwrap();
+        let services = guest_runtime::services::services(&texts).unwrap();
+        let loaded = Loaded::bare(pe_loader::Memory::default(), 0x1000, 0x2000);
+        for (image, time) in [(&untimed, true), (&timed, false)] {
+            let mut start = Start::console("probe.exe");
+            start.time_runtime_word = time;
+            let refused = Guest::new(&loaded, image, &services, &start, &BTreeSet::new(), &[]);
+            assert!(
+                matches!(&refused, Err(GuestError::Layout(why)) if why.contains("leaf locks")),
+                "a guest built with an image of the other kind: {:?}",
+                refused.err()
+            );
+        }
     }
 
     /// Sprint 342 (Change 1's class none): a bridge of lock class none, untraced, holds no `lock_runtime` (its CASA) and

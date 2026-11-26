@@ -3,7 +3,10 @@
 # from a second, timed run of each guest, as MEASUREMENT_RECORDED with vocabulary 0.11's metrics (P24); from Sprint 337
 # step 6's two-vCPU run of locked_race (locked_model_steps, turn_start_ns_p50/p99, vcpus 2) and three CAPABILITY_PROBED
 # (feat_lse2, feat_bbm_level2, guest_wfe_exit), vocabulary 0.13; from Sprint 356 the runtime word's hold and wait by
-# site on semaphore_units' two-vCPU run (vcpus 2), the waits and releases off the word. run_measurements makes no VM itself; it runs each measurement as a signed w2m-vm child. Run from the
+# site on semaphore_units' two-vCPU run (vcpus 2), the waits and releases off the word; from Sprint 358 those waits
+# trusted, each wait's start its vCPU's own, runtime_word_takings, and each leaf lock's lock_takings,
+# lock_hold_ns_p50/p99 and lock_wait_ns_p50/p99 with its lock (vocabulary 0.14) on the guest that drives it, on two
+# vCPUs and on one. run_measurements makes no VM itself; it runs each measurement as a signed w2m-vm child. Run from the
 # repository root after `cargo build --release`, on this Mac (Hypervisor.framework):
 #   uv run substrate run --file harness/w2m-vm-measurements.toml --root store/runs/w2m-vm-measurements-<ns> --strict
 
@@ -11,7 +14,7 @@
 harness = "w2m"
 vocabulary = "0.14"
 host = "w2m-vm"
-implementation = "the Rust host, w2m-vm, on one vCPU and, for locked_race and the rows that say vcpus 2, on two, measured by run_measurements"
+implementation = "the Rust host, w2m-vm, on one vCPU and, for locked_race and the rows that say vcpus 2, on two, measured by run_measurements; the timed runs' image with its four leaf locks timed (W2M_TIME_LOCKS, Sprint 358)"
 
 [[producer]]
 kind = "run_measurements"

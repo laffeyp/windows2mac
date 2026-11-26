@@ -226,12 +226,36 @@ pub fn unlock_runtime(a: &mut Assembler) {
 
 /// MONITOR_VA + this: the runtime word's timing area (Sprint 164), in the monitor region past its eight vCPU areas,
 /// where the region's rounding up to a 2 MB block leaves 1,331,200 bytes no one uses (`VCPU_AREA + 8 * VCPU_STRIDE` is
-/// 0xA8BB000, `MONITOR_SIZE` 0xAA00000). The header: the taking in hand's wait start at +0, taken time at +8, and the
-/// exit count at each at +16 and +24 (counter ticks; exits as the host counts them at +40); the takings at +32,
+/// 0xA8BB000, `MONITOR_SIZE` 0xAA00000). The header: the C's takings at +0 (`LOCK_C_TAKINGS`, Sprint 358's
+/// amendment); the taking in hand's taken time at +8 and the exit count then at
+/// +24, which its holder alone writes (counter ticks; exits as the host counts them at +40); the takings at +32,
 /// counted even past the area's end; then `LOCK_TAKINGS` entries of 64 bytes from `LOCK_ENTRIES`, one per taking:
 /// wait start, taken, released, site (`Site`), and the exit count at each of the three. The run reads them at its
-/// stop.
+/// stop. A taking's wait start and the exit count then are its vCPU's own words, `RUNTIME_WAIT_START` and
+/// `RUNTIME_WAIT_EXITS` in its monitor data page, from Sprint 358: until then they were the header's +0 and +16, which a
+/// second vCPU waiting wrote over while the first waited, so 4,349 of 16,384 two-vCPU waits started past their taking
+/// (Sprint 356).
 pub const LOCK_TIMING: u64 = (VCPU_AREA + MAX_VCPUS * VCPU_STRIDE + PAGE - 1) & !(PAGE - 1);
+/// MONITOR_DATA + these (Sprint 358): the runtime word's wait start of the taking in hand on this vCPU, and the exit
+/// count then, past the YMM upper halves' 0x400-0x500 (`cases::YMM_HI_OFF`); each vCPU's own page, so no other writes
+/// them.
+pub const RUNTIME_WAIT_START: u64 = 0x500;
+pub const RUNTIME_WAIT_EXITS: u64 = 0x508;
+/// MONITOR_DATA + this + 16 * lock (Sprint 358): a leaf lock's taking in hand on this vCPU, its wait start and taken
+/// time, which the C keeps (`runtime.h` `W2M_LOCK_TAKING_OFF`) while it holds the lock.
+pub const LOCK_TAKING: u64 = 0x510;
+/// MONITOR_VA + this (Sprint 358): the four leaf locks' timing areas, at the monitor region's end, each `LOCK_AREA`
+/// bytes in the order of `events::Lock::ALL` (`runtime.h` `W2M_LOCK_AREAS_VA`): its takings at +0, counted by an atomic
+/// add even past its end, and from +64 one 32-byte entry a taking, wait start, taken, released, and the lock word as
+/// its holder read it when it wrote the entry, 1 while the lock is held. Only an image built with `W2M_TIME_LOCKS`
+/// writes them (`guest::runtime_defines_for`).
+pub const LOCK_AREA: u64 = 0x10000;
+pub const LOCK_AREAS: u64 = MONITOR_SIZE - 4 * LOCK_AREA;
+pub const LOCK_AREA_ENTRIES: u64 = 64;
+pub const LOCK_AREA_ENTRY: u64 = 32;
+pub const LOCK_AREA_TAKINGS: u64 = (LOCK_AREA - LOCK_AREA_ENTRIES) / LOCK_AREA_ENTRY;
+const _: () = assert!(LOCK_TIMING + LOCK_ENTRIES + LOCK_ENTRY * LOCK_TAKINGS <= LOCK_AREAS);
+const _: () = assert!(LOCK_TAKING + 16 * 4 <= PAGE);
 pub const LOCK_TAKINGS_COUNT: u64 = 32;
 pub const LOCK_EXITS: u64 = 40;
 /// the release time while the entry is written
@@ -252,10 +276,19 @@ pub enum Site {
     Compile = 2,
     /// the exception entry, around `w2m_exception`
     Exception = 3,
+    /// the runtime's C, `w2m_take_runtime_word` to `w2m_let_runtime_word_go` (Sprint 358's amendment): a service whose
+    /// bridge takes no word taking it to park, to ready or for a host request (`runtime.h` `W2M_WORD_SITE_RUNTIME`)
+    Runtime = 4,
 }
 
 impl Site {
-    pub const ALL: [Site; 4] = [Site::Switch, Site::Bridge, Site::Compile, Site::Exception];
+    pub const ALL: [Site; 5] = [
+        Site::Switch,
+        Site::Bridge,
+        Site::Compile,
+        Site::Exception,
+        Site::Runtime,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -263,9 +296,15 @@ impl Site {
             Site::Bridge => "bridge",
             Site::Compile => "compile",
             Site::Exception => "exception",
+            Site::Runtime => "runtime",
         }
     }
 }
+
+/// LOCK_TIMING + this (Sprint 358's amendment): the takings the runtime's C made (`Site::Runtime`), counted even past
+/// the area's end; they are among the area's takings at `LOCK_TAKINGS_COUNT` too. The header's word +0, which the wait's
+/// start held before it moved to each vCPU's own words.
+pub const LOCK_C_TAKINGS: u64 = 0;
 
 /// The virtual counter and the host's exit count to the header at `time_off` and `exits_off`, through x16 and x18.
 /// The ISB keeps the counter's read from moving ahead of the instructions before it (Arm ARM: a CNTVCT_EL0 read may
@@ -281,11 +320,24 @@ fn stamp(a: &mut Assembler, time_off: u64, exits_off: u64) {
     ]);
 }
 
+/// The wait's start (Sprint 358): the counter and the exit count to this vCPU's own `RUNTIME_WAIT_START` and
+/// `RUNTIME_WAIT_EXITS`, through x16 and x18, so a second vCPU waiting writes its own and not this one's.
+fn stamp_wait_start(a: &mut Assembler) {
+    a.emit(&[a64::ISB, a64::mrs(18, a64::CNTVCT_EL0)]);
+    a.emit(&a64::mov_imm(16, MONITOR_VA + MONITOR_DATA));
+    a.emit(&[a64::str(8, 18, 16, RUNTIME_WAIT_START as u32)]);
+    a.emit(&a64::mov_imm(16, MONITOR_VA + LOCK_TIMING));
+    a.emit(&[a64::ldr(8, 18, 16, LOCK_EXITS as u32)]);
+    a.emit(&a64::mov_imm(16, MONITOR_VA + MONITOR_DATA));
+    a.emit(&[a64::str(8, 18, 16, RUNTIME_WAIT_EXITS as u32)]);
+}
+
 /// The runtime word taken, timed when `timed`: the counter and the exit count before the first attempt (the wait's
-/// start) and after the taking. `lock_runtime` clobbers x16 and x18 already; so does this.
+/// start, this vCPU's own words) and after the taking (the header's, which the holder alone writes). `lock_runtime`
+/// clobbers x16 and x18 already; so does this.
 pub fn take_runtime(a: &mut Assembler, timed: bool) {
     if timed {
-        stamp(a, 0, 16);
+        stamp_wait_start(a);
     }
     lock_runtime(a);
     if timed {
@@ -312,19 +364,24 @@ pub fn record_taking(a: &mut Assembler, site: Site, base: u32, r1: u32, r2: u32)
         a64::add(r1, base, r1, a64::LSL, LOCK_ENTRY.ilog2()),
         a64::ldr(8, r2, base, LOCK_RELEASED as u32),
         a64::str(8, r2, r1, e + 16), // released
-        a64::ldr(8, r2, base, 0),
-        a64::str(8, r2, r1, e), // wait start
         a64::ldr(8, r2, base, 8),
         a64::str(8, r2, r1, e + 8), // taken
         a64::movz(r2, site as u64, 0),
         a64::str(8, r2, r1, e + 24),
-        a64::ldr(8, r2, base, 16),
-        a64::str(8, r2, r1, e + 32), // exits at the wait start
         a64::ldr(8, r2, base, 24),
         a64::str(8, r2, r1, e + 40), // exits at the taking
         a64::ldr(8, r2, base, LOCK_EXITS as u32),
         a64::str(8, r2, r1, e + 48), // exits at the release
     ]);
+    // the wait start and the exit count then, this vCPU's own words (Sprint 358)
+    a.emit(&a64::mov_imm(base, MONITOR_VA + MONITOR_DATA));
+    a.emit(&[
+        a64::ldr(8, r2, base, RUNTIME_WAIT_START as u32),
+        a64::str(8, r2, r1, e), // wait start
+        a64::ldr(8, r2, base, RUNTIME_WAIT_EXITS as u32),
+        a64::str(8, r2, r1, e + 32), // exits at the wait start
+    ]);
+    a.emit(&a64::mov_imm(base, MONITOR_VA + LOCK_TIMING));
     a.bind(full);
     a.emit(&[
         a64::ldr(8, r2, base, LOCK_TAKINGS_COUNT as u32),

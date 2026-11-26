@@ -472,7 +472,7 @@ pub fn measurement_line(
 ) -> String {
     // absent, meaning one vCPU and no holder (0.13, P25 and P27): the batch run and `run_measurements`' one-vCPU
     // measurements, this function's callers, run on one vCPU and split no hold by holder
-    measurement(measurement_id, metric, value, unit, application, variant, None)
+    measurement(measurement_id, metric, value, unit, application, variant, None, None)
 }
 
 /// A MEASUREMENT_RECORDED line as `measurement_line` writes one, of a run on `vcpus` vCPUs (Sprint 337): the one site
@@ -487,9 +487,55 @@ pub fn measurement_line_on(
     application: &str,
     variant: Option<&str>,
 ) -> String {
-    measurement(measurement_id, metric, value, unit, application, variant, Some(vcpus))
+    measurement(
+        measurement_id,
+        metric,
+        value,
+        unit,
+        application,
+        variant,
+        Some(vcpus),
+        None,
+    )
 }
 
+/// The five metrics a leaf lock's MEASUREMENT_RECORDED carries its `lock` on, and no other (E16, 0.14 P32).
+pub const LOCK_METRICS: [events::Metric; 5] = [
+    events::Metric::LockTakings,
+    events::Metric::LockHoldNsP50,
+    events::Metric::LockHoldNsP99,
+    events::Metric::LockWaitNsP50,
+    events::Metric::LockWaitNsP99,
+];
+
+/// A leaf lock's MEASUREMENT_RECORDED line (Sprint 358): as `measurement_line` and `measurement_line_on` write one, on
+/// `vcpus` vCPUs (None: one), with its `lock`; None for a metric not among `LOCK_METRICS`, which carries no lock (E16).
+#[allow(clippy::too_many_arguments)]
+pub fn lock_measurement_line(
+    vcpus: Option<std::num::NonZeroU64>,
+    lock: events::Lock,
+    measurement_id: &str,
+    metric: events::Metric,
+    value: f64,
+    unit: &str,
+    application: &str,
+    variant: Option<&str>,
+) -> Option<String> {
+    LOCK_METRICS.contains(&metric).then(|| {
+        measurement(
+            measurement_id,
+            metric,
+            value,
+            unit,
+            application,
+            variant,
+            vcpus,
+            Some(lock),
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 fn measurement(
     measurement_id: &str,
     metric: events::Metric,
@@ -498,6 +544,7 @@ fn measurement(
     application: &str,
     variant: Option<&str>,
     vcpus: Option<std::num::NonZeroU64>,
+    lock: Option<events::Lock>,
 ) -> String {
     harness_line(&events::MeasurementRecorded {
         measurement_id: Id::new(measurement_id).expect("not empty"),
@@ -512,8 +559,9 @@ fn measurement(
         variant: variant.map(str::to_string),
         vcpus: vcpus.map(|n| HarnessU64::new(n.get()).expect("a vCPU count below 2^53")),
         holder: None,
-        // no leaf lock (0.14, P31): these lines measure the run and the runtime word, not a leaf lock (E16)
-        lock: None,
+        // a leaf lock (0.14, P31) only on `lock_measurement_line`'s five metrics (E16); `measurement_line` and
+        // `measurement_line_on` measure the run and the runtime word
+        lock,
     })
 }
 

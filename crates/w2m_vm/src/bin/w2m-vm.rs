@@ -528,7 +528,44 @@ mod run {
                         ]
                     })
                     .collect();
-                serde_json::json!({ "counted": w.counted, "takings": takings })
+                // each leaf lock's takings (Sprint 358): [wait start, taken, released, the lock word as its holder read
+                // it at the entry's write], counter ticks
+                let locks: serde_json::Map<String, serde_json::Value> = out
+                    .locks
+                    .iter()
+                    .map(|(lock, t)| {
+                        let takings: Vec<[u64; 4]> = t
+                            .takings
+                            .iter()
+                            .map(|e| [e.wait_start, e.taken, e.released, e.held])
+                            .collect();
+                        (
+                            lock.as_str().to_string(),
+                            serde_json::json!({ "counted": t.counted, "takings": takings }),
+                        )
+                    })
+                    .collect();
+                // the guest's own counts, the words of its `.counts` section when it has one (handle_values,
+                // semaphore_units, heap_blocks), read at the stop: the bounds `run_measurements` holds the takings to
+                let counts: Vec<u64> = loaded.images[0]
+                    .pe
+                    .sections
+                    .iter()
+                    .find(|s| s.name == ".counts")
+                    .and_then(|s| {
+                        let va = loaded.images[0].base + u64::from(s.virtual_address);
+                        let at = guest.offset(va)?;
+                        let words = (u64::from(s.virtual_size) / 8).min(64);
+                        Some((0..words).map(|i| guest.memory_view().read_u64(at + 8 * i)).collect())
+                    })
+                    .unwrap_or_default();
+                serde_json::json!({
+                    "counted": w.counted,
+                    "counted_in_c": w.counted_in_c,
+                    "takings": takings,
+                    "locks": locks,
+                    "counts": counts,
+                })
             };
             // relative to the repository root, as `--output` is (the review of 2026-10-27 found it relative to the
             // working directory)
@@ -570,7 +607,9 @@ mod run {
     /// The guest for `loaded` and `start`: the runtime image the build makes, its services, the exported modules and
     /// the VM compiler's symbols, as `tests/test_timed_waits.py` builds a VM.
     fn guest_of(root: &Path, loaded: &pe_loader::Loaded, start: &Start) -> Result<Guest, String> {
-        let (_, image) = guest_runtime::build(root, &runtime_defines(), RUNTIME_IMAGE_VA)
+        // the image with its leaf locks timed when the run times its runtime word (Sprint 358)
+        let defines = w2m_vm::guest::runtime_defines_for(start.time_runtime_word);
+        let (_, image) = guest_runtime::build(root, &defines, RUNTIME_IMAGE_VA)
             .map_err(|e| format!("the guest runtime's build: {e:?}"))?;
         let services = guest_runtime::services::services(
             &guest_runtime::texts(root).map_err(|e| format!("the guest runtime's sources: {e:?}"))?,

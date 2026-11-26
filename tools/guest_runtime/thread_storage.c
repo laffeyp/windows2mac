@@ -63,16 +63,24 @@ static void tls_init(void) {
 /* The slots held: compare-and-swap of 0 for 1, acquire, as heap.c's `hold` and lock_runtime (CASA), a waiter reading
  * the word by plain loads until it reads 0 before it tries the swap; then the TLS set-up. Nothing reenters it. */
 static void hold_slots(void) {
+#ifdef W2M_TIME_LOCKS
+    w2m_lock_take(&slots_lock, W2M_LOCK_SLOTS);          /* timed (Sprint 358, runtime.h) */
+#else
     for (;;) {
         while (__atomic_load_n(&slots_lock, __ATOMIC_RELAXED)) {}
         u32 free = 0;
         if (__atomic_compare_exchange_n(&slots_lock, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
     }
+#endif
     tls_init();
 }
 
 /* The slots let go: a store of 0, release (STLR), as heap.c's `let_go`. */
+#ifdef W2M_TIME_LOCKS
+static void let_slots_go(void) { w2m_lock_let_go(&slots_lock, W2M_LOCK_SLOTS); }
+#else
 static void let_slots_go(void) { __atomic_store_n(&slots_lock, 0, __ATOMIC_RELEASE); }
+#endif
 
 /* The calling thread's FLS block; `make`: create it (the thread's first FlsSetValue). Called with the slots held; a
  * full arena lets them go before it stops the run. */

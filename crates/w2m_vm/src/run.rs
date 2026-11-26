@@ -258,6 +258,8 @@ pub struct Taking {
 pub struct RuntimeWordTimes {
     pub counted: u64,
     pub takings: Vec<Taking>,
+    /// of `counted`, the takings the runtime's C made (`Site::Runtime`, Sprint 358's amendment)
+    pub counted_in_c: u64,
 }
 
 /// The timing area as the guest left it.
@@ -278,7 +280,55 @@ pub fn read_runtime_word(mem: ConcurrentGuestMemory<'_>) -> RuntimeWordTimes {
             }
         })
         .collect();
-    RuntimeWordTimes { counted, takings }
+    let counted_in_c = mem.read_u64(LOCK_TIMING + crate::monitor_code::LOCK_C_TAKINGS);
+    RuntimeWordTimes {
+        counted,
+        takings,
+        counted_in_c,
+    }
+}
+
+/// One taking of a leaf lock as the timed image wrote it (Sprint 358; `monitor_code::LOCK_AREAS`): virtual-counter
+/// ticks at its wait's start (its taken time when it did not wait), its taking and its release, and the lock word as
+/// its holder read it when it wrote the entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LockTaking {
+    pub wait_start: u64,
+    pub taken: u64,
+    pub released: u64,
+    pub held: u64,
+}
+
+/// A leaf lock's takings: how many it counted, and those it wrote (no more than `LOCK_AREA_TAKINGS`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LockTimes {
+    pub counted: u64,
+    pub takings: Vec<LockTaking>,
+}
+
+/// The four leaf locks' timing areas as the guest left them, in `events::Lock::ALL`'s order.
+pub fn read_locks(mem: ConcurrentGuestMemory<'_>) -> Vec<(events::Lock, LockTimes)> {
+    use crate::monitor_code::{LOCK_AREA, LOCK_AREA_ENTRIES, LOCK_AREA_ENTRY, LOCK_AREA_TAKINGS, LOCK_AREAS};
+    events::Lock::ALL
+        .iter()
+        .enumerate()
+        .map(|(k, &lock)| {
+            let area = LOCK_AREAS + LOCK_AREA * k as u64;
+            let counted = mem.read_u64(area);
+            let takings = (0..counted.min(LOCK_AREA_TAKINGS))
+                .map(|i| {
+                    let w = |n: u64| mem.read_u64(area + LOCK_AREA_ENTRIES + LOCK_AREA_ENTRY * i + 8 * n);
+                    LockTaking {
+                        wait_start: w(0),
+                        taken: w(1),
+                        released: w(2),
+                        held: w(3),
+                    }
+                })
+                .collect();
+            (lock, LockTimes { counted, takings })
+        })
+        .collect()
 }
 
 /// The kind the whole-block judge's host time is counted under, apart from the exit it follows (Sprint 257): the
@@ -309,6 +359,8 @@ pub struct Outcome {
     pub turn_start_ns: Vec<u64>,
     /// the runtime word's takings when the guest times them (Sprint 164)
     pub runtime_word: RuntimeWordTimes,
+    /// each leaf lock's takings when the guest times them (Sprint 358), in `events::Lock::ALL`'s order; empty untimed
+    pub locks: Vec<(events::Lock, LockTimes)>,
     /// each run's time, from `hv_vcpu_run`'s call to its return, in ns
     pub run_ns: Vec<u64>,
     /// the exits, by hvc number (0 for a non-hvc exit)
@@ -360,6 +412,7 @@ impl Outcome {
             serve_by_kind: BTreeMap::new(),
             turn_start_ns: Vec::new(),
             runtime_word: RuntimeWordTimes::default(),
+            locks: Vec::new(),
             run_ns: Vec::new(),
             exits: BTreeMap::new(),
             executed: 0,
@@ -1095,6 +1148,7 @@ fn run(
     out.executed = chains.iter().map(|(_, pages)| mem.read_u64(pages.monitor)).sum();
     if guest.time_runtime_word {
         out.runtime_word = read_runtime_word(guest.memory_view()); // Sprint 164: read once, at the stop
+        out.locks = read_locks(guest.memory_view()); // Sprint 358: the leaf locks', with it
     }
     Ok(out)
 }

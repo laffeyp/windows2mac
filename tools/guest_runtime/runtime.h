@@ -356,4 +356,80 @@ u32 w2m_get_last_error(void);
 #define W2M_PROCESSOR_MASK 0xFull
 void w2m_trace_return(u64 rsp, u64 value);   /* call_trace.c: a traced call that ran guest code returns (Sprint 061) */
 
+/* Each leaf lock's takings timed (Sprint 358), in the image built for a timed run alone: the host adds the define
+ * W2M_TIME_LOCKS=1 when the run's runtime word is timed (`Start::time_runtime_word`, w2m-vm's --runtime-word), and an
+ * image built without it is the image built before, its takes and releases unchanged. A take keeps its wait start and
+ * its taken time, by CNTVCT_EL0 as process.c reads it, in this vCPU's own monitor data words (W2M_LOCK_TAKING_OFF + 16
+ * * lock), which no other vCPU writes; its release adds 1 to the lock's takings by an atomic add, counted even past the
+ * area's end, and writes its whole entry while it still holds the lock: the wait start, the taken and released times,
+ * and the lock word as its holder reads it, 1. An untaken lock's take has no wait: its wait start is its taken time
+ * (Linux's lock statistics time the wait of a contended acquisition alone, Documentation/locking/lockstat.rst). The
+ * four areas lie at the monitor region's end, past the runtime word's timing area (`monitor_code::LOCK_LEAF_AREAS`,
+ * crates/w2m_vm), and the host reads them at the run's stop. */
+#ifdef W2M_TIME_LOCKS
+enum { W2M_LOCK_HEAP, W2M_LOCK_SLOTS, W2M_LOCK_HANDLES, W2M_LOCK_SYNC_OBJECTS, W2M_LOCKS };
+#define W2M_LOCK_AREA 0x10000ull
+#define W2M_LOCK_AREAS_VA (W2M_MONITOR_VA + W2M_MONITOR_SIZE - W2M_LOCKS * W2M_LOCK_AREA)
+#define W2M_LOCK_TAKING_OFF 0x510
+struct w2m_lock_entry { u64 wait_start, taken, released, held; };
+#define W2M_LOCK_ENTRIES ((W2M_LOCK_AREA - 64) / sizeof(struct w2m_lock_entry))
+struct w2m_lock_area {
+    u64 takings;
+    u64 reserved[7];
+    struct w2m_lock_entry entry[W2M_LOCK_ENTRIES];
+};
+_Static_assert(sizeof(struct w2m_lock_area) == W2M_LOCK_AREA, "a lock's timing area");
+
+static inline u64 w2m_lock_clock(void) {
+    u64 v;
+    __asm__ volatile("isb\n\tmrs %0, cntvct_el0" : "=r"(v));
+    return v;
+}
+
+/* `word` taken as the leaf locks take it, compare-and-swap of 0 for 1, acquire, plain loads while another holds it; its
+ * wait start read at the first try that fails, its taken time after the swap. */
+static inline void w2m_lock_take(u32 *word, u32 lock) {
+    u64 start = 0;
+    for (;;) {
+        if (!__atomic_load_n(word, __ATOMIC_RELAXED)) {
+            u32 free = 0;
+            if (__atomic_compare_exchange_n(word, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
+        }
+        if (!start) start = w2m_lock_clock();
+        while (__atomic_load_n(word, __ATOMIC_RELAXED)) {}
+    }
+    u64 taken = w2m_lock_clock();
+    volatile u64 *mine = (volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_LOCK_TAKING_OFF + 16 * lock);
+    mine[0] = start ? start : taken;
+    mine[1] = taken;
+}
+
+/* `word` let go, its taking counted and its entry written first, the lock still held; then a store of 0, release. */
+static inline void w2m_lock_let_go(u32 *word, u32 lock) {
+    const volatile u64 *mine = (const volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_LOCK_TAKING_OFF + 16 * lock);
+    struct w2m_lock_area *a = (struct w2m_lock_area *)(W2M_LOCK_AREAS_VA + lock * W2M_LOCK_AREA);
+    u64 released = w2m_lock_clock();
+    u64 i = __atomic_fetch_add(&a->takings, 1, __ATOMIC_RELAXED);
+    if (i < W2M_LOCK_ENTRIES) {
+        struct w2m_lock_entry *e = &a->entry[i];
+        e->wait_start = mine[0];
+        e->taken = mine[1];
+        e->released = released;
+        e->held = __atomic_load_n(word, __ATOMIC_RELAXED);
+    }
+    __atomic_store_n(word, 0, __ATOMIC_RELEASE);
+}
+
+/* The runtime word's timing area (Sprint 358's amendment), where runtime.c's own takings of the word, those of
+ * w2m_take_runtime_word and w2m_let_runtime_word_go, are timed beside the monitor code's: `monitor_code::LOCK_TIMING`,
+ * its entry of eight words, `LOCK_TAKINGS` of them, and the site `Site::Runtime`, which guest.rs's test holds these
+ * lines to. The header: +0 the C's takings, +8 the taking in hand's taken time and +24 the exit count then (its holder
+ * alone writes them), +32 every taking of the word, +40 the host's exit count; the wait's start and the exit count then
+ * in this vCPU's own monitor data words, `monitor_code::RUNTIME_WAIT_START` and `RUNTIME_WAIT_EXITS`. */
+#define W2M_WORD_TIMING_OFF 0xA8BB000ull
+#define W2M_WORD_WAIT_START_OFF 0x500
+#define W2M_WORD_TAKINGS 16384ull
+#define W2M_WORD_SITE_RUNTIME 4ull
+#endif
+
 #endif

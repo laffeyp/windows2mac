@@ -59,11 +59,15 @@ static int ready;
  * never reads it. */
 static struct heap *hold(void) {
     struct heap *h = (struct heap *)W2M_HEAP_VA;
+#ifdef W2M_TIME_LOCKS
+    w2m_lock_take(&h->lock, W2M_LOCK_HEAP);              /* timed (Sprint 358, runtime.h) */
+#else
     for (;;) {
         while (__atomic_load_n(&h->lock, __ATOMIC_RELAXED)) {}
         u32 free = 0;
         if (__atomic_compare_exchange_n(&h->lock, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
     }
+#endif
     if (!ready) {
         ready = 1;
         h->magic = BLOCK_MAGIC;
@@ -78,7 +82,15 @@ static struct heap *hold(void) {
 }
 
 /* The heap let go: a store of 0, release, as unlock_runtime lets the runtime word go (STLR). */
+#ifdef W2M_TIME_LOCKS
+static void let_go(struct heap *h) { w2m_lock_let_go(&h->lock, W2M_LOCK_HEAP); }
+
+/* The four leaf locks' timing areas (Sprint 358): a symbol only the timed image defines, by which the host knows an
+ * image's takes are timed (`guest::LOCKS_TIMED_SYMBOL`). */
+u64 w2m_lock_timing_areas(void) { return W2M_LOCK_AREAS_VA; }
+#else
 static void let_go(struct heap *h) { __atomic_store_n(&h->lock, 0, __ATOMIC_RELEASE); }
+#endif
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
