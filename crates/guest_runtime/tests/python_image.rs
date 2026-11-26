@@ -86,7 +86,9 @@ const DEPARTURES: [(&str, &str); 7] = [
     (
         "tools/guest_runtime/thread_storage.c",
         "Sprint 345: the TLS and FLS slots' own lock around the slot bitmaps, the callbacks, the FLS block list and \
-         the TLS set-up, for its seven services, which take no runtime word",
+         the TLS set-up, for its seven services, which take no runtime word; Sprint 347: TlsAlloc and TlsFree make \
+         their index 0 in every live thread's TEB or expansion array, as Windows reads another thread's value, and \
+         give the first thread its expansion array, so it can use an index past 63 another thread allocated",
     ),
     (
         "tools/vm_compiler/vm_compiler.c",

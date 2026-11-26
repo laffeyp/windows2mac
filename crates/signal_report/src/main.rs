@@ -1495,10 +1495,17 @@ fn named_design_change(commit: &str, path: &str) -> bool {
 /// The commits made between one sprint's close and the next card, each named with why, which `commits_walked` lets
 /// pass; history on `main` is pushed and not rewritten, so a lapse stands here by name rather than by a looser rule.
 /// From Sprint 247 a review's dispositions between sprints go in the next sprint's card commit (WORKING_AGREEMENT).
-const BETWEEN_SPRINTS: [(&str, &str); 1] = [(
-    "c2fe0bbc8",
-    "reviewer-3's review at 246, its dispositions, committed after 246's close and before card 247 (Sprint 247)",
-)];
+const BETWEEN_SPRINTS: [(&str, &str); 2] = [
+    (
+        "c2fe0bbc8",
+        "reviewer-3's review at 246, its dispositions, committed after 246's close and before card 247 (Sprint 247)",
+    ),
+    (
+        "003a0c1a9",
+        "card 347's amendment and its probe `tls_expansion_first`, pushed mid-sprint so the Windows runner could build \
+         it, for a run-stopping defect fixed in the card that found it (Sprint 347)",
+    ),
+];
 
 /// Sprint `n`'s commits from its card's to the next card's (or HEAD), each named that is not its work ("Sprint N: "),
 /// its close ("Sprint N closed:", bookkeeping only, held by `close_moved`) or the card itself (Sprint 195; reviewer-2's

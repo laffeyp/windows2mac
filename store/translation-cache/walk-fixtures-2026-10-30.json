@@ -152,6 +152,15 @@
     "block_starts": 515,
     "undecodable": 0
   },
+  "0dd9cc91c64a4bba26631ccfb60d61108fd3210929d13986836e10cdff0a58a5.exe": {
+    "reachable_instructions": 441,
+    "walked": 441,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 111,
+    "undecodable": 0
+  },
   "0e380e63488ae0166d4ba694b9ce3e7a9e3821c693bc8dad5fbdbdf81f362dba.exe": {
     "reachable_instructions": 297,
     "walked": 297,
@@ -2229,6 +2238,15 @@
     "jump_tables": 0,
     "jump_table_entries": 0,
     "block_starts": 42,
+    "undecodable": 0
+  },
+  "e7bc99857b39e9fbbace17526c3228176bb4486f10ab64e48afe93d781973c49.exe": {
+    "reachable_instructions": 257,
+    "walked": 257,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 68,
     "undecodable": 0
   },
   "e7fb99c56d54a14900958c01086b96c1bc2bc90ee617cfec97d4891c9edb92ff.exe": {

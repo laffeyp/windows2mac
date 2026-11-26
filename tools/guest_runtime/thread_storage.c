@@ -28,6 +28,8 @@
  * lock. The heap's lock is taken under it (a thread's first FlsSetValue, `w2m_heap_take`), slots then heap, as the
  * design's order has it; the lock is let go before every w2m_unimplemented and w2m_logged, so it never waits on the
  * runtime word. TlsGetValue, TlsSetValue and TlsGetValue2 read and write the calling thread's TEB and take no lock.
+ * TlsAlloc and TlsFree make their index 0 in every live thread's TEB or expansion array, under the slots' lock (Sprint
+ * 347, `tls_clear_everywhere`); before, they cleared the caller's alone, and another thread read its old value.
  */
 #include "runtime.h"
 
@@ -93,22 +95,68 @@ static struct fls_block *fls_mine(int make) {
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
-static u64 *tls_slot(u64 index) {
-    u8 *teb = (u8 *)w2m_teb();
+/* The slot of `index` in the TEB at `teb`: TlsSlots below 64, above them the array TlsExpansionSlots points to; none
+ * while it points to none. */
+static u64 *tls_slot_in(u8 *teb, u64 index) {
     if (index < TLS_SLOTS) return (u64 *)(teb + TEB_TLS_SLOTS) + index;
     u64 *expansion = *(u64 **)(teb + TEB_TLS_EXPANSION);
     return expansion ? expansion + (index - TLS_SLOTS) : 0;
+}
+
+static u64 *tls_slot(u64 index) { return tls_slot_in((u8 *)w2m_teb(), index); }
+
+/* The slot of `index` in the TEB at `teb`, its expansion array given first when it has none (Sprint 347's amendment;
+ * Microsoft Learn, TlsAlloc: "After a TLS index has been allocated, each thread of the process can use it to access
+ * its own TLS storage slot"). Every thread but the first has its own array from its creation, "`(0x1780, teb +
+ * 0x2000),`" (crates/w2m_vm/src/threads.rs 1249); the first thread's TEB, W2M_TEB_VA (run.rs 958), has none from the
+ * host (process.rs 372-383), and it takes the process's array, W2M_TLS_EXPANSION_VA, unused till then and so zero.
+ * Before, only its own TlsAlloc past 63 gave it, and its TlsSetValue of an index another thread took stopped the run
+ * (probes/tls_expansion_first). Called with the slots held, for every live thread whenever an index is allocated or
+ * freed, so once any index past 63 is taken every live thread has an array. */
+static u64 *tls_slot_given(u8 *teb, u64 index) {
+    u64 *expansion = (u64 *)(teb + TEB_TLS_EXPANSION);
+    if (index >= TLS_SLOTS && !*expansion && teb == (u8 *)W2M_TEB_VA) *expansion = W2M_TLS_EXPANSION_VA;
+    return tls_slot_in(teb, index);
+}
+
+/* The run table's head and each entry's first eight words, as threads.c's `struct w2m_run_table` and
+ * `struct w2m_run_entry` lay them out (crates/w2m_vm/src/threads.rs RT_COUNT 0x00, E_STATUS 0x08, E_TEB 0x20): the
+ * count of threads the process has made, and each one's status and TEB. */
+struct run_head { u64 tid, status, suspend, deadline, teb, vslot, instructions, pauses; };
+_Static_assert(sizeof(struct run_head) == W2M_RUN_X_OFF, "a run entry's words before its registers");
+#define RUN_COUNT (*(volatile u64 *)W2M_RUN_TABLE_VA)
+#define RUN_ENDED 2u                              /* threads.c's ENDED */
+
+/* `index` made 0 for every live thread (Sprint 347): Windows reads 0 at another thread's slot after TlsFree of the
+ * index and after TlsAlloc takes it again (run 45780352907, at a TEB slot and at an expansion slot; Microsoft Learn,
+ * TlsAlloc: "When a TLS index is allocated, its storage slots are initialized to NULL"). Called with the slots held.
+ * The caller's slot first, since a process that has made no thread has no run table entry (its count 0); then each
+ * thread the run table lists, reached by the TEB its entry holds, as threads.c's `scratch_of` reaches another
+ * thread's TEB ("`e->teb + W2M_THREAD_SCRATCH_OFF`"); not an ended thread's, nor an entry whose TEB the host has yet
+ * to write. Each slot is found by `tls_slot_given`, which gives the first thread its expansion array when it has none.
+ * Each store is one aligned 8-byte store, single-copy atomic, made with no lock the thread's own TlsGetValue or
+ * TlsSetValue takes: a thread reading or writing the index at the same moment sees its value or 0, which is that
+ * application's race on a freed or newly taken index, as it is on Windows. */
+static void tls_clear_everywhere(u64 index) {
+    u64 *mine = tls_slot_given((u8 *)w2m_teb(), index);
+    if (mine) *mine = 0;
+    u64 n = RUN_COUNT;
+    for (u64 i = 0; i < n; i++) {
+        const volatile struct run_head *e =
+            (const volatile struct run_head *)(W2M_RUN_TABLE_VA + W2M_RUN_ENTRIES_OFF + i * W2M_RUN_ENTRY);
+        u64 teb = e->teb;
+        if (!teb || e->status == RUN_ENDED) continue;
+        u64 *slot = tls_slot_given((u8 *)teb, index);
+        if (slot) *(volatile u64 *)slot = 0;
+    }
 }
 
 u64 k32_TlsAlloc(void) {
     hold_slots();
     for (u64 i = 0; i < TLS_INDICES; i++) {
         if (tls_used[i]) continue;
-        if (i >= TLS_SLOTS && *(u64 *)((u8 *)w2m_teb() + TEB_TLS_EXPANSION) == 0)
-            *(u64 *)((u8 *)w2m_teb() + TEB_TLS_EXPANSION) = W2M_TLS_EXPANSION_VA;
         tls_used[i] = 1;
-        u64 *slot = tls_slot(i);
-        *slot = 0;
+        tls_clear_everywhere(i);
         let_slots_go();
         return w2m_logged(W2M_API_TlsAlloc, 0, i);
     }
@@ -135,7 +183,7 @@ u64 k32_TlsSetValue(u64 index, u64 value) {
         return w2m_logged(W2M_API_TlsSetValue, index, 0);
     }
     u64 *slot = tls_slot(index);
-    if (!slot) w2m_unimplemented(W2M_API_TlsSetValue, index);   /* an expansion index never allocated */
+    if (!slot) w2m_unimplemented(W2M_API_TlsSetValue, index);   /* no index past 63 ever allocated: not in the rows */
     *slot = value;
     return w2m_logged(W2M_API_TlsSetValue, index, 1);
 }
@@ -148,8 +196,7 @@ u64 k32_TlsFree(u64 index) {
         w2m_unimplemented(W2M_API_TlsFree, index);
     }
     tls_used[index] = 0;
-    u64 *slot = tls_slot(index);
-    if (slot) *slot = 0;
+    tls_clear_everywhere(index);
     let_slots_go();
     return w2m_logged(W2M_API_TlsFree, index, 1);
 }

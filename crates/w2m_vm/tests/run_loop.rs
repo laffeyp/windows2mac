@@ -1513,6 +1513,103 @@ fn two_threads_taking_and_freeing_tls_and_fls_slots_at_once_never_share_one_on_t
     }
 }
 
+/// Sprint 347 (reviewer-4's fifteenth review, Low 1): `probes/tls_free_reach`. A worker sets its value at a TLS index
+/// and so does the main thread; the main thread frees the index and the worker reads it; the main thread allocates
+/// again, taking the same index, and the worker reads again, then the main thread reads its own. Once at a TEB slot
+/// (below 64) and once at an expansion slot (64 and up), each step waiting on an event. Its rows on one vCPU and on
+/// two are held to the Windows runner's (run 45780352907, three runs alike) field by field, each field unlike Windows'
+/// named: the worker reads 0 after the free and after the new allocation. Before the change both read 2827 (0xB0B, the
+/// worker's value) on one vCPU and on two, TlsFree and TlsAlloc clearing the caller's slot alone.
+#[test]
+fn another_threads_tls_value_after_tlsfree_and_tlsalloc_is_windows_on_one_and_two_vcpus() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let run = root.join("store/probe-runs/45780352907");
+    let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
+    for i in [2, 3] {
+        let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
+        assert_eq!(body, windows, "the Windows run's body-{i} against body-1");
+    }
+    let rows = |body: &str| -> Vec<serde_json::Map<String, serde_json::Value>> {
+        body.lines()
+            .map(|l| match serde_json::from_str(l).unwrap() {
+                serde_json::Value::Object(m) => m,
+                other => panic!("a row not an object: {other}"),
+            })
+            .collect()
+    };
+    let expected = rows(&windows);
+    let binary = fs::read_to_string(run.join("probe.sha256")).unwrap();
+    let program = root.join(format!("store/binaries/{}.exe", binary.trim()));
+    for vcpus in [1, 2] {
+        let (stopped, said, stderr) = program_through_w2m_vm("tls_free_reach", &program, &[], vcpus);
+        eprintln!("tls_free_reach on {vcpus} vCPUs:\n{said}");
+        assert_eq!(
+            stopped, "ExitProcess { code: 0 }",
+            "tls_free_reach on {vcpus} vCPUs; its rows {said}; stderr {stderr}"
+        );
+        let seen = rows(&said);
+        let names = |r: &[serde_json::Map<String, serde_json::Value>]| -> Vec<String> {
+            r.iter().map(|m| m["s"].to_string()).collect()
+        };
+        assert_eq!(
+            names(&seen),
+            names(&expected),
+            "tls_free_reach's rows on {vcpus} vCPUs against Windows'"
+        );
+        let unlike: Vec<String> = seen
+            .iter()
+            .zip(&expected)
+            .flat_map(|(s, w)| {
+                w.iter()
+                    .filter(|(k, v)| s.get(*k) != Some(v))
+                    .map(|(k, v)| {
+                        let row = w["s"].as_str().unwrap_or("?");
+                        let had = s.get(k).map_or("none".into(), |x| x.to_string());
+                        format!("{row}.{k}: {had} against {v}")
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert!(
+            unlike.is_empty(),
+            "tls_free_reach on {vcpus} vCPUs, fields unlike Windows' {unlike:?}"
+        );
+        assert_eq!(said, windows, "tls_free_reach's rows on {vcpus} vCPUs as on Windows");
+    }
+}
+
+/// Sprint 347's amendment (found by builder-347's experiment): `probes/tls_expansion_first`. A worker takes TLS
+/// indices until one lies past the 64 TEB slots and ends; the first thread, which took none past 63, sets its own
+/// value at that index and reads it back. Its row on one vCPU and on two is held to the Windows runner's (run
+/// 45783238565, three runs alike): set 1, got 1511, the last error 0 after the read. Before the fix the first thread
+/// had no expansion array, and the run stopped at "HostRequest op 4: TlsSetValue argument form 0x40".
+#[test]
+fn the_first_thread_uses_an_expansion_index_another_thread_allocated_on_one_and_two_vcpus() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let run = root.join("store/probe-runs/45783238565");
+    let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
+    for i in [2, 3] {
+        let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
+        assert_eq!(body, windows, "the Windows run's body-{i} against body-1");
+    }
+    let binary = fs::read_to_string(run.join("probe.sha256")).unwrap();
+    let program = root.join(format!("store/binaries/{}.exe", binary.trim()));
+    for vcpus in [1, 2] {
+        let (stopped, said, stderr) = program_through_w2m_vm("tls_expansion_first", &program, &[], vcpus);
+        eprintln!("tls_expansion_first on {vcpus} vCPUs:\n{said}");
+        assert_eq!(
+            stopped, "ExitProcess { code: 0 }",
+            "tls_expansion_first on {vcpus} vCPUs; its rows {said}; stderr {stderr}"
+        );
+        assert_eq!(
+            said, windows,
+            "tls_expansion_first's row on {vcpus} vCPUs as on Windows"
+        );
+    }
+}
+
 /// Deferred (Sprint 329), met at Sprint 330: the single-process guests no other test runs on two vCPUs, through
 /// `w2m-vm`, each held to its stop and output in `store/batch_run/first-stop-2026-10-28.tsv` (`qpc2`'s clock reading by
 /// its form, as `batch_run.rs` holds it).

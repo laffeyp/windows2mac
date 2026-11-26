@@ -487,3 +487,107 @@
 2026-11-26T07:46:19Z	sprint 346	signal-report-check	12
 2026-11-26T07:46:19Z	sprint 346	design-check	0
 2026-11-26T07:46:19Z	sprint 346	unplaced	11
+2026-11-26T08:13:02Z	sprint 347	windows-probes-compile	15
+2026-11-26T08:13:02Z	sprint 347	cargo-fmt	1
+2026-11-26T08:13:02Z	sprint 347	cargo-clippy	1
+2026-11-26T08:13:02Z	sprint 347	linux-check	1
+2026-11-26T08:13:02Z	sprint 347	runner-binaries-build	7
+2026-11-26T08:13:02Z	sprint 347	batch-run	148
+2026-11-26T08:13:02Z	sprint 347	batch-run-records-check	0
+2026-11-26T08:13:02Z	sprint 347	batch-run-replay	0
+2026-11-26T08:13:02Z	sprint 347	guests	3
+2026-11-26T08:13:02Z	sprint 347	twoproc-instruction-clock-guest	1
+2026-11-26T08:13:02Z	sprint 347	family-runs	37
+2026-11-26T08:13:02Z	sprint 347	nextest	351
+2026-11-26T08:13:02Z	sprint 347	doc-tests	2
+2026-11-26T08:13:02Z	sprint 347	timing-stage	0
+2026-11-26T08:13:02Z	sprint 347	release-build	2
+2026-11-26T08:13:02Z	sprint 347	case-runs-ledger-check	7
+2026-11-26T08:13:02Z	sprint 347	planted-chain	86
+2026-11-26T08:13:02Z	sprint 347	planted-chain-records-check	0
+2026-11-26T08:13:02Z	sprint 347	vocabulary-generator-check	1
+2026-11-26T08:13:02Z	sprint 347	signal-report-check	14
+2026-11-26T08:13:02Z	sprint 347	design-check	0
+2026-11-26T08:13:02Z	sprint 347	unplaced	8
+2026-11-26T08:30:14Z	sprint 347	windows-probes-compile	10
+2026-11-26T08:30:14Z	sprint 347	cargo-fmt	0
+2026-11-26T08:30:14Z	sprint 347	cargo-clippy	1
+2026-11-26T08:30:14Z	sprint 347	linux-check	1
+2026-11-26T08:30:14Z	sprint 347	runner-binaries-build	5
+2026-11-26T08:30:14Z	sprint 347	batch-run	96
+2026-11-26T08:30:14Z	sprint 347	batch-run-records-check	0
+2026-11-26T08:30:14Z	sprint 347	batch-run-replay	0
+2026-11-26T08:30:14Z	sprint 347	guests	2
+2026-11-26T08:30:14Z	sprint 347	twoproc-instruction-clock-guest	0
+2026-11-26T08:30:14Z	sprint 347	family-runs	27
+2026-11-26T08:30:14Z	sprint 347	nextest	177
+2026-11-26T08:30:14Z	sprint 347	doc-tests	1
+2026-11-26T08:30:14Z	sprint 347	timing-stage	0
+2026-11-26T08:30:14Z	sprint 347	release-build	1
+2026-11-26T08:30:14Z	sprint 347	case-runs-ledger-check	3
+2026-11-26T08:30:14Z	sprint 347	planted-chain	43
+2026-11-26T08:30:14Z	sprint 347	planted-chain-records-check	0
+2026-11-26T08:30:14Z	sprint 347	vocabulary-generator-check	0
+2026-11-26T08:30:14Z	sprint 347	signal-report-check	9
+2026-11-26T08:30:14Z	sprint 347	design-check	0
+2026-11-26T08:30:14Z	sprint 347	unplaced	7
+2026-11-26T08:40:24Z	sprint 	windows-probes-compile	11
+2026-11-26T08:40:24Z	sprint 	cargo-fmt	0
+2026-11-26T08:40:24Z	sprint 	cargo-clippy	1
+2026-11-26T08:40:24Z	sprint 	linux-check	1
+2026-11-26T08:40:24Z	sprint 	runner-binaries-build	5
+2026-11-26T08:40:24Z	sprint 	batch-run	99
+2026-11-26T08:40:24Z	sprint 	batch-run-records-check	0
+2026-11-26T08:40:24Z	sprint 	batch-run-replay	0
+2026-11-26T08:40:24Z	sprint 	guests	2
+2026-11-26T08:40:24Z	sprint 	twoproc-instruction-clock-guest	1
+2026-11-26T08:40:24Z	sprint 	family-runs	27
+2026-11-26T08:40:24Z	sprint 	nextest	182
+2026-11-26T08:40:24Z	sprint 	doc-tests	2
+2026-11-26T08:40:24Z	sprint 	timing-stage	0
+2026-11-26T08:40:24Z	sprint 	release-build	1
+2026-11-26T08:40:24Z	sprint 	case-runs-ledger-check	2
+2026-11-26T08:40:24Z	sprint 	planted-chain	44
+2026-11-26T08:40:24Z	sprint 	planted-chain-records-check	0
+2026-11-26T08:40:24Z	sprint 	vocabulary-generator-check	1
+2026-11-26T08:47:25Z	sprint 347	windows-probes-compile	10
+2026-11-26T08:47:25Z	sprint 347	cargo-fmt	1
+2026-11-26T08:47:25Z	sprint 347	cargo-clippy	0
+2026-11-26T08:47:25Z	sprint 347	linux-check	0
+2026-11-26T08:47:25Z	sprint 347	runner-binaries-build	0
+2026-11-26T08:47:25Z	sprint 347	batch-run	95
+2026-11-26T08:47:25Z	sprint 347	batch-run-records-check	0
+2026-11-26T08:47:25Z	sprint 347	batch-run-replay	0
+2026-11-26T08:47:25Z	sprint 347	guests	2
+2026-11-26T08:47:25Z	sprint 347	twoproc-instruction-clock-guest	1
+2026-11-26T08:47:25Z	sprint 347	family-runs	26
+2026-11-26T08:47:25Z	sprint 347	nextest	172
+2026-11-26T08:47:25Z	sprint 347	doc-tests	2
+2026-11-26T08:47:25Z	sprint 347	timing-stage	0
+2026-11-26T08:47:25Z	sprint 347	release-build	0
+2026-11-26T08:47:25Z	sprint 347	case-runs-ledger-check	2
+2026-11-26T08:47:25Z	sprint 347	planted-chain	42
+2026-11-26T08:47:25Z	sprint 347	planted-chain-records-check	1
+2026-11-26T08:47:25Z	sprint 347	vocabulary-generator-check	0
+2026-11-26T08:54:36Z	sprint 347	windows-probes-compile	10
+2026-11-26T08:54:36Z	sprint 347	cargo-fmt	1
+2026-11-26T08:54:36Z	sprint 347	cargo-clippy	0
+2026-11-26T08:54:36Z	sprint 347	linux-check	0
+2026-11-26T08:54:36Z	sprint 347	runner-binaries-build	0
+2026-11-26T08:54:36Z	sprint 347	batch-run	97
+2026-11-26T08:54:36Z	sprint 347	batch-run-records-check	0
+2026-11-26T08:54:36Z	sprint 347	batch-run-replay	0
+2026-11-26T08:54:36Z	sprint 347	guests	3
+2026-11-26T08:54:36Z	sprint 347	twoproc-instruction-clock-guest	0
+2026-11-26T08:54:36Z	sprint 347	family-runs	27
+2026-11-26T08:54:36Z	sprint 347	nextest	174
+2026-11-26T08:54:36Z	sprint 347	doc-tests	1
+2026-11-26T08:54:36Z	sprint 347	timing-stage	0
+2026-11-26T08:54:36Z	sprint 347	release-build	0
+2026-11-26T08:54:36Z	sprint 347	case-runs-ledger-check	3
+2026-11-26T08:54:36Z	sprint 347	planted-chain	44
+2026-11-26T08:54:36Z	sprint 347	planted-chain-records-check	0
+2026-11-26T08:54:36Z	sprint 347	vocabulary-generator-check	0
+2026-11-26T08:54:36Z	sprint 347	signal-report-check	8
+2026-11-26T08:54:36Z	sprint 347	design-check	1
+2026-11-26T08:54:36Z	sprint 347	unplaced	5
