@@ -13,6 +13,12 @@ publish = false
 [workspace.dependencies]
 serde_json = "1.0.154"
 
+# the debug information in one .dSYM beside each binary, not in the object files: Cargo's macOS default, "unpacked",
+# kept every .rcgu.o in target/debug/deps (857,026 of 859,305 entries), and codesign and Gatekeeper read that directory
+# at each check and first launch (Sprint 335; the test profile inherits dev)
+[profile.dev]
+split-debuginfo = "packed"
+
 [profile.release]
 debug = 1
 # a shift by the type's width or an arithmetic overflow panics in release too (Sprint 176; reviewer-2's Low 1 of
