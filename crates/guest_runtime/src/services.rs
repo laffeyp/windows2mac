@@ -20,11 +20,13 @@ pub struct Service {
 
 /// What a service's bridge holds around its call into the C (Change 1 of the host design,
 /// `docs/design-rust-host-2026-10-24.md` 95-140, "a runtime call takes the lock of what it touches, or none"): the
-/// runtime word, which every service took until Sprint 342, or none.
+/// runtime word, which every service took until Sprint 342; none; or the process heap's own lock, which the C takes
+/// itself (Sprint 343, `heap.c` `hold`), so its bridge holds nothing, as for none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lock {
     RuntimeWord,
     None,
+    Heap,
 }
 
 /// KERNEL32's services of lock class none (Sprint 342; Sprint 339's proof, re-read on Sprint 341's tree): each stores
@@ -42,6 +44,13 @@ pub const NO_LOCK: [&str; 7] = [
     "TlsGetValue",
     "TlsSetValue",
 ];
+
+/// KERNEL32's services of lock class heap (Sprint 343, "a lock per heap"): the process heap's, all in `heap.c`. Each
+/// stores to the heap's shared state, its free list, its bump pointer and its set-up, only under the heap's lock
+/// (`hold` and `let_go`, in `take`, `give_back` and GetProcessHeap); to a block's own header and payload, which its
+/// holder owns; to the calling thread's last error (`set_error`); and to the call ring by atomic add (`w2m_logged`).
+/// Its one host request, `w2m_unimplemented`'s, takes the word itself and is never made with the heap's lock held.
+pub const HEAP_LOCK: [&str; 5] = ["GetProcessHeap", "HeapAlloc", "HeapFree", "HeapReAlloc", "HeapSize"];
 
 /// The clock mode in which QueryPerformanceCounter reads `CNTVCT_EL0` alone (`process.c` 42-47): mode 1 asks the host
 /// through the shared transport page (`w2m_host`, `runtime.c` 26-35), and mode 2 reads the shared warp word.
@@ -147,6 +156,8 @@ pub fn services(texts: &BTreeMap<String, String>) -> Result<Vec<Service>, String
                 }
                 let lock = if dll == "KERNEL32" && NO_LOCK.contains(&name.as_str()) {
                     Lock::None
+                } else if dll == "KERNEL32" && HEAP_LOCK.contains(&name.as_str()) {
+                    Lock::Heap
                 } else {
                     Lock::RuntimeWord
                 };
@@ -260,6 +271,48 @@ mod tests {
             "QueryPerformanceCounter's lock in clock modes 0, 1 and 2"
         );
         for n in ["FlsGetValue", "FlsSetValue", "CreateEventW"] {
+            assert_eq!(named(n).lock_in(GUEST_COUNTER), Lock::RuntimeWord, "{n}'s lock");
+        }
+    }
+
+    /// Sprint 343: in the runtime's own C, the services of lock class heap are the five `HEAP_LOCK` names, each
+    /// KERNEL32's and defined in `heap.c`, of class heap on every clock; LocalAlloc and LocalFree, which reach the heap
+    /// through `w2m_heap_take` and `w2m_heap_release`, stay on the runtime word.
+    #[test]
+    fn the_five_services_of_lock_class_heap_are_the_process_heaps() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let texts = crate::texts(&root).unwrap();
+        let all = services(&texts).unwrap();
+        let mut heap: Vec<String> = all
+            .iter()
+            .filter(|s| s.lock == Lock::Heap)
+            .map(|s| format!("{}!{}", s.dll, s.name))
+            .collect();
+        heap.sort();
+        assert_eq!(
+            heap,
+            [
+                "KERNEL32!GetProcessHeap",
+                "KERNEL32!HeapAlloc",
+                "KERNEL32!HeapFree",
+                "KERNEL32!HeapReAlloc",
+                "KERNEL32!HeapSize",
+            ],
+            "the services of lock class heap"
+        );
+        let named = |n: &str| all.iter().find(|s| s.name == n).unwrap();
+        for n in HEAP_LOCK {
+            assert!(
+                texts["heap.c"].contains(&format!("u64 k32_{n}(")),
+                "{n} defined in heap.c"
+            );
+            assert_eq!(
+                [0, 1, 2].map(|mode| named(n).lock_in(mode)),
+                [Lock::Heap; 3],
+                "{n}'s lock in clock modes 0, 1 and 2"
+            );
+        }
+        for n in ["LocalAlloc", "LocalFree"] {
             assert_eq!(named(n).lock_in(GUEST_COUNTER), Lock::RuntimeWord, "{n}'s lock");
         }
     }

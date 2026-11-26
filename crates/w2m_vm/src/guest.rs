@@ -1802,6 +1802,15 @@ mod tests {
                 bridge_words(Lock::RuntimeWord, true, timed),
                 "timed {timed}: a traced bridge of class none against the runtime word's"
             );
+            // Sprint 343: the heap's class takes its lock in the C (`heap.c` `hold`), so its bridge is class none's,
+            // word for word, untraced and traced
+            for traced in [false, true] {
+                assert_eq!(
+                    bridge_words(Lock::Heap, traced, timed),
+                    bridge_words(Lock::None, traced, timed),
+                    "timed {timed}, traced {traced}: a bridge of class heap against class none's"
+                );
+            }
         }
     }
 

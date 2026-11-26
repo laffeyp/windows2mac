@@ -67,10 +67,15 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 
 /// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
 /// is the frozen one with these changes, which their own tests judge (Sprint 272).
-const DEPARTURES: [(&str, &str); 5] = [
+const DEPARTURES: [(&str, &str); 6] = [
     (
         "tools/guest_runtime/block_compiler.c",
         "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
+    ),
+    (
+        "tools/guest_runtime/heap.c",
+        "Sprint 343: the process heap's own lock around its free list, bump pointer and set-up, for its five \
+         services, which take no runtime word",
     ),
     (
         "tools/guest_runtime/runtime.c",

@@ -1614,3 +1614,347 @@ fn the_call_ring_stays_exact_and_within_itself_on_two_vcpus() {
         capacity - 1 + 2 * CALLS_NEAR
     );
 }
+
+/// Sprint 343 (Change 1's heap class): the process heap's `HeapAlloc` and `HeapFree` (`tools/guest_runtime/heap.c`)
+/// never hand one block to two vCPUs at once and keep the heap whole, called from two vCPUs together without the
+/// runtime word, as their bridges of lock class heap call them. In the form of Sprint 341's ring judge, this drives the
+/// image's own `k32_HeapAlloc` and `k32_HeapFree` from a loop on each of two vCPUs. Each round starts the heap as a
+/// process starts it, `ready` cleared and the heap's first page zero, so the two loops race its one-time set-up too;
+/// they meet at an arrival word, and each makes `PASSES` passes over its `SLOTS` slots: a slot's block has its loop's
+/// mark checked at its second and last words and is freed, then a block of 16 to 264 bytes is taken, marked and held
+/// there. A mark found wrong stops the loop at its own `hvc`. After each round the host walks the blocks the bump
+/// pointer carved, from the heap's start to it, and holds every carved block to one holder: one vCPU's slot, its marks
+/// that vCPU's, or the free list, a chain of carved blocks; and the bump pointer inside the arena and the lock free.
+#[test]
+fn the_process_heap_hands_no_block_to_two_vcpus_at_once() {
+    use a64_encoder as a64;
+    use a64_encoder::assembler::Assembler;
+    use guest_runtime::layout::{HEAP_SIZE, HEAP_VA, PEB_OFF, SAVE_AREA};
+    use hypervisor::{Exit, Reg};
+    use pe_loader::Memory;
+    use std::collections::BTreeMap;
+    use std::sync::mpsc;
+    const DRIVER: u64 = MONITOR_VA + 0x2400; // the monitor's free area past the flush stub (`FLUSH_STUB_END`)
+    const ARRIVAL: u64 = 0x3000_0000;
+    const STACK: u64 = 0x4000_0000;
+    const SLOT_TABLES: u64 = 0x5000_0000; // vCPU k's at + 0x1000 * k: (block, size) a slot
+    const SLOTS: u64 = 32;
+    const PASSES: u64 = 64;
+    const ROUNDS: u64 = 2_000;
+    const MARKS: [u64; 2] = [0xB10C_0000_0000_0001, 0xB10C_0000_0000_0002];
+    const DONE: u16 = 0x77;
+    const MARK_WRONG: u16 = 0x78;
+    const NOTHING_TAKEN: u16 = 0x79;
+    const HEADER: u64 = 32; // `struct header` (`heap.c` 38-43)
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let mut mem = Memory::default();
+    mem.map(ARRIVAL, 0x1000, "arrival");
+    mem.map(STACK, 0x10000, "stack"); // both loops' stacks, 0x8000 each
+    mem.map(SLOT_TABLES, 0x2000, "slot tables");
+    let loaded = Loaded::bare(mem, ARRIVAL, STACK + 0x10000);
+    let mut guest = guest_with(&root, &loaded, &Start::console("heap.exe"));
+    // each loop: sp from x15, x19 its passes left, x20 its slot table, x21 its mark, x22 `k32_HeapAlloc`, x23 the
+    // arrival word, x24 the vCPUs, x25 its spins, x26 `k32_HeapFree`, x27 the slot; the AAPCS keeps x19-x28 across a
+    // call. A slot's size is 16 + 8 * ((slot + passes left) mod 32), made again after each call
+    let mut a = Assembler::new(DRIVER);
+    let size_into = |a: &mut Assembler, rd: u32| {
+        a.emit(&[a64::add(9, 27, 19, 0, 0), a64::ubfx(9, 9, 0, 5)]);
+        a.emit(&a64::mov_imm(rd, 16));
+        a.emit(&[a64::add(rd, rd, 9, 0, 3)]);
+    };
+    let (arrive, wait, spin, pass, slot, take, wrong, nothing) = (
+        a.label(),
+        a.label(),
+        a.label(),
+        a.label(),
+        a.label(),
+        a.label(),
+        a.label(),
+        a.label(),
+    );
+    a.emit(&[a64::addi(31, 15, 0)]);
+    a.bind(arrive);
+    a.emit(&[a64::ldaxr(8, 9, 23), a64::addi(9, 9, 1), a64::stlxr(8, 10, 9, 23)]);
+    a.branch(|o| a64::cbnz(10, o), arrive);
+    a.bind(wait);
+    a.emit(&[a64::ldr(8, 9, 23, 0), a64::sub(9, 9, 24)]);
+    a.branch(|o| a64::cbnz(9, o), wait);
+    a.bind(spin);
+    a.branch(|o| a64::cbz(25, o), pass);
+    a.emit(&[a64::subi(25, 25, 1)]);
+    a.branch(|o| a64::cbnz(25, o), spin);
+    a.bind(pass);
+    a.emit(&a64::mov_imm(27, 0));
+    a.bind(slot);
+    a.emit(&[a64::add(12, 20, 27, 0, 4), a64::ldr(8, 13, 12, 0)]);
+    a.branch(|o| a64::cbz(13, o), take);
+    a.emit(&[a64::ldr(8, 14, 12, 8), a64::ldr(8, 9, 13, 8), a64::cmp(9, 21)]);
+    a.branch(|o| a64::bcond("ne", o), wrong);
+    a.emit(&[
+        a64::add(10, 13, 14, 0, 0),
+        a64::subi(10, 10, 8),
+        a64::ldr(8, 9, 10, 0),
+        a64::cmp(9, 21),
+    ]);
+    a.branch(|o| a64::bcond("ne", o), wrong);
+    a.emit(&a64::mov_imm(0, HEAP_VA));
+    a.emit(&a64::mov_imm(1, 0));
+    a.emit(&[a64::mov(2, 13), a64::blr(26)]);
+    a.bind(take);
+    size_into(&mut a, 2);
+    a.emit(&a64::mov_imm(0, HEAP_VA));
+    a.emit(&a64::mov_imm(1, 0));
+    a.emit(&[a64::blr(22)]);
+    a.branch(|o| a64::cbz(0, o), nothing);
+    size_into(&mut a, 14);
+    a.emit(&[
+        a64::str(8, 21, 0, 8),
+        a64::add(10, 0, 14, 0, 0),
+        a64::subi(10, 10, 8),
+        a64::str(8, 21, 10, 0),
+        a64::add(12, 20, 27, 0, 4),
+        a64::str(8, 0, 12, 0),
+        a64::str(8, 14, 12, 8),
+        a64::addi(27, 27, 1),
+        a64::cmpi(27, SLOTS as u32),
+    ]);
+    a.branch(|o| a64::bcond("ne", o), slot);
+    a.emit(&[a64::subi(19, 19, 1)]);
+    a.branch(|o| a64::cbnz(19, o), pass);
+    a.emit(&[a64::hvc(DONE.into())]);
+    a.bind(wrong);
+    a.emit(&[a64::hvc(MARK_WRONG.into())]);
+    a.bind(nothing);
+    a.emit(&[a64::hvc(NOTHING_TAKEN.into())]);
+    let bytes: Vec<u8> = a.finish().iter().flat_map(|w| w.to_le_bytes()).collect();
+    assert!(bytes.len() < 0xC00, "the driver fits the monitor's free area");
+    let at = guest.offset(DRIVER).unwrap() as usize;
+    guest.memory.as_mut_slice()[at..at + bytes.len()].copy_from_slice(&bytes);
+    let (alloc, free, ready) = (
+        guest.symbols["k32_HeapAlloc"],
+        guest.symbols["k32_HeapFree"],
+        guest.symbols["ready"],
+    );
+    let heap = guest.offset(HEAP_VA).unwrap();
+    let arena = |va: u64| heap + (va - HEAP_VA);
+    let (arrival, ready, tables) = (
+        guest.offset(ARRIVAL).unwrap(),
+        guest.offset(ready).unwrap(),
+        guest.offset(SLOT_TABLES).unwrap(),
+    );
+    let save = guest.offset(MONITOR_VA + MONITOR_DATA + SAVE_AREA).unwrap();
+    let view = guest.memory_view();
+    // where the set-up starts the bump pointer (`heap.c` 66-69): past the ProcessParameters the arena's first pages hold
+    let params = view.read_u64(guest.offset(PROCESS_VA + PEB_OFF + 0x20).unwrap());
+    assert!(
+        (HEAP_VA..HEAP_VA + HEAP_SIZE).contains(&params),
+        "ProcessParameters in the arena"
+    );
+    let start = (params + u64::from(view.read_u32(arena(params))) + 15) & !15;
+    let end = HEAP_VA + HEAP_SIZE;
+    let vm = Vm::new(40).unwrap();
+    vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
+        .unwrap();
+    let ttbr = guest.ttbr;
+    // each vCPU is made once and runs every round: the heap reset here, a wait at `gate`, both loops run to their hvc
+    // and say so on `said`, and the heap judged here. A round whose loops have not both said in 60 s has its vCPUs
+    // stopped (a free list made a cycle leaves `take` searching it), and the rounds end at the first failure
+    let gate = std::sync::Barrier::new(3);
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let handles = std::sync::Mutex::new(Vec::new());
+    let (said_tx, said) = mpsc::channel::<(usize, Option<String>)>();
+    let (mut failure, mut rounds, mut carved_most, mut free_most, mut next_most) = (None::<String>, 0, 0, 0, 0);
+    std::thread::scope(|s| {
+        for k in 0..2usize {
+            let (vm, gate, stop, handles, said_tx, view) = (&vm, &gate, &stop, &handles, said_tx.clone(), &view);
+            s.spawn(move || {
+                let vcpu = Vcpu::new(vm).unwrap();
+                w2m_vm::monitor::set_system_registers(&vcpu, ttbr).unwrap();
+                handles.lock().unwrap().push(vcpu.handle());
+                for round in 0u64.. {
+                    gate.wait();
+                    if stop.load(std::sync::atomic::Ordering::Acquire) {
+                        return;
+                    }
+                    for (r, v) in [
+                        (15, STACK + 0x8000 * (k as u64 + 1)),
+                        (19, PASSES),
+                        (20, SLOT_TABLES + 0x1000 * k as u64),
+                        (21, MARKS[k]),
+                        (22, alloc),
+                        (23, ARRIVAL),
+                        (24, 2),
+                        (25, (round * [37, 61][k]) % 1024),
+                        (26, free),
+                        (28, MONITOR_VA + MONITOR_DATA),
+                    ] {
+                        vcpu.set_reg(Reg::X(r), v).unwrap();
+                    }
+                    vcpu.set_reg(Reg::Cpsr, w2m_vm::CPSR_EL1H).unwrap();
+                    vcpu.set_reg(Reg::Pc, DRIVER).unwrap();
+                    let wrong = loop {
+                        let e = vcpu.run().unwrap();
+                        let x = |r: u8| vcpu.reg(Reg::X(r)).unwrap();
+                        match e {
+                            Exit::VtimerActivated => vcpu.set_vtimer_mask(true).unwrap(),
+                            e if e.hvc_immediate() == Some(DONE) => break None,
+                            e if e.hvc_immediate() == Some(MARK_WRONG) => {
+                                break Some(format!(
+                                    "vCPU {k}'s block {:#x} in slot {} read {:#x}, not its mark {:#x}, with {} passes \
+                                     left",
+                                    x(13),
+                                    x(27),
+                                    x(9),
+                                    MARKS[k],
+                                    x(19)
+                                ));
+                            }
+                            e if e.hvc_immediate() == Some(NOTHING_TAKEN) => {
+                                break Some(format!("vCPU {k}'s HeapAlloc answered NULL in slot {}", x(27)));
+                            }
+                            e => {
+                                // the exception entry's save area (`runtime.h` `struct w2m_save_area`: ESR, FAR, ELR
+                                // at 0x100), which both loops share, one page table serving both
+                                let pc = vcpu.reg(Reg::Pc).unwrap();
+                                let [esr, far, elr] = [0, 8, 16].map(|o| view.read_u64(save + 0x100 + o));
+                                break Some(format!(
+                                    "vCPU {k}: {e:?} at {pc:#x}, not the loop's hvc #{DONE:#x}; the save area's ESR \
+                                     {esr:#x}, FAR {far:#x}, ELR {elr:#x}"
+                                ));
+                            }
+                        }
+                    };
+                    said_tx.send((k, wrong)).unwrap();
+                }
+            });
+        }
+        drop(said_tx);
+        for round in 0..ROUNDS {
+            // the heap as a process starts it: `ready` 0 and the heap's first page zero, the arena's first pages
+            // the ProcessParameters; and the slots empty
+            view.write_u32(ready, 0);
+            view.write(heap, &[0u8; 0x20]);
+            view.write(tables, &vec![0u8; 0x2000]);
+            view.write_u64(arrival, 0);
+            gate.wait();
+            rounds += 1;
+            let (mut wrong, mut heard, mut stopped) = (Vec::new(), 0, false);
+            while heard < 2 {
+                match said.recv_timeout(Duration::from_secs(60)) {
+                    Ok((_, w)) => {
+                        heard += 1;
+                        wrong.extend(w);
+                    }
+                    Err(_) if !stopped => {
+                        wrong.push("a loop had not reached its hvc in 60 s, both stopped".to_string());
+                        stopped = true;
+                        for h in handles.lock().unwrap().iter() {
+                            h.stop().unwrap();
+                        }
+                    }
+                    Err(_) => {
+                        wrong.push("a stopped loop said nothing in 60 s more".to_string());
+                        break;
+                    }
+                }
+            }
+            failure = (|| {
+                if !wrong.is_empty() {
+                    return Some(format!("round {round}: {}", wrong.join("; ")));
+                }
+                let next = view.read_u64(arena(HEAP_VA + 8));
+                if !(start..=end).contains(&next) {
+                    return Some(format!(
+                        "round {round}: the bump pointer {next:#x} outside the arena's blocks, {start:#x} to {end:#x}"
+                    ));
+                }
+                let lock = view.read_u32(arena(HEAP_VA + 0x18));
+                if lock != 0 {
+                    return Some(format!(
+                        "round {round}: the heap's lock word {lock:#x} at the round's end"
+                    ));
+                }
+                // the blocks the bump pointer carved, header to header by capacity (`take`, `heap.c` 110-116)
+                let mut carved = BTreeMap::new();
+                let mut at = start;
+                while at < next {
+                    let capacity = view.read_u64(arena(at + 8));
+                    if capacity == 0 || !capacity.is_multiple_of(16) || at + HEADER + capacity > next {
+                        return Some(format!(
+                            "round {round}: the carved block at {at:#x} has capacity {capacity:#x}, the bump pointer \
+                             {next:#x}"
+                        ));
+                    }
+                    carved.insert(at, capacity);
+                    at += HEADER + capacity;
+                }
+                let mut holder: BTreeMap<u64, String> = BTreeMap::new();
+                for k in 0..2u64 {
+                    for i in 0..SLOTS {
+                        let entry = tables + 0x1000 * k + 16 * i;
+                        let (p, size) = (view.read_u64(entry), view.read_u64(entry + 8));
+                        let who = format!("vCPU {k}'s slot {i}");
+                        let Some(&capacity) = p.checked_sub(HEADER).and_then(|h| carved.get(&h)) else {
+                            return Some(format!("round {round}: {who} holds {p:#x}, not a carved block's"));
+                        };
+                        let marks = [view.read_u64(arena(p + 8)), view.read_u64(arena(p + size - 8))];
+                        if size > capacity || marks != [MARKS[k as usize]; 2] {
+                            return Some(format!(
+                                "round {round}: {who}'s block {p:#x} of {size} bytes, capacity {capacity}, marks \
+                                 {marks:#x?}"
+                            ));
+                        }
+                        if let Some(other) = holder.insert(p - HEADER, who.clone()) {
+                            return Some(format!("round {round}: the block {p:#x} held by {other} and by {who}"));
+                        }
+                    }
+                }
+                let held = holder.len();
+                let mut link = view.read_u64(arena(HEAP_VA + 16));
+                while link != 0 {
+                    if !carved.contains_key(&link) {
+                        return Some(format!(
+                            "round {round}: the free list's link {link:#x} after {} blocks, not a carved block's header",
+                            holder.len() - held
+                        ));
+                    }
+                    if let Some(other) = holder.insert(link, "the free list".to_string()) {
+                        return Some(format!(
+                            "round {round}: the block at {link:#x} on the free list, and already {other}'s"
+                        ));
+                    }
+                    link = view.read_u64(arena(link + HEADER));
+                }
+                if holder.len() != carved.len() {
+                    return Some(format!(
+                        "round {round}: {} blocks carved, {held} held and {} free: {} lost",
+                        carved.len(),
+                        holder.len() - held,
+                        carved.len() - holder.len()
+                    ));
+                }
+                carved_most = carved_most.max(carved.len());
+                free_most = free_most.max(holder.len() - held);
+                next_most = next_most.max(next);
+                None
+            })();
+            if failure.is_some() {
+                break;
+            }
+        }
+        stop.store(true, std::sync::atomic::Ordering::Release);
+        gate.wait();
+    });
+    if let Some(f) = failure {
+        panic!("{f}");
+    }
+    eprintln!(
+        "the process heap on two vCPUs: {rounds} rounds, each from the heap as a process starts it, of {PASSES} passes \
+         over {SLOTS} slots a vCPU, {} HeapAlloc and {} HeapFree calls in all; no mark found wrong; at each round's end \
+         every carved block held by one slot or on the free list once, none lost (at most {carved_most} carved, \
+         {free_most} free), the bump pointer at most {next_most:#x} of the arena's {end:#x}, the lock free",
+        rounds * 2 * PASSES * SLOTS,
+        rounds * 2 * (PASSES * SLOTS - SLOTS)
+    );
+}
