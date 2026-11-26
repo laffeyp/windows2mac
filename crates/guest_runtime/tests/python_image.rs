@@ -105,7 +105,15 @@ const DEPARTURES: [(&str, &str); 11] = [
          and WaitForMultipleObjects of a handle naming no object answers WAIT_FAILED and ERROR_INVALID_HANDLE; \
          Sprint 355: the handle table's own lock around its slots, their flags, the parent's handles' install, an \
          entry's allocation and both its counts, for the ten creates, duplicates and id lookups that take no runtime \
-         word and inside the word for every other caller; a named event's EVENT_OPEN takes the word in the C",
+         word and inside the word for every other caller; a named event's EVENT_OPEN takes the word in the C; \
+         Sprint 356: the sync objects' own lock around a semaphore's, an event's and a mutex's count and owner, the \
+         waiters and the waits for all, for the eight waits and releases, which take no runtime word from their \
+         bridges and take it in the C to park, to ready and for the host's objects, a wait on one of those holding it \
+         from its check to its park; a wait checked under the lock arms the woken mark; a release readies a wait for \
+         all naming one of the host's objects to check again, never taking for it; CloseHandle and w2m_object_kind \
+         read a count only of the kinds fixed at creation; Sprint 356's amendment: a mutex whose owner thread ends \
+         is abandoned (w2m_mutexes_abandoned), granted to its first waiter or taken by the next wait, which answers \
+         WAIT_ABANDONED (WAIT_ABANDONED_0 + index for several) once",
     ),
     (
         "tools/guest_runtime/thread_storage.c",
@@ -122,7 +130,11 @@ const DEPARTURES: [(&str, &str); 11] = [
          writes only its own vCPU's SLICE_UNTIL, so a vCPU's slice ends at each TIME_SLICE and its switch looks again; \
          Sprint 354: the woken mark, the run entry's first reserved word, which w2m_ready_thread and w2m_signal set on \
          a thread another vCPU runs and not BLOCKED, and w2m_block finds and clears, leaving the thread READY, so a \
-         readying between a wait's check and its park is not lost once card 5 parts them; the switch's load clears it",
+         readying between a wait's check and its park is not lost once card 5 parts them; the switch's load clears it; \
+         Sprint 356: the mark armed by a wait at its check (w2m_wait_armed) and set by w2m_ready_thread and w2m_signal \
+         only on an armed thread not BLOCKED, by compare-and-swap, w2m_block clearing it by one exchange, so a thread \
+         running guest code on another vCPU takes no mark; w2m_wait_again marks the running thread; Sprint 356's \
+         amendment: W2mThreadEnd abandons every mutex its thread owns before the host's THREAD_END",
     ),
     (
         "tools/vm_compiler/vm_compiler.c",

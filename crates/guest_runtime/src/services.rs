@@ -22,8 +22,10 @@ pub struct Service {
 /// `docs/design-rust-host-2026-10-24.md` 95-140, "a runtime call takes the lock of what it touches, or none"): the
 /// runtime word, which every service took until Sprint 342; none; the process heap's own lock, which the C takes
 /// itself (Sprint 343, `heap.c` `hold`), so its bridge holds nothing, as for none; the TLS and FLS slots' lock, which
-/// the C takes itself too (Sprint 345, `thread_storage.c` `hold_slots`), its bridge holding nothing; or the handle
-/// table's lock, which the C takes itself (Sprint 355, `sync_objects.c` `hold_handles`), its bridge holding nothing.
+/// the C takes itself too (Sprint 345, `thread_storage.c` `hold_slots`), its bridge holding nothing; the handle
+/// table's lock, which the C takes itself (Sprint 355, `sync_objects.c` `hold_handles`), its bridge holding nothing; or
+/// the sync objects' lock, which the C takes itself with the runtime word to park, to ready and for the host's objects
+/// (Sprint 356, `sync_objects.c` `hold_sync`), its bridge holding nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lock {
     RuntimeWord,
@@ -31,6 +33,7 @@ pub enum Lock {
     Heap,
     Slots,
     Handles,
+    SyncObjects,
 }
 
 /// KERNEL32's services of lock class none (Sprint 342; Sprint 339's proof, re-read on Sprint 341's tree): each stores
@@ -82,9 +85,9 @@ pub const SLOTS_LOCK: [&str; 7] = [
 /// thread's last error (`set_error`), DuplicateHandle's `*lpTargetHandle`, and the call ring by atomic add
 /// (`w2m_logged`). A named event's EVENT_OPEN, and DuplicateHandle's look at the file table and the standard handles
 /// for a source that names no object, take the runtime word in the C with no other lock held (`w2m_take_runtime_word`,
-/// `runtime.c`); `w2m_unimplemented` and `w2m_logged` are called only with the table's lock let go. Every other caller
-/// of the table, CloseHandle, the waits and releases among them, stays on the runtime word and takes the table's lock
-/// inside it, a leaf.
+/// `runtime.c`); `w2m_unimplemented` and `w2m_logged` are called only with the table's lock let go. The waits and
+/// releases take it with no word too (`SYNC_LOCK`, Sprint 356); every other caller of the table, CloseHandle among them,
+/// stays on the runtime word and takes the table's lock inside it, a leaf.
 pub const HANDLES_LOCK: [&str; 10] = [
     "CreateEventA",
     "CreateEventExW",
@@ -98,15 +101,47 @@ pub const HANDLES_LOCK: [&str; 10] = [
     "OpenThread",
 ];
 
+/// KERNEL32's services of lock class sync objects (Sprint 356; card 5 of
+/// `docs/design-handles-and-sync-objects-2026-11-26.md`, "Where each service's class lands"), defined in
+/// `sync_objects.c` but WaitForMultipleObjectsEx, `processes.c`'s, which calls WaitForMultipleObjects. Each looks its
+/// handles up under the handle table's lock and lets it go; stores to a semaphore's, an event's and a mutex's count and
+/// owner, the waiters on one object and the waits for all only under the sync objects' lock (`hold_sync` and
+/// `let_sync_go`), never with the table's lock held; and takes the runtime word itself, with neither held
+/// (`w2m_take_runtime_word`, `runtime.c`), to park (`w2m_block`: the run table, the census, the woken mark), to ready
+/// (`w2m_ready_thread`, `w2m_signal`), and for the host's objects, a thread, a process or a shared event, whose wait
+/// holds the word from its check to its park. Its other stores are the calling thread's TEB (its last error, its wait's
+/// deadline), ReleaseSemaphore's `*lpPreviousCount`, its run entry's woken mark (armed under the sync objects' lock), its
+/// vCPU's state block (`schedule`), and the call ring by atomic add (`w2m_logged`); `w2m_unimplemented` and `w2m_logged`
+/// are called only with both leaves let go.
+pub const SYNC_LOCK: [&str; 8] = [
+    "ReleaseMutex",
+    "ReleaseSemaphore",
+    "ResetEvent",
+    "SetEvent",
+    "WaitForMultipleObjects",
+    "WaitForMultipleObjectsEx",
+    "WaitForSingleObject",
+    "WaitForSingleObjectEx",
+];
+
 /// The clock mode in which QueryPerformanceCounter reads `CNTVCT_EL0` alone (`process.c` 42-47): mode 1 asks the host
 /// through the shared transport page (`w2m_host`, `runtime.c` 26-35), and mode 2 reads the shared warp word.
 pub const GUEST_COUNTER: u64 = 0;
 
+/// The clock mode in which the counter is a host request (`process.c` `counter_now`, `W2M_HOST_CLOCK`), which a wait of
+/// lock class sync objects reads with no word held.
+pub const HOST_CLOCK_MODE: u64 = 1;
+
 impl Service {
     /// The lock its bridge holds in a run of clock mode `clock_mode` (the monitor's `CLOCK_MODE` word, set once at the
-    /// load): its class, but QueryPerformanceCounter's on any clock but the guest's counter is the runtime word.
+    /// load): its class, but QueryPerformanceCounter's on any clock but the guest's counter is the runtime word, and a
+    /// service of the sync objects' class on the host's clock is the runtime word (Sprint 356: a timed wait reads the
+    /// counter, there a host request, with no leaf held; the word held, the C's own takes keep it).
     pub fn lock_in(&self, clock_mode: u64) -> Lock {
         if self.name == "QueryPerformanceCounter" && clock_mode != GUEST_COUNTER {
+            return Lock::RuntimeWord;
+        }
+        if self.lock == Lock::SyncObjects && clock_mode == HOST_CLOCK_MODE {
             return Lock::RuntimeWord;
         }
         self.lock
@@ -208,6 +243,8 @@ pub fn services(texts: &BTreeMap<String, String>) -> Result<Vec<Service>, String
                     Lock::Slots
                 } else if dll == "KERNEL32" && HANDLES_LOCK.contains(&name.as_str()) {
                     Lock::Handles
+                } else if dll == "KERNEL32" && SYNC_LOCK.contains(&name.as_str()) {
+                    Lock::SyncObjects
                 } else {
                     Lock::RuntimeWord
                 };
@@ -462,16 +499,9 @@ mod tests {
                 "{n}'s lock in clock modes 0, 1 and 2"
             );
         }
+        // Sprint 356 moves the waits and releases to the sync objects' lock (its own test below)
         for (dll, n) in [
             ("KERNEL32", "CloseHandle"),
-            ("KERNEL32", "SetEvent"),
-            ("KERNEL32", "ResetEvent"),
-            ("KERNEL32", "ReleaseSemaphore"),
-            ("KERNEL32", "ReleaseMutex"),
-            ("KERNEL32", "WaitForSingleObject"),
-            ("KERNEL32", "WaitForSingleObjectEx"),
-            ("KERNEL32", "WaitForMultipleObjects"),
-            ("KERNEL32", "WaitForMultipleObjectsEx"),
             ("KERNEL32", "GetHandleInformation"),
             ("KERNEL32", "SetHandleInformation"),
             ("KERNEL32", "CreateFileMappingW"),
@@ -490,6 +520,67 @@ mod tests {
                 Lock::RuntimeWord,
                 "{dll}!{n}'s lock"
             );
+        }
+    }
+
+    /// Sprint 356: in the runtime's own C, the services of lock class sync objects are the eight `SYNC_LOCK` names, each
+    /// KERNEL32's, defined in `sync_objects.c` but WaitForMultipleObjectsEx, `processes.c`'s; of class sync objects on
+    /// the guest's counter and the instruction clock, and the runtime word's on the host's clock, where a timed wait's
+    /// counter read is a host request; the other services that reach these kinds' state or a wait stay where they were:
+    /// CloseHandle and the pipe and process calls on the word, the creates, DuplicateHandle and the id lookups on the
+    /// handle table's lock, Sleep, the critical sections and the slim locks on the word.
+    #[test]
+    fn the_eight_services_of_lock_class_sync_objects_are_the_waits_and_releases() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let texts = crate::texts(&root).unwrap();
+        let all = services(&texts).unwrap();
+        let mut sync: Vec<String> = all
+            .iter()
+            .filter(|s| s.lock == Lock::SyncObjects)
+            .map(|s| format!("{}!{}", s.dll, s.name))
+            .collect();
+        sync.sort();
+        assert_eq!(
+            sync,
+            [
+                "KERNEL32!ReleaseMutex",
+                "KERNEL32!ReleaseSemaphore",
+                "KERNEL32!ResetEvent",
+                "KERNEL32!SetEvent",
+                "KERNEL32!WaitForMultipleObjects",
+                "KERNEL32!WaitForMultipleObjectsEx",
+                "KERNEL32!WaitForSingleObject",
+                "KERNEL32!WaitForSingleObjectEx",
+            ],
+            "the services of lock class sync objects"
+        );
+        let named = |n: &str| all.iter().find(|s| s.dll == "KERNEL32" && s.name == n).unwrap();
+        for n in SYNC_LOCK {
+            let file = if n == "WaitForMultipleObjectsEx" {
+                "processes.c"
+            } else {
+                "sync_objects.c"
+            };
+            assert!(texts[file].contains(&format!("u64 k32_{n}(")), "{n} defined in {file}");
+            assert_eq!(
+                [0, 1, 2].map(|mode| named(n).lock_in(mode)),
+                [Lock::SyncObjects, Lock::RuntimeWord, Lock::SyncObjects],
+                "{n}'s lock in clock modes 0, 1 and 2"
+            );
+        }
+        for (n, lock) in [
+            ("CloseHandle", Lock::RuntimeWord),
+            ("CreateSemaphoreW", Lock::Handles),
+            ("CreateEventA", Lock::Handles),
+            ("DuplicateHandle", Lock::Handles),
+            ("ReadFile", Lock::RuntimeWord),
+            ("WriteFile", Lock::RuntimeWord),
+            ("GetExitCodeProcess", Lock::RuntimeWord),
+            ("Sleep", Lock::RuntimeWord),
+            ("EnterCriticalSection", Lock::RuntimeWord),
+            ("SleepConditionVariableSRW", Lock::RuntimeWord),
+        ] {
+            assert_eq!(named(n).lock_in(GUEST_COUNTER), lock, "{n}'s lock");
         }
     }
 

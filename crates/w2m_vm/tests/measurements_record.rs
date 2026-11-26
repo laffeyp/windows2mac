@@ -84,11 +84,37 @@ fn the_two_vcpu_run_is_on_the_record() {
     for row in [&locked, &p50, &p99] {
         assert_eq!(row["vcpus"], 2, "{}: {}'s vCPUs", record.display(), row["metric"]);
     }
-    let two_vcpu = ["locked_model_steps", "turn_start_ns_p50", "turn_start_ns_p99"];
-    for row in measurements
+    // Sprint 356 (its amendment 2): semaphore_units' runtime word on two vCPUs, the waits' and releases' run, each row
+    // with vcpus 2 and the four runtime-word metrics among them, a hold's median at most its 99th percentile
+    let units: Vec<&Value> = measurements
         .iter()
-        .filter(|p| !two_vcpu.iter().any(|m| p["metric"] == *m))
-    {
+        .filter(|p| p["application_profile_id"] == "timed-waits-semaphore-units")
+        .collect();
+    for metric in [
+        "runtime_word_hold_ns_p50",
+        "runtime_word_hold_ns_p99",
+        "runtime_word_wait_ns_p50",
+        "runtime_word_wait_ns_p99",
+    ] {
+        assert!(
+            units.iter().any(|p| p["metric"] == metric),
+            "{}: no semaphore_units {metric} on two vCPUs",
+            record.display()
+        );
+    }
+    for row in &units {
+        assert_eq!(
+            row["vcpus"],
+            2,
+            "{}: {}'s vCPUs",
+            record.display(),
+            row["measurement_id"]
+        );
+    }
+    let two_vcpu = ["locked_model_steps", "turn_start_ns_p50", "turn_start_ns_p99"];
+    for row in measurements.iter().filter(|p| {
+        !two_vcpu.iter().any(|m| p["metric"] == *m) && p["application_profile_id"] != "timed-waits-semaphore-units"
+    }) {
         assert!(
             row["vcpus"].is_null(),
             "{}: {} carries vcpus {}, where a one-vCPU measurement carries none",

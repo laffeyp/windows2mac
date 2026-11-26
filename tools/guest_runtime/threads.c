@@ -87,6 +87,10 @@ static u64 host(u64 sub, u64 a, u64 b, u64 c) { return w2m_host(W2M_HOST_THREAD,
  * by return address (vm_backend.py VM.wake_census names them). */
 struct w2m_wake_census { u64 readied, rewaits, sites[16][2]; } w2m_wake_census;
 
+/* The woken mark's values (Sprint 356): WOKEN, a readying came, the host's mark (threads.rs `mark_woken`) and this
+ * file's; ARMED, the thread has checked a wait under the sync objects' lock and not yet parked. 0: neither. */
+enum { WOKEN = 1, ARMED = 2 };
+
 /* Recentering step 5: a blocked thread names what it waits on, and a signal names what it signals, so the host wakes
  * only the threads that wait on it (before, every blocked thread woke on any signal, ran to find its wait unmet and
  * blocked again). Key 0 on either side wakes every blocked thread: a wait on several objects, a pipe. */
@@ -114,20 +118,43 @@ void w2m_block(u64 deadline, u64 key) {
      * this thread running on its vCPU and not yet BLOCKED, between its wait's check and this park, set it; the thread
      * stays READY, the mark cleared, and the switch retries the call, which checks again (`retry` needs BLOCKED). While
      * the runtime word covers a whole call that window does not exist; card 5's waits, checked under the sync objects'
-     * lock and parked under the word, open it. */
+     * lock and parked under the word, open it (Sprint 356). The mark's word holds WOKEN (the host writes it too) or
+     * ARMED (`w2m_wait_armed`); either is cleared here by one atomic exchange, every writer but the thread's own wait
+     * holding the word this park holds; ARMED parks the thread. */
     if (RUN->count) {
         struct w2m_run_entry *c = run_entry(*monitor_word(W2M_CURRENT_OFF));
-        if (c->woken) c->woken = 0;
-        else set_status(c, BLOCKED);
+        if (__atomic_exchange_n(&c->woken, 0, __ATOMIC_RELAXED) != WOKEN) set_status(c, BLOCKED);
         c->deadline = sc->wait_deadline;
     }
 }
 
-/* The woken mark set on a thread a readying finds running on another vCPU, not BLOCKED (w2m_block): one that may be
- * between its wait's check and its park there. A thread not held by a vCPU is in no such window, and its next run
- * starts on a load, which clears the mark (w2m_switch; the host's `load`). This vCPU's own thread is the readier. */
+/* The running thread's mark armed (Sprint 356; Sprint 354's Deferred (a)), by its wait under `sync_lock`, in the
+ * holding that checked its objects and made its entries: a release that comes after that holding finds the entries,
+ * and its readying, under the runtime word, finds the thread BLOCKED, or not yet parked and ARMED, and marks it WOKEN.
+ * A store, relaxed: `sync_lock`'s release orders it before any release that finds the entries, and the readying's word
+ * after. */
+void w2m_wait_armed(void) {
+    if (RUN->count) __atomic_store_n(&run_entry(*monitor_word(W2M_CURRENT_OFF))->woken, ARMED, __ATOMIC_RELAXED);
+}
+
+/* The running thread marked WOKEN (Sprint 356): its park leaves it ready and the switch retries its call at once; a
+ * wait for all naming one of the host's objects, the word held, whose check found an object signaled after it read it
+ * unset (sync_objects.c `wait_all_held`). */
+void w2m_wait_again(void) {
+    if (RUN->count) __atomic_store_n(&run_entry(*monitor_word(W2M_CURRENT_OFF))->woken, WOKEN, __ATOMIC_RELAXED);
+}
+
+/* The woken mark set on a thread a readying finds not BLOCKED and ARMED (w2m_block): one between its wait's check and
+ * its park, on its own vCPU. Before Sprint 356 every thread another vCPU held was marked (`held_elsewhere`), one
+ * running guest code included, which spent the mark on one spare retry of its next park (Sprint 354's Deferred (a));
+ * the waits that check outside the runtime word (sync_objects.c) are the only ones that arm, every other wait checking
+ * and parking within one holding of the word. A compare-and-swap of ARMED for WOKEN, under the word: the park's
+ * exchange holds the word too, and a wait arms with no word held, never while a readying meant for it can see its
+ * entries. */
 static void mark_woken(struct w2m_run_entry *e) {
-    if (e->status != BLOCKED && held_elsewhere(e)) e->woken = 1;
+    u64 armed = ARMED;
+    if (e->status != BLOCKED)
+        __atomic_compare_exchange_n(&e->woken, &armed, WOKEN, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 }
 
 /* A thread made ready inside the VM (Sprint 121). A vCPU waiting in the host for a thread learns of it only from the
@@ -142,9 +169,9 @@ static void readied(void) {
 }
 
 /* The waiters on `key` ready: those whose wait takes it, any signal (their key 0), or every key (`key` 0). A thread
- * between its wait's check and its park has written no key yet (w2m_block writes it), so every thread running on
- * another vCPU takes the woken mark (Sprint 354), whatever it will wait on: one whose wait is on another key retries
- * its call once and parks again. With no thread blocked, the mark is all a signal does. */
+ * between its wait's check and its park has written no key yet (w2m_block writes it), so every ARMED thread takes the
+ * woken mark (Sprint 354; Sprint 356 the armed alone), whatever it will wait on: one whose wait is on another key
+ * retries its call once and parks again. With no thread blocked, the mark is all a signal does. */
 void w2m_signal(u64 key) {
     int woke = 0;
     for (u64 i = 0; i < RUN->count; i++) {
@@ -167,7 +194,7 @@ void w2m_signal(u64 key) {
  * other waiters on the object stay blocked, as Windows releases "a single waiting thread" (SetEvent, auto-reset) and
  * one waiter per unit (ReleaseSemaphore). Before, every waiter on the key woke and all but one blocked again (the
  * wake census: 11,086 of 186,272 readies on the batch run, 99.5% in wait_one). A waiter not yet BLOCKED takes the woken
- * mark (Sprint 354), when it runs on another vCPU: its grant is made, and its park must not lose the readying. */
+ * mark (Sprint 354), when it is ARMED (Sprint 356): its grant is made, and its park must not lose the readying. */
 void w2m_ready_thread(u32 tid) {
     for (u64 i = 0; i < RUN->count; i++) {
         struct w2m_run_entry *e = run_entry(i);
@@ -332,7 +359,8 @@ u64 w2m_switch(u64 schedule, u64 stop) {
         *monitor_word(W2M_CURRENT_ENTRY_OFF) = (u64)e;
         c->vcpu = 0;
         e->vcpu = this_vcpu();
-        e->woken = 0;                  /* loaded: in no wait's window, its call checked again (w2m_block, mark_woken) */
+        e->woken = 0;                  /* loaded: in no wait's window, its call checked again (w2m_block, mark_woken);
+                                        * a host mark taken while it ran guest code elsewhere goes here (Sprint 356) */
         rt->switches++;
         c = e;
     }
@@ -370,8 +398,12 @@ W2M_VOID u64 k32_ExitThread(u64 code) {
     return w2m_logged(W2M_API_ExitThread, (u32)code, 0);
 }
 
-/* The last call of every thread but the first: the exit code is final, waiters on its handle wake. */
+void w2m_mutexes_abandoned(u32 tid);          /* sync_objects.c (Sprint 356's amendment) */
+
+/* The last call of every thread but the first: the exit code is final, waiters on its handle wake. Every mutex it
+ * still owns is abandoned first (Sprint 356's amendment), its first waiter granted it with WAIT_ABANDONED. */
 W2M_VOID u64 k32_W2mThreadEnd(void) {
+    w2m_mutexes_abandoned((u32)w2m_teb()->client_thread);
     host(W2M_THREAD_END, w2m_thread_scratch()->exit_code, 0, 0);
     w2m_state()->schedule |= W2M_SCHEDULE_END;
     return w2m_logged(W2M_API_W2mThreadEnd, 0, 0);

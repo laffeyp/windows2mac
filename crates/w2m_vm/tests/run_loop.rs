@@ -1761,7 +1761,8 @@ const LOST_WAKEUP_LIMIT: u64 = 20_000_000;
 /// INFINITE, so a readying lost between a wait's check and its park leaves both waiting with no deadline and the run
 /// stops as a deadlock. No run reaches that window before card 5 takes waits off the runtime word, so the guest is
 /// held here for card 5 and its plant (the woken mark ignored in `w2m_block`): one run on one vCPU and 20 on two, each
-/// held to ExitProcess and "done" inside `LOST_WAKEUP_LIMIT` instructions and 60 s, each run's count printed.
+/// held to ExitProcess and "done" inside `LOST_WAKEUP_LIMIT` instructions and 60 s, each run's count printed. Sprint 356:
+/// the failed runs are counted before the assertion, so a plant's result says in how many of 20 runs it failed.
 #[test]
 fn the_lost_wakeup_guest_ends_inside_its_limit_on_two_vcpus() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
@@ -1769,6 +1770,7 @@ fn the_lost_wakeup_guest_ends_inside_its_limit_on_two_vcpus() {
     let data = fs::read(root.join("tests/data/timed_waits/lost_wakeup.exe")).unwrap();
     let loaded = load(&data, None, "probe.exe").unwrap();
     let mut counts = Vec::new();
+    let mut failed = Vec::new();
     for (run, vcpus) in std::iter::once((0, 1)).chain((1..=20).map(|run| (run, 2))) {
         let mut start = Start::console("probe.exe");
         start.vcpus = vcpus;
@@ -1790,23 +1792,19 @@ fn the_lost_wakeup_guest_ends_inside_its_limit_on_two_vcpus() {
             "lost_wakeup on {vcpus} vCPU(s), run {run}: stop {:?}, {} instructions, runs by vCPU {:?}, output {stdout:?}",
             out.stop, out.executed, out.runs_by_vcpu
         );
-        assert_eq!(
-            (&out.stop, stdout.as_str()),
-            (&Stop::ExitProcess { code: 0 }, "done\n"),
-            "lost_wakeup on {vcpus} vCPU(s), run {run}, its stop and output; {} instructions",
-            out.executed
-        );
-        assert!(
-            out.executed < LOST_WAKEUP_LIMIT,
-            "lost_wakeup on {vcpus} vCPU(s), run {run}: {} instructions, not inside {LOST_WAKEUP_LIMIT}",
-            out.executed
-        );
+        let ran_both = vcpus == 1 || (out.runs_by_vcpu.len() == 2 && out.runs_by_vcpu[1] > 0);
+        if out.stop != (Stop::ExitProcess { code: 0 })
+            || stdout != "done\n"
+            || out.executed >= LOST_WAKEUP_LIMIT
+            || !ran_both
+        {
+            failed.push(format!(
+                "{vcpus} vCPU(s) run {run}: stop {:?}, output {stdout:?}, {} instructions (limit {LOST_WAKEUP_LIMIT}), \
+                 runs by vCPU {:?}",
+                out.stop, out.executed, out.runs_by_vcpu
+            ));
+        }
         if vcpus == 2 {
-            assert!(
-                out.runs_by_vcpu.len() == 2 && out.runs_by_vcpu[1] > 0,
-                "lost_wakeup on two vCPUs, run {run}: runs by vCPU {:?}, the second never ran a thread",
-                out.runs_by_vcpu
-            );
             counts.push(out.executed);
         }
     }
@@ -1814,6 +1812,11 @@ fn the_lost_wakeup_guest_ends_inside_its_limit_on_two_vcpus() {
         "lost_wakeup's 20 runs on two vCPUs: {} to {} instructions, limit {LOST_WAKEUP_LIMIT}",
         counts.iter().min().unwrap(),
         counts.iter().max().unwrap()
+    );
+    assert!(
+        failed.is_empty(),
+        "lost_wakeup: {} of 21 runs failed (one on one vCPU, 20 on two): {failed:#?}",
+        failed.len()
     );
 }
 
@@ -1895,6 +1898,144 @@ fn two_vcpus_creating_duplicating_and_closing_handles_keep_every_value_distinct_
     assert!(
         failed.is_empty(),
         "handle_values: {} of 21 runs failed (one on one vCPU, 20 on two): {failed:#?}",
+        failed.len()
+    );
+}
+
+/// The floor on each semaphore_units thread's rounds that saw the other threads' rounds move, on two vCPUs (Sprint 356).
+const SEMAPHORE_OVERLAP_FLOOR: u64 = 1_000;
+
+/// semaphore_units' wall-clock limit a run (Sprint 356): its runs end in 0.9 to 1.4 s on two vCPUs, and a run a plant
+/// leaves waiting is held alive by its 1 ms waits, so the limit, not a deadlock, ends it.
+const SEMAPHORE_RUN_LIMIT: Duration = Duration::from_secs(20);
+
+/// Sprint 356 (card 5 of `docs/design-handles-and-sync-objects-2026-11-26.md`, its judge "A semaphore's units across
+/// vCPUs"): `tests/data/timed_waits/semaphore_units`, four threads each releasing one unit of one semaphore (maximum
+/// 1,000) and then waiting for one, 100,000 rounds: by WaitForSingleObject with no timeout, every 8th with a zero
+/// timeout, and by WaitForMultipleObjects with no timeout, for any of it (every 16th from the 4th), of it and the main
+/// thread's handle (every 16th from the 12th), for all of it (every 32nd from the 16th), and of it and an ended thread's
+/// handle (every 32nd). Strengthened for plant 4: two locks the four threads share and enter by turns, a mutex (every
+/// 8th round waited on with no timeout, every other even round with a zero timeout, then released) and an auto-reset
+/// event made set (every 8th round from the 5th with no timeout, every other odd round with a zero timeout, then set
+/// again), each entry counted by an atomic add and a plain add, which a second holder at once would lose; every 64th
+/// round a manual-reset event reset, set and waited on; and 1 ms waits that time out, the main thread's on each
+/// worker's handle in turn until it ends and two more threads' on the main thread's handle until the four end. No wait
+/// is on a named event, whose set readies every blocked thread of the process and so would make good a grant a plant
+/// had lost. The eight services take the sync objects' lock and hold the runtime word only to park, to ready and, for
+/// the waits naming one of the host's objects, from their check to their park. Its `.counts` section holds the
+/// releases answered TRUE and FALSE, the semaphore's waits satisfied, its zero-timeout waits timed out, the other
+/// answers, the semaphore's final count, each worker's rounds that saw the others' move, each lock's entries counted
+/// both ways, the entries that found another thread inside, the manual-reset event's waits returned, and the 1 ms waits
+/// that timed out. One run on one vCPU and 20 on two, each printed; every run must end at ExitProcess with "done"
+/// inside `SEMAPHORE_RUN_LIMIT`, its counts whole (400,000 releases TRUE, none FALSE, none wrong, every wait satisfied
+/// or timed out at a zero timeout, the final count the releases less the satisfied waits, each lock's two counts equal and at least its
+/// 50,000 waits with no timeout, none shared, 6,248 gate waits, a 1 ms wait timed out), and on two vCPUs each worker's
+/// overlap above `SEMAPHORE_OVERLAP_FLOOR` and the second vCPU running a thread. The failed runs are counted before the
+/// assertion, so a plant's result says in how many of 20 runs it failed.
+#[test]
+fn four_threads_on_two_vcpus_keep_a_semaphores_units_and_every_wait_returns() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let data = fs::read(root.join("tests/data/timed_waits/semaphore_units.exe")).unwrap();
+    let loaded = load(&data, None, "probe.exe").unwrap();
+    let program = &loaded.images[0];
+    let section = program
+        .pe
+        .sections
+        .iter()
+        .find(|s| s.name == ".counts")
+        .expect("semaphore_units' .counts section");
+    let counts_va = program.base + u64::from(section.virtual_address);
+    const NAMES: [&str; 17] = [
+        "released",
+        "refused",
+        "satisfied",
+        "timed_out",
+        "wrong",
+        "final",
+        "overlap0",
+        "overlap1",
+        "overlap2",
+        "overlap3",
+        "mutex_taken",
+        "mutex_counted",
+        "turn_taken",
+        "turn_counted",
+        "shared",
+        "gated",
+        "watched",
+    ];
+    const WAITS: u64 = 400_000;
+    const LOCKED: u64 = 50_000;
+    const GATED: u64 = 4 * (100_000 / 64);
+    let mut failed = Vec::new();
+    for (run, vcpus) in std::iter::once((0, 1)).chain((1..=20).map(|run| (run, 2))) {
+        let mut start = Start::console("probe.exe");
+        start.vcpus = vcpus;
+        let mut guest = guest_with(&root, &loaded, &start);
+        let out = run_limited(
+            &mut guest,
+            &loaded,
+            &mut HostCompiler::default(),
+            Some(SEMAPHORE_RUN_LIMIT),
+        );
+        let at = guest.offset(counts_va).expect("the .counts section mapped");
+        let w: Vec<u64> = (0..17).map(|i| guest.memory_view().read_u64(at + 8 * i)).collect();
+        let stdout = String::from_utf8_lossy(&guest.served.stdout).into_owned();
+        let mut counts: Vec<String> = NAMES
+            .iter()
+            .zip(&w)
+            .map(|(n, v)| format!("{n} {}", *v as i64))
+            .collect();
+        // the run table's count of blocked threads against its entries' BLOCKED statuses (strengthened for plant 4, a
+        // park or a readying without the runtime word: `set_status`' read, add and store of the count, threads.c 76-79,
+        // lose one another's change only when two vCPUs make them at once)
+        let view = guest.memory_view();
+        let blocked = view.read_u64(RUN_TABLE + w2m_vm::threads::RT_BLOCKED);
+        let in_entries = guest
+            .served
+            .threads
+            .values()
+            .filter(|t| {
+                let entry = RUN_TABLE + guest_runtime::layout::RT_ENTRIES + guest_runtime::layout::RUN_ENTRY * t.index;
+                view.read_u64(entry + w2m_vm::threads::E_STATUS) == w2m_vm::threads::BLOCKED
+            })
+            .count() as u64;
+        counts.push(format!("blocked {} against {in_entries} entries", blocked as i64));
+        println!(
+            "semaphore_units on {vcpus} vCPU(s), run {run}: stop {:?}, output {stdout:?}, {}, runs by vCPU {:?}",
+            out.stop,
+            counts.join(", "),
+            out.runs_by_vcpu
+        );
+        let whole = w[0] == WAITS
+            && w[1] == 0
+            && w[4] == 0
+            && w[2] + w[3] == WAITS
+            && w[5] == w[0].wrapping_sub(w[2])
+            && w[10] == w[11]
+            && w[10] >= LOCKED
+            && w[12] == w[13]
+            && w[12] >= LOCKED
+            && w[14] == 0
+            && w[15] == GATED
+            && w[16] > 0
+            && blocked == in_entries;
+        let overlapped = vcpus == 1
+            || (w[6..10].iter().all(|&o| o > SEMAPHORE_OVERLAP_FLOOR)
+                && out.runs_by_vcpu.len() == 2
+                && out.runs_by_vcpu[1] > 0);
+        if out.stop != (Stop::ExitProcess { code: 0 }) || stdout != "done\n" || !whole || !overlapped {
+            failed.push(format!(
+                "{vcpus} vCPU(s) run {run}: stop {:?}, output {stdout:?}, {}",
+                out.stop,
+                counts.join(", ")
+            ));
+        }
+    }
+    assert!(
+        failed.is_empty(),
+        "semaphore_units: {} of 21 runs failed (one on one vCPU, 20 on two): {failed:#?}",
         failed.len()
     );
 }
@@ -2049,6 +2190,75 @@ fn the_waits_keep_their_objects_and_a_closed_handle_fails_wait_for_multiple_obje
             );
         }
     }
+}
+
+/// Sprint 356's amendment (reviewer-4's twenty-sixth review, Medium 1): `probes/mutex_abandoned`, waits on a mutex
+/// whose owner thread returned holding it. Windows run 45871497648 (Server 2025 10.0.26100.33828, an Intel Xeon
+/// Platinum 8370C, three runs alike) answers WAIT_ABANDONED (128) to the first wait and 0 to the owner's recursive wait
+/// and to a fresh wait after two releases; 129, WAIT_ABANDONED_0 + 1, to a wait for any whose abandoned mutex is at
+/// index 1; 128, WAIT_ABANDONED_0, to a wait for all of a set event and an abandoned mutex at index 1; 128 to a worker
+/// blocked with no timeout when the holder ends, the worker ending inside 5000 ms; and FALSE with 288 to a non-owner's
+/// ReleaseMutex. Before the amendment w2m never released such a mutex: 258 to every wait, the blocked worker never
+/// returning. Every row is defined; each is held on one vCPU and on two to the runner's, field by field, each unlike
+/// field named, and the runner's three bodies to each other.
+#[test]
+fn a_mutex_whose_owner_ends_answers_wait_abandoned_as_windows_on_one_and_two_vcpus() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let run = root.join("store/probe-runs/45871497648");
+    let row_of = |body: &str, name: &str| -> serde_json::Map<String, serde_json::Value> {
+        let line = body
+            .lines()
+            .find(|l| l.starts_with(&format!("{{\"s\":\"{name}\",")))
+            .unwrap_or_else(|| panic!("no {name} row in {body}"));
+        match serde_json::from_str(line).unwrap() {
+            serde_json::Value::Object(m) => m,
+            other => panic!("a row not an object: {other}"),
+        }
+    };
+    let rows = ["single", "any", "all", "blocked", "not_owner"];
+    let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
+    eprintln!("mutex_abandoned on Windows:\n{windows}");
+    for i in [2, 3] {
+        let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
+        for name in rows {
+            assert_eq!(
+                row_of(&body, name),
+                row_of(&windows, name),
+                "the Windows run's body-{i} {name} row against body-1's"
+            );
+        }
+    }
+    let binary = fs::read_to_string(run.join("probe.sha256")).unwrap();
+    let program = root.join(format!("store/binaries/{}.exe", binary.trim()));
+    let mut unlike = Vec::new();
+    for vcpus in [1, 2] {
+        let (stopped, said, stderr) = program_through_w2m_vm("mutex_abandoned", &program, &[], vcpus);
+        eprintln!("mutex_abandoned on {vcpus} vCPUs:\n{said}");
+        assert_eq!(
+            stopped, "ExitProcess { code: 0 }",
+            "mutex_abandoned on {vcpus} vCPUs; its rows {said}; stderr {stderr}"
+        );
+        let names: Vec<&str> = said.lines().map(|l| l.split('"').nth(3).unwrap_or("?")).collect();
+        assert_eq!(names, rows, "mutex_abandoned's rows on {vcpus} vCPUs");
+        for name in rows {
+            let (expected, seen) = (row_of(&windows, name), row_of(&said, name));
+            for (k, v) in &expected {
+                if seen.get(k) != Some(v) {
+                    let had = seen.get(k).map_or("none".into(), |x| x.to_string());
+                    unlike.push(format!("{vcpus} vCPU(s) {name}.{k}: {had} against {v}"));
+                }
+            }
+            if seen.len() != expected.len() {
+                unlike.push(format!(
+                    "{vcpus} vCPU(s) {name}: {} fields against {}",
+                    seen.len(),
+                    expected.len()
+                ));
+            }
+        }
+    }
+    assert!(unlike.is_empty(), "mutex_abandoned, fields unlike Windows': {unlike:?}");
 }
 
 /// Deferred (Sprint 329), met at Sprint 330: the single-process guests no other test runs on two vCPUs, through
@@ -2290,7 +2500,10 @@ fn the_call_ring_stays_exact_and_within_itself_on_two_vcpus() {
 /// `w2m_block` as T on that vCPU, and reads T's status and mark. Two threads, R (index 0, the readier, on vCPU owner 1)
 /// and T (index 1); the paths, the class `threads.c` and the host keep: the C runtime's `w2m_ready_thread` (a release's
 /// grant) and `w2m_signal` (a manual-reset event's set, among others), the host's `wake_blocked` (a kernel answer's
-/// wake) and `schedule`'s SCHEDULE_END (a thread's end); and a row with no readying, T then BLOCKED.
+/// wake) and `schedule`'s SCHEDULE_END (a thread's end); and a row with no readying, T then BLOCKED. Sprint 356 (Sprint
+/// 354's Deferred (a)): T's wait arms the mark at its check (`w2m_wait_armed`, run as T on vCPU owner 2), and each path
+/// runs again with T unarmed, running guest code there: the C's two then leave no mark and T's next park blocks it, the
+/// spare retry gone; the host's two still mark every thread another vCPU holds (`threads.rs` `mark_woken`).
 #[test]
 fn a_readying_before_the_block_leaves_the_thread_ready() {
     use a64_encoder as a64;
@@ -2333,10 +2546,11 @@ fn a_readying_before_the_block_leaves_the_thread_ready() {
     let bytes: Vec<u8> = driver.iter().flat_map(|w| w.to_le_bytes()).collect();
     let at = guest.offset(DRIVER).unwrap() as usize;
     guest.memory.as_mut_slice()[at..at + bytes.len()].copy_from_slice(&bytes);
-    let (ready_thread, signal, block) = (
+    let (ready_thread, signal, block, armed) = (
         guest.symbols["w2m_ready_thread"],
         guest.symbols["w2m_signal"],
         guest.symbols["w2m_block"],
+        guest.symbols["w2m_wait_armed"],
     );
     let monitor = guest.served.vcpu.monitor;
     let entry = |index: u64| RUN_TABLE + RT_ENTRIES + RUN_ENTRY * index;
@@ -2374,9 +2588,14 @@ fn a_readying_before_the_block_leaves_the_thread_ready() {
         }
     };
     let mut rows = Vec::new();
-    for path in ["none", "w2m_ready_thread", "w2m_signal", "wake_blocked", "SCHEDULE_END"] {
-        // R current and running on vCPU owner 1; T READY and running its wait on vCPU owner 2, its check made, its block
-        // not yet; no thread blocked, no vCPU waiting
+    let paths = ["none", "w2m_ready_thread", "w2m_signal", "wake_blocked", "SCHEDULE_END"];
+    for (path, arm) in paths
+        .iter()
+        .map(|&p| (p, true))
+        .chain(paths.iter().map(|&p| (p, false)))
+    {
+        // R current and running on vCPU owner 1; T READY and running on vCPU owner 2, its wait's check made (armed) or
+        // running guest code (not); no thread blocked, no vCPU waiting
         let view = guest.memory_view();
         for (index, owner) in [(0, 1), (1, 2)] {
             view.write_u64(entry(index) + E_STATUS, READY);
@@ -2387,6 +2606,10 @@ fn a_readying_before_the_block_leaves_the_thread_ready() {
         view.write_u64(RUN_TABLE + RT_WAITING, 0);
         view.write_u64(t_scratch, 0);
         view.write_u64(t_scratch + 0x30, 0);
+        if arm {
+            call(&guest, 2, 1, T_TEB, armed, [0, 0]);
+        }
+        let view = guest.memory_view();
         view.write_u64(monitor + LOCK_OWNER, 1);
         view.write_u64(monitor + CURRENT, 0);
         view.write_u64(monitor + CURRENT_ENTRY, MONITOR_VA + entry(0));
@@ -2413,25 +2636,151 @@ fn a_readying_before_the_block_leaves_the_thread_ready() {
             BLOCKED => "BLOCKED".to_string(),
             s => format!("status {s}"),
         };
-        rows.push((path, marked, named(status), woken));
+        rows.push((path, arm, marked, named(status), woken));
         eprintln!(
-            "the woken mark, {path}: T's mark {marked} after the readying; after its w2m_block T {} with the mark {woken}",
+            "the woken mark, {path}, T {}: T's mark {marked} after the readying; after its w2m_block T {} with the mark \
+             {woken}",
+            if arm { "armed" } else { "not armed" },
             named(status)
         );
     }
     let wrong: Vec<String> = rows
         .iter()
-        .filter(|(path, _, status, woken)| {
-            let expected = if *path == "none" { "BLOCKED" } else { "READY" };
+        .filter(|(path, arm, _, status, woken)| {
+            let c_path = *path == "w2m_ready_thread" || *path == "w2m_signal";
+            let expected = if *path == "none" || (c_path && !arm) {
+                "BLOCKED"
+            } else {
+                "READY"
+            };
             status != expected || *woken != 0
         })
-        .map(|(path, marked, status, woken)| {
-            format!("{path}: mark {marked} after the readying, T {status}, mark {woken}")
+        .map(|(path, arm, marked, status, woken)| {
+            format!("{path}, armed {arm}: mark {marked} after the readying, T {status}, mark {woken}")
         })
         .collect();
     assert!(
         wrong.is_empty(),
-        "a readying before T's block, T then READY with its mark clear (none: BLOCKED), against {wrong:?}"
+        "a readying before T's block, T then READY with its mark clear (none, and the C's paths on T not armed: BLOCKED), \
+         against {wrong:?}"
+    );
+}
+
+/// Sprint 356 (Sprint 354's Deferred (b)): the C switch's clearing of the woken mark at a thread's load, judged alone,
+/// in the form of `a_readying_before_the_block_leaves_the_thread_ready`. T (index 1) holds the mark WOKEN, as the host's
+/// readying leaves it on a thread another vCPU ran guest code on, and is put down READY; R (index 0), current on vCPU
+/// owner 1, calls the image's own `w2m_switch` with SCHEDULE_YIELD, which loads T there; then T's wait parks, the
+/// image's `w2m_block` as T on that vCPU. T must have its mark clear after the load and be BLOCKED by the park; with the
+/// clearing removed the mark survives the load and the park leaves T READY, its next wait passed over once.
+#[test]
+fn the_c_switch_clears_the_woken_mark_of_the_thread_it_loads() {
+    use a64_encoder as a64;
+    use guest_runtime::layout::{CURRENT, CURRENT_ENTRY, RT_ENTRIES, RUN_ENTRY, TEB_OFF};
+    use hypervisor::{Exit, Reg};
+    use pe_loader::Memory;
+    use w2m_vm::threads::{BLOCKED, E_STATUS, E_VCPU, E_WOKEN, READY, RT_BLOCKED, RT_WAITING, Thread};
+    const DRIVER: u64 = MONITOR_VA + 0x2400; // the monitor's free area past the flush stub (`FLUSH_STUB_END`)
+    const STACK: u64 = 0x4000_0000;
+    const T_TEB: u64 = 0x5000_0000;
+    const DONE: u16 = 0x77;
+    const KEY: u64 = 0x2468;
+    const SCRATCH_OFF: u64 = 0x1900; // runtime.h W2M_THREAD_SCRATCH_OFF
+    const SCHEDULE_YIELD: u64 = 1; // runtime.h W2M_SCHEDULE_YIELD
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let mut mem = Memory::default();
+    mem.map(STACK, 0x10000, "stack");
+    mem.map(T_TEB, 0x4000, "T's TEB");
+    let loaded = Loaded::bare(mem, STACK, STACK + 0x10000);
+    let mut guest = guest_with(&root, &loaded, &Start::console("woken.exe"));
+    for (tid, teb) in [(4u64, PROCESS_VA + TEB_OFF), (8u64, T_TEB)] {
+        w2m_vm::threads::add_thread(
+            &mut guest,
+            Thread {
+                tid,
+                index: 0,
+                teb,
+                stack: (0, 0, 0),
+                exit_code: w2m_vm::threads::STILL_ACTIVE,
+                parent: 0,
+                start: 0,
+                created_suspended: false,
+            },
+        )
+        .unwrap();
+    }
+    let driver = [a64::addi(31, 15, 0), a64::blr(22), a64::hvc(DONE.into())];
+    let bytes: Vec<u8> = driver.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let at = guest.offset(DRIVER).unwrap() as usize;
+    guest.memory.as_mut_slice()[at..at + bytes.len()].copy_from_slice(&bytes);
+    let (switch, block) = (guest.symbols["w2m_switch"], guest.symbols["w2m_block"]);
+    let monitor = guest.served.vcpu.monitor;
+    let entry = |index: u64| RUN_TABLE + RT_ENTRIES + RUN_ENTRY * index;
+    let gs_base = guest.offset(PROCESS_VA + STATE_OFF + 0xb0).unwrap();
+    let t_scratch = guest.offset(T_TEB + SCRATCH_OFF).unwrap();
+    let vm = Vm::new(40).unwrap();
+    vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
+        .unwrap();
+    let vcpu = Vcpu::new(&vm).unwrap();
+    w2m_vm::monitor::set_system_registers(&vcpu, guest.ttbr).unwrap();
+    // one call of the image's `function` on this vCPU, as vCPU owner 1 running thread `index` (its TEB `teb`); x0 its
+    // answer
+    let call = |guest: &Guest, index: u64, teb: u64, function: u64, args: [u64; 2]| {
+        let view = guest.memory_view();
+        view.write_u64(monitor + LOCK_OWNER, 1);
+        view.write_u64(monitor + CURRENT, index);
+        view.write_u64(monitor + CURRENT_ENTRY, MONITOR_VA + entry(index));
+        view.write_u64(gs_base, teb);
+        for (r, v) in [
+            (0, args[0]),
+            (1, args[1]),
+            (15, STACK + 0x10000),
+            (22, function),
+            (28, MONITOR_VA + MONITOR_DATA),
+        ] {
+            vcpu.set_reg(Reg::X(r), v).unwrap();
+        }
+        vcpu.set_reg(Reg::Cpsr, w2m_vm::CPSR_EL1H).unwrap();
+        vcpu.set_reg(Reg::Pc, DRIVER).unwrap();
+        loop {
+            match vcpu.run().unwrap() {
+                Exit::VtimerActivated => vcpu.set_vtimer_mask(true).unwrap(),
+                e if e.hvc_immediate() == Some(DONE) => return vcpu.reg(Reg::X(0)).unwrap(),
+                e => panic!("{e:?} at {:#x} in a call of {function:#x}", vcpu.reg(Reg::Pc).unwrap()),
+            }
+        }
+    };
+    // R current and READY on vCPU owner 1; T READY, held by no vCPU, its mark WOKEN; the VM may switch
+    let view = guest.memory_view();
+    for (index, holder, woken) in [(0, 1, 0), (1, 0, 1)] {
+        view.write_u64(entry(index) + E_STATUS, READY);
+        view.write_u64(entry(index) + E_VCPU, holder);
+        view.write_u64(entry(index) + E_WOKEN, woken);
+    }
+    view.write_u64(RUN_TABLE + RT_BLOCKED, 0);
+    view.write_u64(RUN_TABLE + RT_WAITING, 0);
+    view.write_u64(RUN_TABLE + u64::from(w2m_vm::guest::RT_IN_VM), 1);
+    view.write_u64(t_scratch, 0);
+    view.write_u64(t_scratch + 0x30, 0);
+    let switched = call(&guest, 0, PROCESS_VA + TEB_OFF, switch, [SCHEDULE_YIELD, 0]);
+    let view = guest.memory_view();
+    let (current, holder, loaded_mark) = (
+        view.read_u64(monitor + CURRENT),
+        view.read_u64(entry(1) + E_VCPU),
+        view.read_u64(entry(1) + E_WOKEN),
+    );
+    // T's wait parks on the vCPU that loaded it: `w2m_block` as T, no deadline, its key
+    call(&guest, 1, T_TEB, block, [u64::MAX, KEY]);
+    let view = guest.memory_view();
+    let status = view.read_u64(entry(1) + E_STATUS);
+    eprintln!(
+        "the C switch's load: answer {switched}, current {current}, T held by {holder}, T's mark {loaded_mark} after \
+         the load; after its w2m_block T's status {status} (READY {READY}, BLOCKED {BLOCKED})"
+    );
+    assert_eq!(
+        (switched, current, holder, loaded_mark, status),
+        (1, 1, 1, 0, BLOCKED),
+        "the switch's answer, the current thread, T's holder, T's mark after its load, and T's status after its park"
     );
 }
 

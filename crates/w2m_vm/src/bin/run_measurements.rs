@@ -12,6 +12,10 @@
 //! - step 6's two-vCPU run (Sprint 337): `probes/locked_race`, the binary `store/probe-runs/41326239822/probe.sha256`
 //!   names, with `--vcpus 2 --vcpu-figures`: `locked_model_steps` (`count`) and `turn_start_ns_p50` and
 //!   `turn_start_ns_p99` (`ns`, nearest rank over each turn's start), each with `vcpus` 2;
+//! - the runtime word on two vCPUs while the waits and releases run (Sprint 356, its amendment 2):
+//!   `tests/data/timed_waits/semaphore_units` with `--vcpus 2 --runtime-word`, its output "done": the word's hold and
+//!   wait per taking by site, each with `vcpus` 2, over the run's first `LOCK_TAKINGS` takings, the takings counted
+//!   named in each variant;
 //! - the capabilities `vcpus_allowed` and the run-loop design read (Sprint 337), one CAPABILITY_PROBED each:
 //!   `feat_lse2` and `feat_bbm_level2` from `w2m-vm --capabilities`, `guest_wfe_exit` from the WFE probe's run.
 //!
@@ -353,6 +357,107 @@ fn run() -> Result<(), String> {
             race,
             Some(&format!("{n} turns")),
         ));
+    }
+
+    // the runtime word on two vCPUs while the waits and releases run (Sprint 356, its amendment 2):
+    // `tests/data/timed_waits/semaphore_units`, its output "done", with the takings timed; its takings pass the timing
+    // area's LOCK_TAKINGS, so the figures are over the takings the area holds, the run's first, and each variant names
+    // them and the takings counted
+    let (units_output, units_word) = (
+        "build/measurements/semaphore_units-stdout.txt",
+        "build/measurements/semaphore_units-word.json",
+    );
+    child(
+        &root,
+        &[
+            "tests/data/timed_waits/semaphore_units.exe",
+            "--vcpus",
+            &two,
+            "--output",
+            units_output,
+            "--runtime-word",
+            units_word,
+        ],
+    )?;
+    if std::fs::read(root.join(units_output)).map_err(|e| format!("{units_output}: {e}"))? != b"done\n" {
+        return Err(format!("semaphore_units on {TWO} vCPUs: its output is not \"done\""));
+    }
+    let json: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join(units_word)).map_err(|e| format!("{units_word}: {e}"))?,
+    )
+    .map_err(|e| format!("{units_word}: {e}"))?;
+    let counted = json["counted"].as_u64().ok_or(format!("{units_word}: no count"))?;
+    let takings: Vec<[u64; 7]> =
+        serde_json::from_value(json["takings"].clone()).map_err(|e| format!("{units_word}: {e}"))?;
+    if takings.len() as u64 != counted.min(w2m_vm::monitor_code::LOCK_TAKINGS) {
+        return Err(format!(
+            "semaphore_units on {TWO} vCPUs: {counted} takings counted, {} written",
+            takings.len()
+        ));
+    }
+    // a hold, taken to released, is written by the word's holder alone; a wait's start is the timing area's one header
+    // word (+0), which a second vCPU waiting writes over while the first holds the word, moving the start later: so on
+    // two vCPUs a wait figure is a lower bound, not trusted, a wait whose start passed its taking (the overwrite's
+    // evidence, counted in each variant) is left out, and the holds and the takings counted are the figures (a wait
+    // start a vCPU is the per-lock vocabulary card's)
+    if takings.iter().any(|t| t[3] < t[2]) {
+        return Err(format!("semaphore_units on {TWO} vCPUs: a hold's time ran backward"));
+    }
+    let overwritten = takings.iter().filter(|t| t[2] < t[1]).count();
+    let ns_per_tick = 1e9 / w2m_vm::host_state::counter_frequency()? as f64;
+    let units = "timed-waits-semaphore-units";
+    for site in Site::ALL {
+        let at: Vec<&[u64; 7]> = takings.iter().filter(|t| t[0] == site as u64).collect();
+        for (which, [p50, p99], start, end) in [
+            (
+                "hold",
+                [Metric::RuntimeWordHoldNsP50, Metric::RuntimeWordHoldNsP99],
+                2,
+                3,
+            ),
+            (
+                "wait",
+                [Metric::RuntimeWordWaitNsP50, Metric::RuntimeWordWaitNsP99],
+                1,
+                2,
+            ),
+        ] {
+            let mut ticks: Vec<u64> = at
+                .iter()
+                .filter(|t| t[end] >= t[start])
+                .map(|t| t[end] - t[start])
+                .collect();
+            if ticks.is_empty() {
+                continue;
+            }
+            ticks.sort_unstable();
+            let left_out = if which == "wait" {
+                format!(
+                    "; a lower bound, untrusted: another vCPU's wait writes the one wait start, {overwritten} of the \
+                     {} passing their taking, left out",
+                    takings.len()
+                )
+            } else {
+                String::new()
+            };
+            let variant = format!(
+                "{}; {} of the run's first {} takings, of {counted} counted{left_out}",
+                site.name(),
+                ticks.len(),
+                takings.len()
+            );
+            for (metric, q, name) in [(p50, 0.5, "p50"), (p99, 0.99, "p99")] {
+                lines.push(measurement_line_on(
+                    vcpus,
+                    &format!("semaphore-units-runtime-word-{}-{which}-ns-{name}", site.name()),
+                    metric,
+                    (quantile(&ticks, q) as f64 * ns_per_tick).round(),
+                    "ns",
+                    units,
+                    Some(&variant),
+                ));
+            }
+        }
     }
 
     // the capabilities `vcpus_allowed` and the run-loop design read (Sprint 337; vocabulary 0.13, P28)

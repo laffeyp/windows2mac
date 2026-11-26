@@ -2,7 +2,8 @@
 # by kind on qpc and sleeper, whether a guest WFE or WFI exits, and (Sprint 164) the runtime word's hold and wait times
 # from a second, timed run of each guest, as MEASUREMENT_RECORDED with vocabulary 0.11's metrics (P24); from Sprint 337
 # step 6's two-vCPU run of locked_race (locked_model_steps, turn_start_ns_p50/p99, vcpus 2) and three CAPABILITY_PROBED
-# (feat_lse2, feat_bbm_level2, guest_wfe_exit), vocabulary 0.13. run_measurements makes no VM itself; it runs each measurement as a signed w2m-vm child. Run from the
+# (feat_lse2, feat_bbm_level2, guest_wfe_exit), vocabulary 0.13; from Sprint 356 the runtime word's hold and wait by
+# site on semaphore_units' two-vCPU run (vcpus 2), the waits and releases off the word. run_measurements makes no VM itself; it runs each measurement as a signed w2m-vm child. Run from the
 # repository root after `cargo build --release`, on this Mac (Hypervisor.framework):
 #   uv run substrate run --file harness/w2m-vm-measurements.toml --root store/runs/w2m-vm-measurements-<ns> --strict
 

@@ -1,0 +1,5 @@
+{"s":"single","wait":128,"error":0,"again":0,"released":1,"released_again":1,"release_error":0,"after":0,"after_released":1}
+{"s":"any","wait":129,"error":0,"released":1}
+{"s":"all","wait":128,"error":0,"released":1,"after":0}
+{"s":"blocked","wait":128,"error":0,"ended":0,"released":1}
+{"s":"not_owner","released":0,"error":288,"owner_released":1,"after":0}
