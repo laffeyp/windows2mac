@@ -1309,3 +1309,206 @@ fn the_other_single_process_guests_end_on_two_vcpus_as_held() {
         }
     }
 }
+
+/// Sprint 341 (the Decision "Card 341's form"): `w2m_logged` (`tools/guest_runtime/runtime.c`), which every logged
+/// service returns through, writes the process-wide call ring exactly and within it from two vCPUs at once. Every bridge
+/// takes the runtime word around its service (`guest::bridge`), so no guest's calls reach `w2m_logged` from two vCPUs
+/// together; this drives the runtime image's own `w2m_logged` from a loop on each of two vCPUs, without the word, as a
+/// bridge of lock class none (card 342) will call it. In each round the two loops meet at an arrival word, then call.
+/// Round 0 starts from the ring as a process starts it and makes `CALLS_EACH` calls a loop, together more than the
+/// ring's 10,751 records, so the capacity is crossed while both run. A call written past the ring needs the crossing
+/// to fall inside one call's check and stores, which 2,000 such rounds never showed with the check made on a reloaded
+/// `count` (plant 1); so each later round starts the ring one record short of its capacity, as a process past that
+/// many calls has it (the calls before counted under `PRIOR_API`), and makes `CALLS_NEAR` calls a loop, the two loops'
+/// first calls racing for the last record. Each round holds `count` to the calls before and made, `per_api`'s total to
+/// `count`, and every byte of the exception area past the ring (`EXCEPTION_OFF`, 0x1000 bytes) to its value before the
+/// rounds; after the rounds, each record a round wrote below the capacity is one call's whole (its api, its loop's
+/// remaining count, its loop's tag), no call twice.
+#[test]
+fn the_call_ring_stays_exact_and_within_itself_on_two_vcpus() {
+    use a64_encoder as a64;
+    use guest_runtime::layout::{EXCEPTION_OFF, RING_OFF, RING_SIZE};
+    use hypervisor::{Exit, Reg};
+    use pe_loader::Memory;
+    const DRIVER: u64 = MONITOR_VA + 0x2400; // the monitor's free area past the flush stub (`FLUSH_STUB_END`)
+    const ARRIVAL: u64 = 0x3000_0000;
+    const STACK: u64 = 0x4000_0000;
+    const CALLS_EACH: u64 = 8_000;
+    const CALLS_NEAR: u64 = 4;
+    const ROUNDS: u64 = 20_000;
+    const PRIOR_API: u64 = 0x100;
+    const APIS: [u64; 2] = [0x101, 0x102]; // below W2M_RING_APIS (512), so per_api counts them
+    const TAGS: [u64; 2] = [0xA000_0000_0000_0001, 0xA000_0000_0000_0002];
+    const DONE: u16 = 0x77;
+    const HEADER: u64 = 16 + 8 * 512; // count, capacity, per_api (`runtime.h` 89-94)
+    let calls_each = |round: u64| if round == 0 { CALLS_EACH } else { CALLS_NEAR };
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let mut mem = Memory::default();
+    mem.map(ARRIVAL, 0x1000, "arrival");
+    mem.map(STACK, 0x10000, "stack");
+    let loaded = Loaded::bare(mem, ARRIVAL, STACK + 0x10000);
+    let mut guest = guest_with(&root, &loaded, &Start::console("ring.exe"));
+    // each loop: x19 its calls left, x20 its api, x21 its tag, x22 `w2m_logged`, x23 the arrival word, x24 the vCPUs,
+    // x25 its spins; it adds itself to the arrival word, waits for both, spins x25 times, then calls
+    // w2m_logged(api, calls left, tag) to zero. The spins differ round by round and loop by loop: the last to arrive
+    // leaves the wait first, ahead by more than a call's check and stores, and the spins move the two calls' start
+    // across that window
+    let driver = [
+        a64::ldaxr(8, 9, 23),
+        a64::addi(9, 9, 1),
+        a64::stlxr(8, 10, 9, 23),
+        a64::cbnz(10, -12),
+        a64::ldr(8, 9, 23, 0),
+        a64::sub(9, 9, 24),
+        a64::cbnz(9, -8),
+        a64::cbz(25, 12),
+        a64::subi(25, 25, 1),
+        a64::cbnz(25, -4),
+        a64::mov(0, 20),
+        a64::mov(1, 19),
+        a64::mov(2, 21),
+        a64::blr(22),
+        a64::subi(19, 19, 1),
+        a64::cbnz(19, -20),
+        a64::hvc(DONE.into()),
+    ];
+    let bytes: Vec<u8> = driver.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let at = guest.offset(DRIVER).unwrap() as usize;
+    guest.memory.as_mut_slice()[at..at + bytes.len()].copy_from_slice(&bytes);
+    let logged = guest.symbols["w2m_logged"];
+    let (ring, exception, arrival) = (
+        guest.offset(PROCESS_VA + RING_OFF).unwrap(),
+        guest.offset(PROCESS_VA + EXCEPTION_OFF).unwrap(),
+        guest.offset(ARRIVAL).unwrap(),
+    );
+    let view = guest.memory_view();
+    let capacity = view.read_u64(ring + 8);
+    assert_eq!(capacity, (RING_SIZE - HEADER) / 24, "the ring's capacity");
+    assert!(2 * CALLS_EACH > capacity, "the rounds' calls do not pass the capacity");
+    let mut exception_before = vec![0u8; 0x1000];
+    view.read(exception, &mut exception_before);
+    let vm = Vm::new(40).unwrap();
+    vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
+        .unwrap();
+    let ttbr = guest.ttbr;
+    // the round's failure, which ends the rounds; and the first records that are not one call's whole
+    let (mut failure, mut records_wrong): (Option<String>, Vec<String>) = (None, Vec::new());
+    // each vCPU is made once and runs every round, the rounds marked by `gate` (the two vCPU threads and this one):
+    // the ring reset here, a wait, both loops run to DONE, a wait, the ring judged here; a failure is held, not
+    // panicked on, so that no thread is left at the gate, and stops the rounds
+    let gate = std::sync::Barrier::new(3);
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let exits_wrong = std::sync::Mutex::new(Vec::<String>::new());
+    let mut rounds = 0;
+    std::thread::scope(|s| {
+        for k in 0..2 {
+            let (vm, gate, stop, exits_wrong) = (&vm, &gate, &stop, &exits_wrong);
+            s.spawn(move || {
+                let vcpu = Vcpu::new(vm).unwrap();
+                w2m_vm::monitor::set_system_registers(&vcpu, ttbr).unwrap();
+                for round in 0.. {
+                    gate.wait();
+                    if stop.load(std::sync::atomic::Ordering::Acquire) {
+                        return;
+                    }
+                    for (r, v) in [
+                        (19, calls_each(round)),
+                        (20, APIS[k]),
+                        (21, TAGS[k]),
+                        (22, logged),
+                        (23, ARRIVAL),
+                        (24, 2),
+                        (25, (round * [37, 61][k]) % 1024),
+                        (28, MONITOR_VA + MONITOR_DATA),
+                    ] {
+                        vcpu.set_reg(Reg::X(r), v).unwrap();
+                    }
+                    // no stack: `w2m_logged` is a leaf that stores nothing to one, before and after (its disassembly)
+                    vcpu.set_reg(Reg::Cpsr, w2m_vm::CPSR_EL1H).unwrap();
+                    vcpu.set_reg(Reg::Pc, DRIVER).unwrap();
+                    loop {
+                        match vcpu.run().unwrap() {
+                            Exit::VtimerActivated => vcpu.set_vtimer_mask(true).unwrap(),
+                            e if e.hvc_immediate() == Some(DONE) => break,
+                            e => {
+                                let pc = vcpu.reg(Reg::Pc).unwrap();
+                                exits_wrong.lock().unwrap().push(format!("vCPU {k}: {e:?} at {pc:#x}"));
+                                break;
+                            }
+                        }
+                    }
+                    gate.wait();
+                }
+            });
+        }
+        for round in 0..ROUNDS {
+            // the ring as the process starts it (`process.rs` 395-396), its records cleared; after round 0, as a
+            // process past `before` calls has it
+            let before = if round == 0 { 0 } else { capacity - 1 };
+            view.write(ring, &vec![0u8; RING_SIZE as usize]);
+            view.write_u64(ring, before);
+            view.write_u64(ring + 8, capacity);
+            view.write_u64(ring + 16 + 8 * PRIOR_API, before);
+            view.write_u64(arrival, 0);
+            gate.wait();
+            gate.wait();
+            rounds += 1;
+            failure = (|| {
+                if let Some(e) = exits_wrong.lock().unwrap().first() {
+                    return Some(format!("round {round}: {e}, not the loop's hvc #{DONE:#x}"));
+                }
+                let count = view.read_u64(ring);
+                let calls = 2 * calls_each(round);
+                if count != before + calls {
+                    return Some(format!(
+                        "round {round}: the ring's count {count} against the {before} calls before and {calls} logged \
+                         calls made"
+                    ));
+                }
+                let total: u64 = (0..512).map(|a| view.read_u64(ring + 16 + 8 * a)).sum();
+                if total != count {
+                    return Some(format!("round {round}: per_api's total {total} against count {count}"));
+                }
+                let mut after = vec![0u8; 0x1000];
+                view.read(exception, &mut after);
+                let i = (0..0x1000).find(|&i| after[i] != exception_before[i])?;
+                Some(format!(
+                    "round {round}: the exception area changed, first at EXCEPTION_OFF + {i:#x}: {:#04x} to {:#04x}",
+                    exception_before[i], after[i]
+                ))
+            })();
+            let mut seen = BTreeSet::new();
+            for i in before..capacity {
+                let at = ring + HEADER + 24 * i;
+                let (api, arg0, ret) = (view.read_u64(at), view.read_u64(at + 8), view.read_u64(at + 16));
+                let whole = (0..2).any(|k| api == APIS[k] && ret == TAGS[k] && (1..=calls_each(round)).contains(&arg0));
+                if (!whole || !seen.insert((api, arg0))) && records_wrong.len() < 4 {
+                    records_wrong.push(format!("round {round}, record {i}: ({api:#x}, {arg0}, {ret:#x})"));
+                }
+            }
+            if failure.is_some() {
+                break;
+            }
+        }
+        stop.store(true, std::sync::atomic::Ordering::Release);
+        gate.wait();
+    });
+    if let Some(f) = failure {
+        panic!("{f}");
+    }
+    assert!(
+        records_wrong.is_empty(),
+        "records not one call's whole: {records_wrong:?}"
+    );
+    eprintln!(
+        "the call ring on two vCPUs: round 0's {} logged calls from an empty ring, count and per_api total {}; {} \
+         rounds of {} from {} calls before, each count and total {}; capacity {capacity}, the exception area unchanged",
+        2 * CALLS_EACH,
+        2 * CALLS_EACH,
+        rounds - 1,
+        2 * CALLS_NEAR,
+        capacity - 1,
+        capacity - 1 + 2 * CALLS_NEAR
+    );
+}

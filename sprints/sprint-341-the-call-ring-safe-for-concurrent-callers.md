@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 341
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -122,4 +122,52 @@ past capacity leaves the exception area untouched.
 
 ## result
 
-GATES-LINE
+Done. `w2m_logged` (`tools/guest_runtime/runtime.c` 60-75) increments `per_api[api]` and reserves the record's index by
+`__atomic_fetch_add(..., __ATOMIC_RELAXED)`, checks `i < capacity` on that index, and stores all three fields at
+`rec[i]`. The judge is `run_loop.rs`' `the_call_ring_stays_exact_and_within_itself_on_two_vcpus`.
+
+- **The reach, read before the work.** Every bridge takes the runtime word around its service (`guest::bridge`,
+  `guest.rs` 577-581), and every logged service returns through `w2m_logged`. So no guest's calls reach `w2m_logged`
+  from two vCPUs at once, and no guest or probe in `tests/data/timed_waits` or `probes/` can be the judge. The test
+  drives the image's own `w2m_logged` (its symbol, `Guest::symbols`) from a loop on each of two vCPUs, without the word,
+  as card 342's none-class bridge will call it: 17 words at `MONITOR_VA + 0x2400`, which meet at an arrival word, spin,
+  then call `w2m_logged(api, calls left, tag)`. No new binary, so no walk fixture entry. The capacity is
+  `(0x40000 - 0x1010) / 24` = 10,751 records (the card's 10,750 is one short; `process.rs` 396).
+- **The memory order: relaxed.** The adds need only their atomicity: a read-modify-write on one location loses no
+  update in any order. The host reads the ring with every vCPU stopped. GCC's `__atomic` builtins: `__ATOMIC_RELAXED`
+  "implies no inter-thread ordering constraints". The Arm ARM: LDADD has no ordering; LDADDA and LDADDAL acquire;
+  LDADDL and LDADDAL release.
+- **The build.** The runtime's flags are `CFLAGS` (`crates/guest_runtime/src/lib.rs` 20-33), which hold
+  `-ffreestanding -fno-builtin -mgeneral-regs-only` at `-O2`. Before (`build/guest_runtime_rust/22a9eaf0...bin`,
+  `_w2m_logged` at 0x7f0004182050, 0x6c bytes): `ldr x10, [x9, #0x10]; add x10, x10, #0x1; str x10, [x9, #0x10]` for
+  `per_api`, then `ldp x9, x10, [x8]` for the check and `ldr x9, [x8]` reloading `count` at ...090, ...09c and ...0a8
+  before each field's store and the plain increment. After (`f46baecc...bin`, same address, 0x5c bytes):
+  `ldadd x10, x9, [x9]` at ...06c (`per_api`), `ldadd x9, x9, [x10]` at ...07c (`count`, the old value in x9), then
+  `ldr x8, [x8]` (capacity), `cmp x9, x8`, `madd x8, x9, x8, x10`, `stp x0, x1, [x8]` and `str x2, [x8, #0x10]`. No
+  call, no stack (the image has no undefined symbol). Every runtime symbol after `w2m_logged` moves 0x10 lower. The
+  image lies at `RUNTIME_IMAGE_VA` in the monitor area, outside the ledger's hashed range (`PROCESS_VA` to `TRACE_OFF`).
+- **The two-vCPU run, before the change**: "round 0: the ring's count against the 16000 logged calls made, left:
+  12278, right: 16000".
+- **After**: "the call ring on two vCPUs: round 0's 16000 logged calls from an empty ring, count and per_api total
+  16000; 19999 rounds of 8 from 10750 calls before, each count and total 10758; capacity 10751, the exception area
+  unchanged". Each round compares the 0x1000 bytes from `EXCEPTION_OFF` with their value before the rounds; 13.4 s.
+- **The judge's rounds.** Round 0 is the card's run: 8,000 calls a loop from an empty ring. Plant 1 under 2,000 such
+  rounds wrote nothing past the ring; it failed only on the records. So each later round starts the ring one record
+  short of capacity, with `count` 10,750 and those calls under `per_api[0x100]`, and makes 4 calls a loop. Each loop
+  spins `(round * 37 or 61) % 1024` times after the meeting, since the last to arrive leaves first, ahead by more than
+  a call's check and stores. Sixteen runs of plant 1 reached the exception area at rounds 41 to 13,096 of 20,000.
+- **One vCPU.** The ring's bytes after each call are the plain update's: `per_api[api]` + 1, `rec[count]` filled below
+  capacity, `count` + 1. The exit ledger and the batch record pass in the gates below.
+- **Plant 1** "round 13096: the exception area changed, first at EXCEPTION_OFF + 0x0: 0x00 to 0x04". The check made
+  on a reloaded `count`, the fields stored at `rec[r->count]`, the add atomic; run on the tree as gated, then restored
+  and checked by `cmp`. In 64 rounds of the judge's first form it failed only as "records not one call's whole:
+  [\"round 0, record 0: (0x101, 8000, 0xa000000000000002)\", ...]".
+- **Plant 2** "round 0: the ring's count 12309 against the 0 calls before and 16000 logged calls made". `count` by a
+  plain `r->count++`; run on the tree as gated, then restored and checked by `cmp`.
+- **A third file.** The first gates run failed at `guest_runtime::python_image`'s
+  `the_working_trees_c_departs_from_the_frozen_c_only_where_named` (`python_image.rs` 104): `runtime.c` was changed
+  from `frozen-python-2026-10-29`'s and not named. `DEPARTURES` now names it with Sprint 341 and its reason. The
+  frozen judge, `the_image_rust_builds_is_the_python_builds_byte_for_byte`, builds the C at the tag and is unmoved. The
+  batch run's call stream names runtime addresses by symbol (`batch_run.rs` 214-219), so the 0x10 move compares equal.
+  The first run's step rows stay in `store/gates/steps.tsv`; it wrote no pass row.
+- **The gates** (copied from `tail -1 store/gates/passes.tsv`): `exit 0 in 369 s	default	2026-11-26T03:29:31Z	sprint 341	c62a25911799acead66312f1fe9858b5332c4e62	f77dff558b346ac24d298ccae1cc40f0ff7786aa138c58610ecad7073a2225a2	root=104052c95d212efd012615a5645bd62bd3936858	rust=all python=0 samples=0	base=5ba5b714f7011fbac219ee70d6cb711acb7fe5fc`

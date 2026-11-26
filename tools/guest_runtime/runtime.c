@@ -57,15 +57,20 @@ void w2m_unimplemented(u64 api, u64 detail) {
     for (;;) {}
 }
 
+/* Safe from several vCPUs at once (Sprint 341): each count by one atomic add, and the record at the index the add on
+ * `count` reserved, checked against the capacity there, so no two calls share a record and none is written past the
+ * ring. Relaxed: the adds need only their atomicity, and the host reads the ring with every vCPU stopped (GCC's
+ * __atomic builtins: __ATOMIC_RELAXED "implies no inter-thread ordering constraints"); it builds to LDADD. On one vCPU
+ * the ring's bytes are the plain update's. */
 u64 w2m_logged(u64 api, u64 arg0, u64 ret) {
     struct w2m_ring *r = (struct w2m_ring *)W2M_RING_VA;
-    if (api < W2M_RING_APIS) r->per_api[api]++;
-    if (r->count < r->capacity) {
-        r->rec[r->count].api = api;
-        r->rec[r->count].arg0 = arg0;
-        r->rec[r->count].ret = ret;
+    if (api < W2M_RING_APIS) __atomic_fetch_add(&r->per_api[api], 1, __ATOMIC_RELAXED);
+    u64 i = __atomic_fetch_add(&r->count, 1, __ATOMIC_RELAXED);
+    if (i < r->capacity) {
+        r->rec[i].api = api;
+        r->rec[i].arg0 = arg0;
+        r->rec[i].ret = ret;
     }
-    r->count++;
     return ret;
 }
 
