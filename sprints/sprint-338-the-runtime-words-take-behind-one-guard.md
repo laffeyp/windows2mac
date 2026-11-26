@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 338
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -123,4 +123,44 @@ the guard does not release, and every test that passed before still passes.
 
 ## result
 
-GATES-LINE
+- **The guard:** `run.rs` `RuntimeWordGuard` (695), `#[must_use]`, holding the view and whether the host took the
+  word; its `Drop` (701) releases the word when it did and nothing when the vCPU's guest held it already.
+  `take_word_unchecked` (715) returns the guard; `take_word` (729) returns `Option<RuntimeWordGuard>`, the stop read
+  unchanged, and on a stop drops the guard (737), so the give-back is the `Drop`'s release, not a second hand-written
+  one. `turn` (834) takes the guard by value beside the lock's guard and hands a new one back: a guard that took the
+  word is dropped before the wait (853) and the word taken again after it; one that took nothing is kept across the
+  wait, as the hold was.
+- **The count:** `grep -c host_release_runtime_word crates/w2m_vm/src/run.rs`, 16 before and 12 after. Split at
+  `#[cfg(test)]`: the code 11 before (`take_word`'s give-back, `turn`'s release, the nine sites) and 1 after, the
+  guard's `Drop`; the tests 5 before and 11 after, the six added being the text test's own strings.
+- **The nine sites**, each `let Some(word) = take_word(...)` and its hand release replaced by `drop(word)` at the same
+  place, after the lock's guard, so the order is as before: `take_a_thread` (1300, dropped 1310, before the thread's
+  load or the park); the turn's start (1399, 1416, inside the timed part); an exit's diagnostics (1450, 1539, after the
+  section's lock); `hvc #13` (1571, 1582); `hvc #12` (1687, `mut word` through `turn`'s Idle loop, 1717); `hvc #10` and
+  `#11` (1756, 1772, before `stepped?`); `hvc #4` (1813, `mut word` through `turn`'s Slice and Idle calls, 1863);
+  `hvc #9` (1900, 1920); `hvc #1` (1930, 1972). No site had a `return` or `?` between its take and its release, so no
+  path's order changed; a panic inside a service now releases the host's hold as it unwinds, where before the word
+  stayed held.
+- **Left as they are** (the guest's holds, not the host's take): `HaltAtEnd`'s `release_guests_word` at a vCPU's end
+  and `kick_and_wait`'s `release_guests_word` and `take_word_for_guest`, both in `run.rs`; `monitor_code.rs`'s
+  `lock_runtime` and `unlock_runtime`, the guest's own take and release, and `host_take_runtime_word`,
+  `host_release_runtime_word` themselves.
+- **The tests:** `run_loop.rs` `the_runtime_word_is_free_after_each_served_exit`: `sleeper` on one vCPU and on two,
+  each run on a thread of its own, reads `RUN_TABLE + RUNTIME_LOCK` 0 after its ExitProcess, and holds the reach: turn
+  starts above 0 and `hvc #1` and `#12` exits above 0, vCPU 1 running on two. Read on the tree before the change: one
+  vCPU 23 turns' starts, exits `{1: 14, 8: 8, 12: 1, 15: 3}`; two vCPUs 25, `{1: 14, 8: 8, 12: 3, 15: 3}`, runs by vCPU
+  `[13, 12]`. So the guest reaches five of the nine sites (the turn's start, an exit's diagnostics, `hvc #1`, `hvc
+  #12`, `take_a_thread`) and the planted `Drop` through every one; not `hvc #4`, `#9`, `#10`/`#11` or `#13`. In
+  `run.rs`'s own tests: `the_word_is_released_only_by_its_guards_drop`, a text test naming by line any
+  `host_release_runtime_word(` call before `#[cfg(test)]` outside the guard's `Drop`, with fixtures for a hand pairing,
+  the `Drop`'s own release and a comment; `a_stopped_runs_take_of_the_word_ends_its_service` now drops a taken guard and
+  reads the word 0, and drops a guard over the guest's own hold and reads the hold kept.
+- **Plant 1**, "sleeper on 1 vCPUs did not end in 120 s: a take waits on a runtime word left held" (the guard's `Drop`,
+  704, `let _ = self.mem;` in place of the release; `the_runtime_word_is_free_after_each_served_exit` FAIL [120.031s]); the run's own limit of 60 s did
+  not stop it, the host's take spinning outside guest code, which the limit cancels. Beside it
+  `a_stopped_runs_take_of_the_word_ends_its_service` FAIL, "the word released by the guard's drop left: 4294967295
+  right: 0" (`HOST_OWNER`), and the text test passing, as it judges the text and not the release. Made from a cp
+  backup, restored by cp and checked by cmp ("cmp equal"), before the gates.
+- **The gates:** one run, after the plant, on the restored tree; `signal_report --check` exit 0 before it.
+
+exit 0 in 366 s	default	2026-11-26T02:03:17Z	sprint 338	ba288384588449a90e4df4adc5ff8c163b862770	c878882f5572426970b2e74c44998dc8ef5e0bf7f71843ea162266c8b036baaa	root=9fffa122ddd06efad951901c17490401dc20044f	rust=crates python=0 samples=0	base=fa47573ca63ec21c5286610f7171ec2d1aca5a13

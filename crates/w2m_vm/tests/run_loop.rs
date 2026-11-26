@@ -28,7 +28,7 @@ use translator::lower::RuntimeCalls;
 use w2m_vm::cache_file::{self, Exits};
 use w2m_vm::compile::HostCompiler;
 use w2m_vm::guest::{Guest, vm_compiler_symbols};
-use w2m_vm::monitor_code::{VMC_INSTALLER, VMC_LOG_COUNT};
+use w2m_vm::monitor_code::{RUNTIME_LOCK, VMC_INSTALLER, VMC_LOG_COUNT};
 use w2m_vm::process::Start;
 use w2m_vm::run::{JUDGE_KIND, Outcome, Stop, run_compiling};
 use w2m_vm::tables::{block_descriptor, page_descriptor};
@@ -1057,6 +1057,67 @@ fn two_vcpus_end_each_guest_as_one_does() {
                 both.runs_by_vcpu[1] > 0,
                 "twoready: vCPU 1 ran no guest code, runs {:?}",
                 both.runs_by_vcpu
+            );
+        }
+    }
+}
+
+/// Sprint 338 (Change 1's first card, the runtime word's take behind one guard): no served exit leaves the runtime word
+/// held. `sleeper` runs on one vCPU and on two to its ExitProcess, and the run table's word (`RUNTIME_LOCK`) is read
+/// free after the stop, held neither by the host nor by a guest; the services the run reaches are held by their counts:
+/// every turn's start and every exit's diagnostics take the word, and so do `hvc #1` and `hvc #12`, and vCPU 1 takes it
+/// for a thread. A word the host leaves held makes the next take wait in the host for ever, which the run's limit does
+/// not end (it stops guest code), so the run is on a thread of its own and one not ended in 120 s fails by name, the
+/// limit a hang's stop as the run's 60 s is; no elapsed time is held.
+#[test]
+fn the_runtime_word_is_free_after_each_served_exit() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    for vcpus in [1, 2] {
+        let (done, ended) = std::sync::mpsc::channel();
+        let running = std::thread::spawn(move || {
+            let root = root();
+            let data = fs::read(root.join("tests/data/timed_waits/sleeper.exe")).unwrap();
+            let loaded = load(&data, None, "probe.exe").unwrap();
+            let mut start = Start::console("probe.exe");
+            start.vcpus = vcpus;
+            let mut guest = guest_with(&root, &loaded, &start);
+            let limit = Some(Duration::from_secs(60));
+            let out = run_limited(&mut guest, &loaded, &mut HostCompiler::default(), limit);
+            let word = guest.memory_view().read_u32(RUN_TABLE + RUNTIME_LOCK);
+            let _ = done.send((out, word));
+        });
+        let (out, word) = match ended.recv_timeout(Duration::from_secs(120)) {
+            Ok(ran) => ran,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                panic!("sleeper on {vcpus} vCPUs did not end in 120 s: a take waits on a runtime word left held")
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                std::panic::resume_unwind(running.join().expect_err("the run's thread ended with no outcome"))
+            }
+        };
+        assert_eq!(out.stop, Stop::ExitProcess { code: 0 }, "sleeper on {vcpus} vCPUs");
+        assert_eq!(
+            word, 0,
+            "sleeper on {vcpus} vCPUs: the runtime word after the stop, held by {word:#x}"
+        );
+        let exits = |n: u16| out.exits.get(&n).copied().unwrap_or(0);
+        assert!(
+            !out.turn_start_ns.is_empty() && exits(1) > 0 && exits(12) > 0,
+            "sleeper on {vcpus} vCPUs: the services reached, {} turns' starts and the exits {:?}",
+            out.turn_start_ns.len(),
+            out.exits
+        );
+        eprintln!(
+            "sleeper on {vcpus} vCPUs: {} turns' starts, exits {:?}, runs by vCPU {:?}",
+            out.turn_start_ns.len(),
+            out.exits,
+            out.runs_by_vcpu
+        );
+        if vcpus == 2 {
+            assert!(
+                out.runs_by_vcpu[1] > 0,
+                "sleeper: vCPU 1 took no thread, runs {:?}",
+                out.runs_by_vcpu
             );
         }
     }

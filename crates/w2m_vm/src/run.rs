@@ -683,35 +683,61 @@ fn vector_slot(guest: &Guest, tid: u64) -> Option<u64> {
     )
 }
 
+/// The host's take of the runtime word for one service (Sprint 338, the host design's Change 1, its first card): whether
+/// the host took it, and the word released in `Drop` when it did, so a service whose guard goes out of scope, by any
+/// return, a `?` or a panic, cannot leave the word held for every other vCPU to spin on. One place that cannot be paired
+/// wrongly (Ousterhout, *A Philosophy of Software Design*, 2nd ed., chapter 10, "Define Errors Out of Existence"; *The
+/// Rust Programming Language*, 15.3, "Running Code on Cleanup with the Drop Trait"): until Sprint 338 nine sites paired
+/// the take with a release by hand. A vCPU that held the word already (a miss inside the runtime) keeps it, and its
+/// guard releases nothing. A site that must let the word go before a later step drops its guard there; the lock's
+/// guard is dropped first, the word outermost.
+#[must_use = "a guard dropped at once lets the word go before the service it guards"]
+struct RuntimeWordGuard<'a> {
+    mem: ConcurrentGuestMemory<'a>,
+    /// the host took the word, and the guard's drop releases it
+    took: bool,
+}
+
+impl Drop for RuntimeWordGuard<'_> {
+    fn drop(&mut self) {
+        if self.took {
+            crate::monitor_code::host_release_runtime_word(self.mem);
+        }
+    }
+}
+
 /// The runtime word taken for the host, for a service that changes state two vCPUs share (`hvc #1`, `#4`, `#12`, `#13`;
 /// `docs/design-run-loop-on-several-vcpus-2026-10-31.md`, "The exits"), by the vCPU whose monitor data page is at
-/// `monitor`; true when the host took it, and so must release it; a vCPU that holds it already (a miss inside the
+/// `monitor`: its guard, which releases it if the host took it; a vCPU that holds it already (a miss inside the
 /// runtime) keeps it. A service found outside it after the take, the word held neither by the host nor by this vCPU, is
 /// counted in `outside`. With no run's stop to read: `turn`'s take after the Machine's wait, a process with a machine
 /// link running on one vCPU (`MACHINE_ON_ONE`, Sprint 325); every other take is `take_word`'s (Sprint 329).
-fn take_word_unchecked(mem: ConcurrentGuestMemory<'_>, monitor: u64, outside: &mut u64) -> bool {
+fn take_word_unchecked<'a>(mem: ConcurrentGuestMemory<'a>, monitor: u64, outside: &mut u64) -> RuntimeWordGuard<'a> {
     let own = crate::monitor_code::vcpu_owner(mem, monitor);
     let took = crate::monitor_code::host_take_runtime_word(mem, own);
     let holder = mem
         .atomic_u32(RUN_TABLE + crate::monitor_code::RUNTIME_LOCK)
         .load(std::sync::atomic::Ordering::Relaxed);
     *outside += u64::from(holder != crate::monitor_code::HOST_OWNER && holder != own);
-    took
+    RuntimeWordGuard { mem, took }
 }
 
 /// `take_word_unchecked`, then the run's stop read (Sprint 329; reviewer-3's Low 2 at 327): None when the run has
-/// stopped, the word given back if the host took it, so the service returns before it reads what the word guards. An
-/// ended vCPU's guest's hold is let go at its stop (`release_guests_word`), and the state under it may be half
-/// written; a take that finds the stop reads none of it. Some(whether the host took it) otherwise.
-fn take_word(mem: ConcurrentGuestMemory<'_>, monitor: u64, outside: &mut u64, stopping: &RunStop) -> Option<bool> {
-    let took = take_word_unchecked(mem, monitor, outside);
+/// stopped, the guard dropped, giving the word back if the host took it, so the service returns before it reads what
+/// the word guards. An ended vCPU's guest's hold is let go at its stop (`release_guests_word`), and the state under it
+/// may be half written; a take that finds the stop reads none of it. The take's guard otherwise.
+fn take_word<'a>(
+    mem: ConcurrentGuestMemory<'a>,
+    monitor: u64,
+    outside: &mut u64,
+    stopping: &RunStop,
+) -> Option<RuntimeWordGuard<'a>> {
+    let word = take_word_unchecked(mem, monitor, outside);
     if stopping.stopped() {
-        if took {
-            crate::monitor_code::host_release_runtime_word(mem);
-        }
+        drop(word); // the word given back if the host took it
         return None;
     }
-    Some(took)
+    Some(word)
 }
 
 /// What a served exit or the in-VM compiler's drain writes into `Outcome` (the run-loop design's "The run loop's own
@@ -801,16 +827,21 @@ impl<'a> GuestLock<'a> {
 /// The process's turn ends (Sprint 197: `VM.steps` yields "idle" or "slice", vm_backend 5066, 5082): the machine runs
 /// the others until this process's turn comes back; a pending wake readies its blocked threads, and on the instruction
 /// clock it is caught up to the machine's (`_catch_up`). Err: the run stops (a deadlock, a child's stop). The wait holds
-/// neither the lock nor the word (the guest-memory design's choice 6; Sprints 294 and 311): the guard let go, then the
-/// word if the host took it; after, the word taken again, then the guard, which is handed back. The link and the kernel
-/// objects are out of `Guest` across the wait.
+/// neither the lock nor the word (the guest-memory design's choice 6; Sprints 294 and 311): the lock's guard let go,
+/// then the word's, releasing it if the host took it; after, the word taken again, then the lock, and both guards
+/// handed back (Sprint 338: a guard that took nothing, the vCPU's guest holding the word, is kept across the wait, as
+/// the hold was). The link and the kernel objects are out of `Guest` across the wait.
 fn turn<'l, 'a>(
     lock: &'l GuestLock<'a>,
     mut held: std::sync::MutexGuard<'l, Shared<'a>>,
     message: crate::turns::Message,
-    took: bool,
+    word: RuntimeWordGuard<'a>,
     outside: &mut u64,
-) -> (std::sync::MutexGuard<'l, Shared<'a>>, Result<(), String>) {
+) -> (
+    std::sync::MutexGuard<'l, Shared<'a>>,
+    RuntimeWordGuard<'a>,
+    Result<(), String>,
+) {
     use crate::turns::{Back, Link};
     let mut state = crate::threads::turn_state(held.guest);
     state.clock = crate::threads::counter_now(held.guest);
@@ -818,9 +849,12 @@ fn turn<'l, 'a>(
     let mut objects = std::mem::take(&mut held.guest.served.kernel);
     let pages = held.guest.served.vcpu;
     drop(held);
-    if took {
-        crate::monitor_code::host_release_runtime_word(lock.view());
-    }
+    let kept = if word.took {
+        drop(word); // the host's take let go for the wait
+        None
+    } else {
+        Some(word)
+    };
     assert!(lock.shared.try_lock().is_ok(), "a turn's wait with the run's lock held");
     let back = match &mut link {
         Some(Link::Supervisor(s)) => s.hand_over(&mut objects, state).map(|back| match back {
@@ -832,9 +866,7 @@ fn turn<'l, 'a>(
         }
         None => Ok((false, 0, 1)),
     };
-    if took {
-        take_word_unchecked(lock.view(), pages.monitor, outside);
-    }
+    let word = kept.unwrap_or_else(|| take_word_unchecked(lock.view(), pages.monitor, outside));
     let mut held = lock.serve(pages);
     held.guest.served.kernel = objects;
     held.guest.served.link = link;
@@ -844,7 +876,7 @@ fn turn<'l, 'a>(
         }
         crate::threads::catch_up(held.guest, machine, processes);
     });
-    (held, handed)
+    (held, word, handed)
 }
 
 pub fn run_compiling(
@@ -1265,7 +1297,7 @@ fn take_a_thread(
         }
         // read before the take, so a thread readied after it moves the count and the park returns at once
         let seen = place.sched.changes();
-        let Some(took) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
+        let Some(word) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
             return Ok(Taken::Ended);
         };
         let (taken, deadline) = {
@@ -1275,9 +1307,7 @@ fn take_a_thread(
             let taken = crate::threads::take(held.guest, &mut x).map(|t| t.map(|(_, vslot)| (vslot, x)));
             (taken, crate::threads::park_deadline(held.guest))
         };
-        if took {
-            crate::monitor_code::host_release_runtime_word(lock.view());
-        }
+        drop(word); // let go before the thread's load or the park, which holds neither the word nor the lock
         match taken {
             Err(why) => return Ok(Taken::Stopped(Stop::Handover { pc: dispatch_va, why })),
             Ok(Some((vslot, x))) => {
@@ -1366,7 +1396,7 @@ fn vcpu_loop(
             // the lock (the design's first form; Sprint 324), and is timed against an exit's service
             let started = Instant::now();
             let mem = lock.view();
-            let Some(took) = take_word(mem, md, &mut out.served_outside_word, place.stopping) else {
+            let Some(word) = take_word(mem, md, &mut out.served_outside_word, place.stopping) else {
                 return Ok(None);
             };
             let held = lock.serve(pages);
@@ -1383,9 +1413,7 @@ fn vcpu_loop(
                 .is_some_and(|l| l.others_due(crate::threads::counter_now(guest)));
             mem.write_u64(RUN_TABLE + u64::from(RT_IN_VM), u64::from(!others_due));
             drop(held);
-            if took {
-                crate::monitor_code::host_release_runtime_word(mem);
-            }
+            drop(word); // let go inside the timed part, as before the guard
             out.turn_start_ns.push(started.elapsed().as_nanos() as u64);
             if !runtime.contains(&pc) {
                 vcpu.set_reg(Reg::X(REG_BUDGET as u8), limit.wrapping_sub(count))?;
@@ -1419,7 +1447,7 @@ fn vcpu_loop(
         // under the runtime word and the lock, taken once (Sprints 275, 311 and 324): another vCPU's compile appends to
         // the log and the tails under the word. The word is in the monitor region (`RUN_TABLE`), below the process area
         // the ledger hashes, so the take leaves the hash as it was. A stop leaves the section before the word is let go
-        let Some(took) = take_word(mem, md, &mut out.served_outside_word, place.stopping) else {
+        let Some(word) = take_word(mem, md, &mut out.served_outside_word, place.stopping) else {
             return Ok(None);
         };
         let served: Result<Result<(), HvError>, Stop> = 'exit: {
@@ -1508,9 +1536,7 @@ fn vcpu_loop(
             }
             Ok(counted)
         };
-        if took {
-            crate::monitor_code::host_release_runtime_word(mem);
-        }
+        drop(word); // the lock let go at the section's end, then the word, before the exit is dispatched
         match served {
             Err(stop) => break stop,
             Ok(counted) => counted?,
@@ -1542,7 +1568,7 @@ fn vcpu_loop(
             // a write faulted: behind translated code? (5297-5299) Under the runtime word (Sprint 294): it changes the host
             // compiler's tables, and whether this vCPU holds the word here is not established
             let address = vcpu.reg(Reg::X(17))?;
-            let Some(took) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
+            let Some(word) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
                 return Ok(None);
             };
             let written = {
@@ -1553,9 +1579,7 @@ fn vcpu_loop(
                 };
                 h.code_written(s.guest, address, &mut || flush_through_stub(vcpu, &counts))
             };
-            if took {
-                crate::monitor_code::host_release_runtime_word(lock.view());
-            }
+            drop(word); // let go before the answer's register is set, whose error returns
             match written {
                 Ok(written) => vcpu.set_reg(Reg::X(17), u64::from(written))?,
                 Err(why) => break Stop::Untranslated { target: address, why },
@@ -1660,7 +1684,7 @@ fn vcpu_loop(
             }
             // under the runtime word (Sprint 294): the switch stub released it before `hvc #12`, and the scheduler
             // changes the threads and the turn, which another vCPU's services change under it
-            let Some(took) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
+            let Some(mut word) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
                 return Ok(None);
             };
             let mut held = lock.serve(pages);
@@ -1670,11 +1694,11 @@ fn vcpu_loop(
             // no thread ready in a process of a machine: the turn goes to the others until one is (Sprint 197)
             while switched == Ok(Switch::Idle) {
                 let handed;
-                (held, handed) = turn(
+                (held, word, handed) = turn(
                     lock,
                     held,
                     crate::turns::Message::Idle,
-                    took,
+                    word,
                     &mut out.served_outside_word,
                 );
                 switched = handed.and_then(|()| crate::threads::resume_idle(held.guest, &mut x, from, bits));
@@ -1690,9 +1714,7 @@ fn vcpu_loop(
                 });
             }
             drop(held); // the lock let go before the word, the word outermost
-            if took {
-                crate::monitor_code::host_release_runtime_word(lock.view());
-            }
+            drop(word); // let go before a park's wait or the next thread's registers
             match switched {
                 Err(why) => break Stop::Handover { pc, why },
                 Ok(Switch::Idle) => unreachable!(),
@@ -1731,7 +1753,7 @@ fn vcpu_loop(
             };
             // under the runtime word and the lock, as the other services (Sprint 324): the step reads the vCPU's own
             // pages, which `serve` names; a slow step comes from a translated block, which holds nothing
-            let Some(took) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
+            let Some(word) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
                 return Ok(None);
             };
             let stepped = {
@@ -1747,9 +1769,7 @@ fn vcpu_loop(
                 }
                 crate::model_step::model_step(guest, vcpu, &code, rip)
             };
-            if took {
-                crate::monitor_code::host_release_runtime_word(lock.view());
-            }
+            drop(word); // let go before the step's error returns
             match stepped? {
                 crate::model_step::ModelStep::Resumed | crate::model_step::ModelStep::Raised => {
                     vcpu.set_reg(Reg::Cpsr, CPSR_EL1H)?;
@@ -1790,7 +1810,7 @@ fn vcpu_loop(
             }
             // under the runtime word (Sprint 294): a slice's end comes from a translated block, which holds nothing,
             // and the budget, the wakes and the scheduler change the threads and the turn; released once, after
-            let Some(took) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
+            let Some(mut word) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
                 return Ok(None);
             };
             let mut held = lock.serve(pages);
@@ -1812,11 +1832,11 @@ fn vcpu_loop(
                 }
                 if others {
                     let handed;
-                    (held, handed) = turn(
+                    (held, word, handed) = turn(
                         lock,
                         held,
                         crate::turns::Message::Slice,
-                        took,
+                        word,
                         &mut out.served_outside_word,
                     );
                     if let Err(why) = handed {
@@ -1828,11 +1848,11 @@ fn vcpu_loop(
                 let mut switched = crate::threads::schedule(held.guest, &mut x, 0);
                 while switched == Ok(Switch::Idle) {
                     let handed;
-                    (held, handed) = turn(
+                    (held, word, handed) = turn(
                         lock,
                         held,
                         crate::turns::Message::Idle,
-                        took,
+                        word,
                         &mut out.served_outside_word,
                     );
                     switched = handed.and_then(|()| crate::threads::resume_idle(held.guest, &mut x, from, 0));
@@ -1840,9 +1860,7 @@ fn vcpu_loop(
                 switched.map(Some).map_err(|why| Stop::Handover { pc, why })
             };
             drop(held);
-            if took {
-                crate::monitor_code::host_release_runtime_word(lock.view());
-            }
+            drop(word); // let go before a park's wait or the next thread's registers
             match switched {
                 Err(stop) => break stop,
                 Ok(None) => continue,
@@ -1879,7 +1897,7 @@ fn vcpu_loop(
             let thunk = vcpu.reg(Reg::X(17))?;
             let rsp = vcpu.reg(Reg::X(4))?;
             // the record written under the word and the lock (Sprint 311), the run stopping after
-            let Some(took) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
+            let Some(word) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
                 return Ok(None);
             };
             let stop = {
@@ -1899,9 +1917,7 @@ fn vcpu_loop(
                     }
                 }
             };
-            if took {
-                crate::monitor_code::host_release_runtime_word(lock.view());
-            }
+            drop(word);
             break stop;
         }
         if number != 1 {
@@ -1910,8 +1926,8 @@ fn vcpu_loop(
         let target = vcpu.reg(Reg::X(17))?;
         // the install or compile and the dispatch insert under the runtime word (Sprint 286): they write the code cursor,
         // the reconstruction table and the dispatch table, which the in-VM compiler and the installer write holding the
-        // word, and the miss stub released it before `hvc 1`; released on every path before the loop goes on or stops
-        let Some(took) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
+        // word, and the miss stub released it before `hvc 1`; released by the guard before the loop goes on or stops
+        let Some(word) = take_word(lock.view(), md, &mut out.served_outside_word, place.stopping) else {
             return Ok(None);
         };
         let mut held = lock.serve(pages);
@@ -1952,10 +1968,8 @@ fn vcpu_loop(
             dispatch_insert(guest.memory_view(), target, va);
             Ok(va)
         };
-        drop(held);
-        if took {
-            crate::monitor_code::host_release_runtime_word(lock.view());
-        }
+        drop(held); // the lock let go before the word, the word outermost
+        drop(word);
         if let Err(stop) = served {
             break stop;
         }
@@ -2093,8 +2107,9 @@ mod tests {
     }
 
     /// A take of the word in a stopped run ends the service (Sprint 329; reviewer-3's Low 2 at 327): with the run's stop
-    /// not set and the word free, the host takes it; with it set, `take_word` answers None, giving the word back when
-    /// the host took it, and leaving a hold of this vCPU's guest as it was.
+    /// not set and the word free, the host takes it, and its guard's drop releases it (Sprint 338); with this vCPU's
+    /// guest holding it, the guard took nothing and its drop leaves the hold; with the stop set, `take_word` answers
+    /// None, giving the word back when the host took it, and leaving a hold of this vCPU's guest as it was.
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     #[test]
     fn a_stopped_runs_take_of_the_word_ends_its_service() {
@@ -2108,28 +2123,80 @@ mod tests {
         let stopping = super::RunStop::default();
         let mut outside = 0;
         host_release_runtime_word(mem);
-        assert_eq!(
-            super::take_word(mem, md, &mut outside, &stopping),
-            Some(true),
-            "a running run's take"
-        );
+        let taken = super::take_word(mem, md, &mut outside, &stopping).expect("a running run's take");
+        assert!(taken.took, "a running run's take, the word free");
         assert_eq!(word.load(Ordering::Relaxed), HOST_OWNER, "the word the host's");
+        drop(taken);
+        assert_eq!(word.load(Ordering::Relaxed), 0, "the word released by the guard's drop");
+        // vCPU 0's owner, as the run's set-up writes it; this guest's page holds none, and owner 0 is the free word
+        mem.write_u64(md + super::LOCK_OWNER, u64::from(super::owner_of(0)));
+        let own = vcpu_owner(mem, md);
+        assert_eq!(own, 1, "vCPU 0's owner");
+        word.store(own, Ordering::Relaxed);
+        let kept = super::take_word(mem, md, &mut outside, &stopping).expect("a running run's take, held");
+        assert!(!kept.took, "a take of the word this vCPU's guest holds");
+        drop(kept);
+        assert_eq!(
+            word.load(Ordering::Relaxed),
+            own,
+            "the guest's hold kept by the guard's drop"
+        );
         host_release_runtime_word(mem);
         stopping.stopped.store(true, Ordering::Release);
-        assert_eq!(
-            super::take_word(mem, md, &mut outside, &stopping),
-            None,
+        assert!(
+            super::take_word(mem, md, &mut outside, &stopping).is_none(),
             "a stopped run's take"
         );
         assert_eq!(word.load(Ordering::Relaxed), 0, "the word given back");
-        let own = vcpu_owner(mem, md);
         word.store(own, Ordering::Relaxed);
-        assert_eq!(
-            super::take_word(mem, md, &mut outside, &stopping),
-            None,
+        assert!(
+            super::take_word(mem, md, &mut outside, &stopping).is_none(),
             "a stopped run's take, held"
         );
         assert_eq!(word.load(Ordering::Relaxed), own, "the guest's hold kept");
+    }
+
+    /// The text of `run.rs` before its tests, each `host_release_runtime_word` in it other than the one in
+    /// `RuntimeWordGuard`'s `Drop` named by its line (Sprint 338): a hand-paired release beside a guard lets the word go
+    /// early and, at the guard's drop, again, over another vCPU's take made between.
+    fn releases_outside_the_guard(text: &str) -> Vec<String> {
+        let code = text.split("\n#[cfg(test)]\nmod tests {").next().unwrap_or(text);
+        let in_drop = code.find("impl Drop for RuntimeWordGuard<'_> {").map(|at| {
+            let end = at + code[at..].find("\n}\n").unwrap_or(code.len() - at);
+            at..end
+        });
+        let mut at = 0;
+        let mut found = Vec::new();
+        for line in code.split_inclusive('\n') {
+            let called = line
+                .split("//")
+                .next()
+                .unwrap_or("")
+                .contains("host_release_runtime_word(");
+            if called && !in_drop.as_ref().is_some_and(|d| d.contains(&at)) {
+                found.push(format!("{}: {}", code[..at].lines().count() + 1, line.trim()));
+            }
+            at += line.len();
+        }
+        found
+    }
+
+    /// The runtime word is released in one place, the guard's `Drop` (Sprint 338): no service of `run.rs` pairs its
+    /// take with a release by hand, and a release written outside the `Drop` is named.
+    #[test]
+    fn the_word_is_released_only_by_its_guards_drop() {
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/run.rs")).unwrap();
+        assert_eq!(releases_outside_the_guard(&text), Vec::<String>::new());
+        assert!(text.contains("impl Drop for RuntimeWordGuard<'_> {"), "no guard's Drop");
+        let drop = "impl Drop for RuntimeWordGuard<'_> {\n    fn drop(&mut self) {\n        host_release_runtime_word(self.mem);\n    }\n}\n";
+        let paired = format!("fn f() {{\n    let w = take();\n    host_release_runtime_word(mem);\n}}\n{drop}");
+        assert_eq!(
+            releases_outside_the_guard(&paired),
+            vec!["3: host_release_runtime_word(mem);".to_string()]
+        );
+        assert!(releases_outside_the_guard(drop).is_empty(), "the Drop's own release");
+        let commented = "fn f() {\n    // host_release_runtime_word(mem) is the Drop's\n}\n";
+        assert!(releases_outside_the_guard(commented).is_empty(), "a comment naming it");
     }
 
     /// A vCPU's thread that ends by a panic, as by an error's return, halts the run and lets go its guest's hold of the
