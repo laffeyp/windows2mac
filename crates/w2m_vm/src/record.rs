@@ -301,6 +301,9 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
         timeout_seconds: seconds(e.timeout_seconds),
         kill_grace_seconds: seconds(e.kill_grace_seconds),
         unobserved: None,
+        // absent, meaning one vCPU (0.13, P25): the batch run takes the instruction clock, which `vcpus_allowed` holds
+        // to one vCPU
+        vcpus: None,
     }));
     // run_measurements' ids and variants (run_frontier.py 159-177), for the rows the Rust host measures
     let application = application_profile(e.program_stem, e.subject_sha256);
@@ -478,6 +481,10 @@ pub fn measurement_line(
         artifact_state: events::ArtifactState::Cold,
         destination_profile_id: Id::new("w2m-vm").expect("not empty"),
         variant: variant.map(str::to_string),
+        // absent, meaning one vCPU and no holder (0.13, P25 and P27): the batch run and `run_measurements`, this
+        // function's callers, run on one vCPU and split no hold by holder
+        vcpus: None,
+        holder: None,
     })
 }
 

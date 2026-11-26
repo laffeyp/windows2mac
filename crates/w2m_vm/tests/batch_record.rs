@@ -167,7 +167,9 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
             c["target_execution_id"], done["execution_id"]
         ));
     }
-    // EXECUTION_STARTED, field for field but the run's id
+    // EXECUTION_STARTED, field for field but the run's id; a field left out is null on a record substrate writes and
+    // absent on the frozen host's, read alike (`events::FieldReader::optional`), so a null is a field left out: the
+    // reference, a 0.9 record, holds no `vcpus` (0.13, P25)
     if let (Some(a), Some(b)) = (
         of(ours, "EXECUTION_STARTED").first(),
         of(reference, "EXECUTION_STARTED").first(),
@@ -176,7 +178,7 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
             p.as_object()
                 .unwrap()
                 .iter()
-                .filter(|(k, _)| k.as_str() != "execution_id")
+                .filter(|(k, v)| k.as_str() != "execution_id" && !v.is_null())
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect()
         };

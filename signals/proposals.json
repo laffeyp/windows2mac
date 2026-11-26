@@ -410,6 +410,95 @@
     "into": "0.11",
     "grounds": "project — the plan's step 3 text, Decision 2026-10-24 (the host design's revisit conditions: the run-table word busy over 5% or a p99 wait over 10 µs), v0.2 §3.1 (performance numbers kept apart from acceptance); SDD — PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version), AGENTS.md hard rule 2; practice — a distribution reported as its quantiles with a label for its dimension (Prometheus naming practice, as P19 and P20)"
    }
+  },
+  {
+   "id": "P25",
+   "kind": "PAYLOAD_FIELD_PROPOSED",
+   "layer": 2,
+   "candidate": [
+    "EXECUTION_STARTED gains optional vcpus (u64, at least 1, absent meaning 1)",
+    "MEASUREMENT_RECORDED gains optional vcpus (u64, at least 1, absent meaning 1)",
+    "E14 (range): vcpus >= 1 when present"
+   ],
+   "source": "BLACKBOARD Decision 2026-11-24 \"Step 6 restored to the user's fix (b), and the order after Sprint 332\" (vocabulary 0.13's `vcpus`, then `w2m-vm --vcpus N` on a substrate record); crates/w2m_vm/src/run.rs `vcpus_allowed` (Sprint 308: one vCPU always, more refused by named reason); sprints/sprint-336-vocabulary-0-13.md",
+   "rationale": "The two-vCPU tests' judges are to read a substrate record of a run on N vCPUs, and no field of 0.12 names a run's vCPU count: an execution and each measurement taken on two vCPUs would read the same as one taken on one. Optional with absent meaning 1, so every record written before 0.13, all on one vCPU, keeps its meaning; at least 1 because a run with no vCPU runs nothing.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-11-25",
+    "by": "agent-resolved",
+    "into": "0.13",
+    "grounds": "project — the Decision \"Step 6 restored to the user's fix (b)\" (2026-11-24), its order naming `vcpus`; run.rs `vcpus_allowed`; SDD — PRINCIPLES.md proposal taxonomy (an optional field bumps the minor version), AGENTS.md hard rule 2; practice — an optional field whose absence keeps the old meaning reads every earlier record unchanged (P13's and P22's form)"
+   }
+  },
+  {
+   "id": "P26",
+   "kind": "ENUM_EXTENDED",
+   "layer": 2,
+   "candidate": [
+    "metric += locked_model_steps, turn_start_ns_p50, turn_start_ns_p99"
+   ],
+   "source": "BLACKBOARD Decision 2026-11-24 \"Step 6 restored to the user's fix (b)\" (its order: `locked_model_steps`, `turn_start_ns_p50/p99`); Sprint 331 (\"w2m-vm: N model steps of a locked form\", crates/w2m_vm/src/run.rs Outcome.locked_steps, the run-loop design's precondition 8); Sprint 324 (Outcome.turn_start_ns, the run-loop design's measure of its first form against the second)",
+   "rationale": "The batch run counts the model steps of a form x86 locks and times each turn's start, and prints both; MEASUREMENT_RECORDED's metric names neither, so a record cannot carry them. Three values: locked_model_steps, a count (unit 'count', as wfe_exits is written); turn_start_ns_p50 and turn_start_ns_p99, the median and 99th percentile in nanoseconds (unit 'ns', as exit_ns_p50 and exit_ns_p99 are written). The vocabulary types unit as text and ties no metric to a unit; both units are ones the Rust records already write.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-11-25",
+    "by": "agent-resolved",
+    "into": "0.13",
+    "grounds": "project — the Decision \"Step 6 restored to the user's fix (b)\" (2026-11-24); run.rs Outcome.locked_steps and Outcome.turn_start_ns; SDD — PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version), AGENTS.md hard rule 2; practice — a distribution reported as its quantiles with a label for its dimension (Prometheus naming practice, as P19, P20 and P24)"
+   }
+  },
+  {
+   "id": "P27",
+   "kind": "PAYLOAD_FIELD_PROPOSED",
+   "layer": 2,
+   "candidate": [
+    "MEASUREMENT_RECORDED gains optional holder (enum:holder)",
+    "enum holder = service, host_request, compile_install, turn_start, spin"
+   ],
+   "source": "BLACKBOARD Decision 2026-11-24 \"The holder field and the turn's start\" (an enum `holder` of the five on MEASUREMENT_RECORDED, so G6 needs no second bump); Decision 2026-11-24 \"When step 6 ends, amended\" (G6's hold and wait split by holder: a host request's service, an in-VM or host compile and install, a turn's start, a spin waiting for the word)",
+   "rationale": "G6 measures the runtime word's hold and wait with the 0.12 metrics runtime_word_hold_ns_p50/p99 and runtime_word_wait_ns_p50/p99, split by what the word was held for; variant is free text and already names the site and the takings, so the holder, which the step's change for each holder reads, needs a field of its own with a closed set. Optional: a measurement that is not split by holder omits it.",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-11-25",
+    "by": "agent-resolved",
+    "into": "0.13",
+    "grounds": "project — the Decisions \"The holder field and the turn's start\" and \"When step 6 ends, amended\" (2026-11-24), the latter superseded on the lock changes' trigger by \"Step 6 restored to the user's fix (b)\" but not on G6's measure; SDD — PRINCIPLES.md proposal taxonomy (a new field and its enum bump the minor version), AGENTS.md hard rule 2; practice — a dimension with a closed set of values as an enum, not free text, so a reader dispatches on it (the example project's FILE_SKIPPED.reason, left as documentation until a sprint dispatches on it)"
+   }
+  },
+  {
+   "id": "P28",
+   "kind": "ENUM_EXTENDED",
+   "layer": 2,
+   "candidate": [
+    "capability += feat_lse2, feat_bbm_level2, guest_wfe_exit",
+    "feat_bbm_level2 reads present when ID_AA64MMFR2_EL1.BBM (bits 55:52) is 2 or more, absent otherwise, the level read in detail"
+   ],
+   "source": "port-reviewer's review of the Rust port (2026-11-24), Medium 1: step 6's capability probes (FEAT_LSE2, FEAT_BBM, guest WFE exits) emit no CAPABILITY_PROBED (BLACKBOARD Surfaced, disposition: three values in 0.13, the emits in the card after); crates/w2m_vm/src/bin/w2m-vm.rs 318 (`hypervisor::feature(\"FEAT_LSE2\")`, the gate `vcpus_allowed` reads); crates/hypervisor/tests/id_registers.rs (Sprint 303, ID_AA64MMFR2_EL1.BBM); crates/w2m_vm/src/bin/run_measurements.rs (the WFE probe, wfe_exits)",
+   "rationale": "w2m-vm admits a second vCPU only on FEAT_LSE2; whether a block split in the guest's stage-1 tables needs the run-loop design's two steps rests on the CPU's FEAT_BBM level (its precondition 4, id_registers.rs); and wfe_exits (P24) counts whether a guest WFE or WFI traps to the host. Each is probed on this Mac and none can be stated by CAPABILITY_PROBED, whose capability enum names page, TSO, Metal and floating-point properties only (as P17 found for the floating point). CAPABILITY_PROBED's outcome is enum:capability_outcome (present, absent, error, not_established), which cannot carry a level, so the BBM capability is named for the property the design decides on, Sprint 303's level 2, at which a change of block size alone needs no break, and the level read goes in detail (reviewer-4's tenth review, Medium 1; the first form, feat_bbm, named a level the outcome could not hold).",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-11-25",
+    "by": "agent-resolved",
+    "into": "0.13",
+    "grounds": "project — port-reviewer's Medium 1 (2026-11-24) and its disposition; reviewer-4's tenth review (2026-11-25), Medium 1; v0.2 §8.1 (destination capabilities are probed, not assumed); SDD — PRINCIPLES.md proposal taxonomy (an enum value bumps the minor version), AGENTS.md hard rule 2; practice — n/a"
+   }
+  },
+  {
+   "id": "P29",
+   "kind": "INVARIANT_PROPOSED",
+   "layer": 7,
+   "candidate": [
+    "E15: MEASUREMENT_RECORDED.holder is present only when metric is runtime_word_hold_ns_p50, runtime_word_hold_ns_p99, runtime_word_wait_ns_p50 or runtime_word_wait_ns_p99"
+   ],
+   "source": "reviewer-4's tenth review (2026-11-25), Low 2 (holder tied to the runtime word); sprints/sprint-336-vocabulary-0-13.md, its amendment; the Decision \"When step 6 ends, amended\" (2026-11-24: G6 splits the runtime word's hold and wait by holder)",
+   "rationale": "P27 gives holder to every MEASUREMENT_RECORDED, and the type alone lets it ride on any metric, where it means nothing: the holder names what the runtime word was held for, so only the word's four hold and wait values carry one. turn_start_ns is the turn's start from before its take of the runtime word to after its release, the wait included (run.rs 1367-1389); a runtime_word_hold_ns with holder turn_start is the hold alone, so the two do not count the same nanoseconds under one name. The Rust records check holds E15, as it holds T4's exemption for guest_trace false (Sprint 170).",
+   "status": "ratified",
+   "ratified": {
+    "date": "2026-11-25",
+    "by": "agent-resolved",
+    "into": "0.13",
+    "grounds": "project — reviewer-4's tenth review, Low 2; the Decision \"When step 6 ends, amended\" (2026-11-24); crates/w2m_vm/src/bin/check_records.rs (the records check holds E1 and E6, and now E15); SDD — PRINCIPLES.md proposal taxonomy (INVARIANT_PROPOSED, Layer 7), AGENTS.md hard rule 2; practice — a field whose meaning depends on another is checked where both are read, not left to prose (the vocabulary's E2 and E5, conditional on a field's value)"
+   }
   }
  ]
 }

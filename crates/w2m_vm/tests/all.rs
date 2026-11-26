@@ -44,6 +44,7 @@ mod loader_lists;
 mod monitor_code_in_vm;
 mod private_chain;
 mod process_area;
+mod records_check;
 mod run_loop;
 mod run_loop_lock;
 mod skeleton_gate;

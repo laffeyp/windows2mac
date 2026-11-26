@@ -4,8 +4,8 @@
 //! (Sprint 109) rule for rule, so a vocabulary can change a rule in Rust (Decision 2026-10-28: P22 changes T4, which the
 //! Python holds in code). It reads each record's application events (`w2m_vm::ledger::frames`, without `substrate.*`
 //! kinds) and checks T1, T2, T3, T4 and T7 (`temporal_invariants`), S1 to S13 where their tags occur
-//! (`state_transitions`; a rule whose payload match is prose is checked for order alone, and its count says so), and E1
-//! and E6 (`evidence_constraints`). T5, T6 and S14 are the guest trace's, enforced at ingest.
+//! (`state_transitions`; a rule whose payload match is prose is checked for order alone, and its count says so), and E1,
+//! E6 and, from 0.13 (P29), E15 (`evidence_constraints`). T5, T6 and S14 are the guest trace's, enforced at ingest.
 //!
 //! The rules come from `signals/rust-current.json`'s vocabulary. Its three rule sections equalled 0.9's, which the
 //! Python reads, until 0.12 (Sprint 170), whose T4 leaves out an execution with `guest_trace` false (P22); the two
@@ -180,6 +180,9 @@ fn strings(v: &Value, key: &str) -> Vec<String> {
 struct Checker {
     states: Vec<Value>,
     sha_fields: BTreeMap<String, Vec<String>>,
+    /// E15's metrics (0.13, P29): the `runtime_word_*` values of `enums.metric`, the only ones a MEASUREMENT_RECORDED
+    /// may give a `holder`; none when the vocabulary holds no E15
+    holder_metrics: Option<Vec<String>>,
 }
 
 impl Checker {
@@ -202,7 +205,22 @@ impl Checker {
                 .collect();
             sha_fields.insert(t["name"].as_str().unwrap_or("").to_string(), fields);
         }
-        Checker { states, sha_fields }
+        let has_e15 = vocab["evidence_constraints"]["constraints"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|c| c["id"] == "E15");
+        let holder_metrics = has_e15.then(|| {
+            strings(&vocab["enums"], "metric")
+                .into_iter()
+                .filter(|m| m.starts_with("runtime_word_"))
+                .collect()
+        });
+        Checker {
+            states,
+            sha_fields,
+            holder_metrics,
+        }
     }
 
     fn check(&self, events: &[Event], found: &mut Vec<(String, String)>, applied: &mut Counts, unchecked: &mut Counts) {
@@ -261,6 +279,26 @@ impl Checker {
                         format!(
                             "{}: a discrepancy with no first_divergence",
                             py_str(e.payload.get("comparison_id"))
+                        ),
+                    ));
+                }
+            }
+            // E15 (0.13, P29): a holder names what the runtime word was held for, so it rides only on the word's four
+            // hold and wait metrics; a holder left out (absent or null) is not checked
+            if let Some(metrics) = &self.holder_metrics
+                && e.kind == "MEASUREMENT_RECORDED"
+                && let Some(holder) = e.get("holder")
+            {
+                bump(applied, "E15");
+                let metric = e.get("metric").and_then(Value::as_str).unwrap_or("");
+                if !metrics.iter().any(|m| m == metric) {
+                    found.push((
+                        "E15".into(),
+                        format!(
+                            "{}: holder {} on metric {}",
+                            py_str(e.payload.get("measurement_id")),
+                            py_str(Some(holder)),
+                            py_str(e.payload.get("metric"))
                         ),
                     ));
                 }

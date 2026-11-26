@@ -86,7 +86,9 @@ fn run() -> Result<(), String> {
     }
     for tag in vocab.harness_tags() {
         for with_optional in [true, false] {
-            let payload = Value::Object(sample_payload(tag, with_optional, &vocab));
+            let mut payload = sample_payload(tag, with_optional, &vocab);
+            runtime_word_holder_only(&mut payload);
+            let payload = Value::Object(payload);
             let event = HarnessEvent::from_kind(&tag.name, &payload).map_err(|e| e.to_string())?;
             writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
         }
@@ -100,6 +102,7 @@ fn run() -> Result<(), String> {
     for metric in vocab.enums.get("metric").ok_or("no metric enum")? {
         let mut payload = sample_payload(measurement, true, &vocab);
         payload.insert("metric".to_string(), Value::from(metric.as_str()));
+        runtime_word_holder_only(&mut payload);
         let event =
             HarnessEvent::from_kind("MEASUREMENT_RECORDED", &Value::Object(payload)).map_err(|e| e.to_string())?;
         writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
@@ -114,7 +117,49 @@ fn run() -> Result<(), String> {
     payload.insert("guest_trace".to_string(), Value::from(false));
     let event = HarnessEvent::from_kind("EXECUTION_COMPLETED", &Value::Object(payload)).map_err(|e| e.to_string())?;
     writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
+    // a run on two vCPUs (P25, Sprint 336): `vcpus` 2, where the samples' integers sit at the harness limit
+    let started = vocab
+        .harness_tags()
+        .find(|t| t.name == "EXECUTION_STARTED")
+        .ok_or("no EXECUTION_STARTED")?;
+    let mut payload = sample_payload(started, true, &vocab);
+    payload.insert("vcpus".to_string(), Value::from(2));
+    let event = HarnessEvent::from_kind("EXECUTION_STARTED", &Value::Object(payload)).map_err(|e| e.to_string())?;
+    writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
+    // every `holder` value once (P27) on MEASUREMENT_RECORDED, on a runtime word metric as E15 holds it (P29), and every
+    // `capability` value once (P28's among them) on CAPABILITY_PROBED, as every `metric` value above: the samples' enum
+    // fields take only an enum's last value
+    for holder in vocab.enums.get("holder").ok_or("no holder enum")? {
+        let mut payload = sample_payload(measurement, true, &vocab);
+        payload.insert("metric".to_string(), Value::from("runtime_word_hold_ns_p50"));
+        payload.insert("holder".to_string(), Value::from(holder.as_str()));
+        let event =
+            HarnessEvent::from_kind("MEASUREMENT_RECORDED", &Value::Object(payload)).map_err(|e| e.to_string())?;
+        writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
+    }
+    let probed = vocab
+        .harness_tags()
+        .find(|t| t.name == "CAPABILITY_PROBED")
+        .ok_or("no CAPABILITY_PROBED")?;
+    for capability in vocab.enums.get("capability").ok_or("no capability enum")? {
+        let mut payload = sample_payload(probed, true, &vocab);
+        payload.insert("capability".to_string(), Value::from(capability.as_str()));
+        let event = HarnessEvent::from_kind("CAPABILITY_PROBED", &Value::Object(payload)).map_err(|e| e.to_string())?;
+        writeln!(out, "{}", event.line()).map_err(|e| e.to_string())?;
+    }
     out.flush().map_err(|e| e.to_string())
+}
+
+/// A sample MEASUREMENT_RECORDED's `holder` left out unless its metric is the runtime word's (E15, 0.13, P29): the
+/// samples' payloads give every optional field, and `holder` on another metric is the fault the records check names.
+fn runtime_word_holder_only(payload: &mut events::Map<String, Value>) {
+    let on_word = payload
+        .get("metric")
+        .and_then(Value::as_str)
+        .is_some_and(|m| m.starts_with("runtime_word_"));
+    if !on_word {
+        payload.remove("holder");
+    }
 }
 
 fn main() -> ExitCode {
