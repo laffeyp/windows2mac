@@ -356,6 +356,41 @@ u32 w2m_get_last_error(void);
 #define W2M_PROCESSOR_MASK 0xFull
 void w2m_trace_return(u64 rsp, u64 value);   /* call_trace.c: a traced call that ran guest code returns (Sprint 061) */
 
+/* A lock held to the end of the scope that declares its guard (Sprint 359; the Decision "The runtime C's leaf locks
+ * released by a scoped guard", 2026-11-26): the heap's, the slots', the handle table's and the sync objects' (heap.c,
+ * thread_storage.c, sync_objects.c), and the runtime word as a service whose bridge holds none takes it. W2M_HELD(lock)
+ * declares `lock_guard`, set by `hold_lock()`, with clang's `cleanup` attribute naming `lock_guard_end`: "This
+ * attribute allows a function to be run when a local variable goes out of scope. The attribute takes the identifier of
+ * a function with a parameter type that is a pointer to the type with the attribute." (Clang's attribute reference,
+ * `cleanup`.) Every way out of the scope, a return, a break, a continue or its block's end, so lets the lock go, a path
+ * a later edit adds among them, as RuntimeWordGuard's Drop lets the host's take go (crates/w2m_vm/src/run.rs, Sprint
+ * 338). The guard holds what its take answered: 1 for a leaf lock, which a take always takes; for the runtime word, 1
+ * when this call took it and 0 when this vCPU held it already, and its end lets the word go only when its take took
+ * it. crates/guest_runtime/tests/scoped_locks.rs holds the five files to it: no take and no release outside it, and the
+ * two forms below. */
+#define W2M_HELD(lock) int lock##_guard __attribute__((cleanup(lock##_guard_end))) = hold_##lock()
+
+/* The guard's lock let go before its scope ends, and the guard emptied, so its end lets nothing go. Cleanup runs when
+ * the scope is left, not before a call made in it: w2m_unimplemented never returns, so a guard's end after it never
+ * runs, and w2m_logged called in the scope, the operand of a `return` included, runs with the lock held, which a leaf
+ * never does (heap.c, thread_storage.c, sync_objects.c). So a path that calls either of them in a leaf's scope lets the
+ * lock go first by this name, and the source test holds each such release to a path that then calls one of them. */
+#define W2M_LET_GO_EARLY(lock) (lock##_guard_end(&lock##_guard), lock##_guard = 0)
+
+/* A leaf lock its caller's guard holds, let go by a function the caller calls in that guard's scope and which has no
+ * guard of its own to empty, before w2m_unimplemented: that call never returns, so the caller's guard never ends and
+ * nothing is let go twice. The source test holds each to w2m_unimplemented as its next call, in a function every caller
+ * of which holds the lock. */
+#define W2M_LET_GO_BEFORE_STOP(lock) let_##lock##_go()
+
+/* runtime.c (Sprint 355): the runtime word taken by a call whose bridge holds none, 1 when this call took it, and let
+ * go when it did; and its guard, W2M_HELD(runtime_word), for a host request or a read of the word's state made with no
+ * other lock held. */
+int w2m_take_runtime_word(void);
+void w2m_let_runtime_word_go(int taken);
+static inline int hold_runtime_word(void) { return w2m_take_runtime_word(); }
+static inline void runtime_word_guard_end(int *taken) { w2m_let_runtime_word_go(*taken); }
+
 /* Each leaf lock's takings timed (Sprint 358), in the image built for a timed run alone: the host adds the define
  * W2M_TIME_LOCKS=1 when the run's runtime word is timed (`Start::time_runtime_word`, w2m-vm's --runtime-word), and an
  * image built without it is the image built before, its takes and releases unchanged. A take keeps its wait start and

@@ -19,11 +19,11 @@
  *
  * The heap's own lock (Sprint 343; Change 1 of docs/design-rust-host-2026-10-24.md, "a lock per heap": "the heap
  * serializes access within the calling process", Microsoft Learn, HeapCreate): its five services take no runtime word,
- * so `hold` and `let_go` serialize the heap's shared state alone, the free list, the bump pointer and the one-time
- * set-up, in `take` and `give_back`. A block's header and payload belong to its holder, as Windows leaves a block to
- * its caller. Nothing is called while the lock is held, w2m_unimplemented and w2m_logged least of all, so the lock
- * never waits on another lock, and a service on the runtime word calls w2m_heap_take and w2m_heap_release without an
- * inversion.
+ * so `hold_heap` and `let_heap_go` serialize the heap's shared state alone, the free list, the bump pointer and the
+ * one-time set-up, in `take` and `give_back`. A block's header and payload belong to its holder, as Windows leaves a
+ * block to its caller. Nothing is called while the lock is held, w2m_unimplemented and w2m_logged least of all, so the
+ * lock never waits on another lock, and a service on the runtime word calls w2m_heap_take and w2m_heap_release without
+ * an inversion. From Sprint 359 each take is a guard, W2M_HELD(heap) (runtime.h), whose scope's end lets it go.
  */
 #include "runtime.h"
 
@@ -56,8 +56,8 @@ static int ready;
  * done. As lock_runtime does (monitor_code.rs 128-131), a waiter reads the word by plain loads until it reads 0 and
  * only then tries the swap, so it does not take the line from the holder writing `next` and `free_list` beside it
  * (reviewer-4's fourteenth review, Low 1). The lock word reads 1 for any holder: nothing reenters it, and the host
- * never reads it. */
-static struct heap *hold(void) {
+ * never reads it. Its answer, 1, is its guard's (W2M_HELD, runtime.h; Sprint 359). */
+static int hold_heap(void) {
     struct heap *h = (struct heap *)W2M_HEAP_VA;
 #ifdef W2M_TIME_LOCKS
     w2m_lock_take(&h->lock, W2M_LOCK_HEAP);              /* timed (Sprint 358, runtime.h) */
@@ -78,19 +78,24 @@ static struct heap *hold(void) {
         h->free_list = 0;
         *(volatile u64 *)(W2M_PEB_VA + 0x30) = W2M_HEAP_VA;          /* PEB.ProcessHeap */
     }
-    return h;
+    return 1;
 }
 
 /* The heap let go: a store of 0, release, as unlock_runtime lets the runtime word go (STLR). */
 #ifdef W2M_TIME_LOCKS
-static void let_go(struct heap *h) { w2m_lock_let_go(&h->lock, W2M_LOCK_HEAP); }
+static void let_heap_go(void) { w2m_lock_let_go(&((struct heap *)W2M_HEAP_VA)->lock, W2M_LOCK_HEAP); }
 
 /* The four leaf locks' timing areas (Sprint 358): a symbol only the timed image defines, by which the host knows an
  * image's takes are timed (`guest::LOCKS_TIMED_SYMBOL`). */
 u64 w2m_lock_timing_areas(void) { return W2M_LOCK_AREAS_VA; }
 #else
-static void let_go(struct heap *h) { __atomic_store_n(&h->lock, 0, __ATOMIC_RELEASE); }
+static void let_heap_go(void) { __atomic_store_n(&((struct heap *)W2M_HEAP_VA)->lock, 0, __ATOMIC_RELEASE); }
 #endif
+
+/* The heap's guard's end (W2M_HELD, runtime.h; Sprint 359): its lock let go unless let go early. */
+static void heap_guard_end(int *held) {
+    if (*held) let_heap_go();
+}
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
@@ -109,37 +114,34 @@ static void check_handle(u64 api, u64 heap) {
 }
 
 /* A block of at least `size` bytes, or 0 when the arena is full; the heap held from the free list's walk to the bump
- * pointer's move and the new block's capacity, which no one else reaches until it is returned. */
+ * pointer's move and the new block's capacity, which no one else reaches until it is returned. Each return lets the
+ * lock go by the guard's end (Sprint 359). */
 static struct header *take(u64 size) {
-    struct heap *h = hold();
+    W2M_HELD(heap);
+    struct heap *h = (struct heap *)W2M_HEAP_VA;
     u64 want = round16(size ? size : 1);
     u64 *link = &h->free_list;
     while (*link) {
         struct header *b = (struct header *)*link;
         if (b->capacity >= want) {
             *link = *(u64 *)(b + 1);
-            let_go(h);
             return b;
         }
         link = (u64 *)(b + 1);
     }
-    if (h->next + sizeof(struct header) + want > W2M_HEAP_VA + W2M_HEAP_SIZE) {
-        let_go(h);
-        return 0;
-    }
+    if (h->next + sizeof(struct header) + want > W2M_HEAP_VA + W2M_HEAP_SIZE) return 0;
     struct header *b = (struct header *)h->next;
     h->next += sizeof(struct header) + want;
     b->capacity = want;
-    let_go(h);
     return b;
 }
 
 /* `b` linked at the free list's head, under the heap's lock. */
 static void give_back(struct header *b) {
-    struct heap *h = hold();
+    W2M_HELD(heap);
+    struct heap *h = (struct heap *)W2M_HEAP_VA;
     *(u64 *)(b + 1) = h->free_list;
     h->free_list = (u64)b;
-    let_go(h);
 }
 
 static struct header *header_of(u64 api, u64 p) {
@@ -162,9 +164,10 @@ u64 w2m_heap_take(u64 size) {
 void w2m_heap_release(u64 api, u64 p) { give_back(header_of(api, p)); }
 
 u64 k32_GetProcessHeap(void) {
-    struct heap *h = hold();                                             /* the set-up, once */
-    let_go(h);
-    return w2m_logged(W2M_API_GetProcessHeap, 0, (u64)h);
+    {
+        W2M_HELD(heap);                                                  /* the set-up, once */
+    }
+    return w2m_logged(W2M_API_GetProcessHeap, 0, W2M_HEAP_VA);
 }
 
 u64 k32_HeapAlloc(u64 heap, u64 flags, u64 size) {

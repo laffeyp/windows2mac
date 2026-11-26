@@ -79,7 +79,12 @@ fn guest_for(root: &Path, name: &str) -> (Loaded, Guest) {
 
 /// The guest of `loaded` as `start` asks.
 fn guest_with(root: &Path, loaded: &Loaded, start: &Start) -> Guest {
-    let (_, image) = guest_runtime::build(root, &runtime_defines(), RUNTIME_IMAGE_VA).unwrap();
+    guest_with_defines(root, loaded, start, &runtime_defines())
+}
+
+/// `guest_with`, its runtime image built with `defines` (Sprint 359: the timed image's, `runtime_defines_for(true)`).
+fn guest_with_defines(root: &Path, loaded: &Loaded, start: &Start, defines: &[(String, u64)]) -> Guest {
+    let (_, image) = guest_runtime::build(root, defines, RUNTIME_IMAGE_VA).unwrap();
     let services = guest_runtime::services::services(&guest_runtime::texts(root).unwrap()).unwrap();
     let exports: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(root.join("specs/windows_exports.json")).unwrap()).unwrap();
@@ -2663,6 +2668,151 @@ fn a_readying_before_the_block_leaves_the_thread_ready() {
         wrong.is_empty(),
         "a readying before T's block, T then READY with its mark clear (none, and the C's paths on T not armed: BLOCKED), \
          against {wrong:?}"
+    );
+}
+
+/// Sprint 359 (its card's amendment; reviewer-4's thirty-first review, High 1): the runtime word's guard,
+/// `W2M_HELD(runtime_word)` (`runtime.h`), lets the word go only when its take took it, and once. This drives the image's
+/// own services, in the form of Sprint 341's ring judge, on one vCPU as vCPU owner 1, in the image a run builds and in
+/// the timed one (`W2M_TIME_LOCKS`): (a) `DuplicateHandle` of a source that names no handle, whose look at the file
+/// table and the standard handles holds the word by its guard (`sync_objects.c`), with the word held by this vCPU's
+/// owner before the call, as a traced call's bridge holds it, and with it free; (b) `WaitForSingleObject` of a handle to
+/// this process with no wait (`DuplicateHandle` of the pseudo-handle makes it), whose check holds the word by its guard
+/// and lets it go early by `W2M_LET_GO_EARLY(runtime_word)` before `w2m_logged` (`wait_one_held`), the word held and
+/// free as in (a). After a call made holding the word, the word is still this owner's; after a call made with it free,
+/// it is free. In the timed image each release of a take the C made counts one in the runtime word's timing area
+/// (`runtime.c` `word_released`, `monitor_code::LOCK_C_TAKINGS`): a call made holding the word counts none, (a) free
+/// one, and (b) free one, where a second release at the guard's scope's end would count two.
+#[test]
+fn the_runtime_words_guard_lets_it_go_only_when_its_take_took_it_and_once() {
+    use a64_encoder as a64;
+    use guest_runtime::layout::TEB_OFF;
+    use hypervisor::{Exit, Reg};
+    use pe_loader::Memory;
+    use std::sync::atomic::Ordering;
+    use w2m_vm::monitor_code::{LOCK_C_TAKINGS, LOCK_TIMING};
+    const DRIVER: u64 = MONITOR_VA + 0x2400; // the monitor's free area past the flush stub (`FLUSH_STUB_END`)
+    const STACK: u64 = 0x4000_0000;
+    const ARGS: u64 = STACK + 0x8000; // the call's RSP, its stack arguments at + 0x28 on
+    const OUT: u64 = STACK + 0x9000; // DuplicateHandle's lpTargetHandle
+    const DONE: u16 = 0x77;
+    const OWNER: u64 = 1;
+    const PSEUDO: u64 = !0; // GetCurrentProcess() (sync_objects.c CURRENT_PROCESS)
+    const NO_HANDLE: u64 = 0x1234; // below the objects' handles, no file's and no standard handle
+    const SAME_ACCESS: u32 = 2; // DUPLICATE_SAME_ACCESS
+    const WAIT_TIMEOUT: u64 = 258;
+    const ERROR_INVALID_HANDLE: u32 = 6;
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let mut rows = Vec::new();
+    for timed in [false, true] {
+        let mut mem = Memory::default();
+        mem.map(STACK, 0x10000, "stack");
+        let loaded = Loaded::bare(mem, STACK, STACK + 0x10000);
+        let mut start = Start::console("word.exe");
+        start.time_runtime_word = timed;
+        let mut guest = guest_with_defines(&root, &loaded, &start, &w2m_vm::guest::runtime_defines_for(timed));
+        // the driver: sp from x15, the function in x22 called with x0 to x4, then the driver's own hvc
+        let driver = [a64::addi(31, 15, 0), a64::blr(22), a64::hvc(DONE.into())];
+        let bytes: Vec<u8> = driver.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let at = guest.offset(DRIVER).unwrap() as usize;
+        guest.memory.as_mut_slice()[at..at + bytes.len()].copy_from_slice(&bytes);
+        let (duplicate, wait) = (
+            guest.symbols["k32_DuplicateHandle"],
+            guest.symbols["k32_WaitForSingleObject"],
+        );
+        let monitor = guest.served.vcpu.monitor;
+        let gs_base = guest.offset(PROCESS_VA + STATE_OFF + 0xb0).unwrap();
+        let teb = guest.offset(PROCESS_VA + TEB_OFF).unwrap();
+        let (args, out) = (guest.offset(ARGS).unwrap(), guest.offset(OUT).unwrap());
+        let takings = guest.offset(MONITOR_VA + LOCK_TIMING + LOCK_C_TAKINGS).unwrap();
+        let vm = Vm::new(40).unwrap();
+        vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
+            .unwrap();
+        let vcpu = Vcpu::new(&vm).unwrap();
+        w2m_vm::monitor::set_system_registers(&vcpu, guest.ttbr).unwrap();
+        let view = guest.memory_view();
+        view.write_u64(monitor + LOCK_OWNER, OWNER);
+        view.write_u64(gs_base, PROCESS_VA + TEB_OFF);
+        view.write_u32(args + 0x30, 0); // bInheritHandle
+        view.write_u32(args + 0x38, SAME_ACCESS); // dwOptions
+        let word = view.atomic_u32(RUN_TABLE + RUNTIME_LOCK);
+        // one call of the image's `function` on this vCPU, the word held by this owner before it or free: its answer,
+        // the word after it, and the C's takings it counted (the timed image's)
+        let call = |function: u64, regs: [u64; 5], held: bool| -> (u64, u32, u64) {
+            word.store(if held { OWNER as u32 } else { 0 }, Ordering::Relaxed);
+            let before = view.read_u64(takings);
+            for (r, v) in regs.iter().enumerate() {
+                vcpu.set_reg(Reg::X(r as u8), *v).unwrap();
+            }
+            for (r, v) in [(15, STACK + 0x10000), (22, function), (28, MONITOR_VA + MONITOR_DATA)] {
+                vcpu.set_reg(Reg::X(r), v).unwrap();
+            }
+            vcpu.set_reg(Reg::Cpsr, w2m_vm::CPSR_EL1H).unwrap();
+            vcpu.set_reg(Reg::Pc, DRIVER).unwrap();
+            loop {
+                match vcpu.run().unwrap() {
+                    Exit::VtimerActivated => vcpu.set_vtimer_mask(true).unwrap(),
+                    e if e.hvc_immediate() == Some(DONE) => break,
+                    e => panic!("{e:?} at {:#x} in a call of {function:#x}", vcpu.reg(Reg::Pc).unwrap()),
+                }
+            }
+            (
+                vcpu.reg(Reg::X(0)).unwrap(),
+                word.load(Ordering::Relaxed),
+                view.read_u64(takings) - before,
+            )
+        };
+        let image = if timed { "timed" } else { "untimed" };
+        for held in [true, false] {
+            let (answer, after, counted) = call(duplicate, [PSEUDO, NO_HANDLE, PSEUDO, OUT, ARGS], held);
+            let failed = (answer, view.read_u64(out), view.read_u32(teb + 0x68));
+            rows.push((
+                image,
+                "(a) DuplicateHandle",
+                held,
+                failed == (0, 0, ERROR_INVALID_HANDLE),
+                after,
+                counted,
+            ));
+            let (made, _, _) = call(duplicate, [PSEUDO, PSEUDO, PSEUDO, OUT, ARGS], false);
+            let handle = view.read_u64(out);
+            assert!(
+                made == 1 && handle >= 0x2000,
+                "{image}: DuplicateHandle of the process answered {made}, {handle:#x}"
+            );
+            let (answer, after, counted) = call(wait, [handle, 0, 0, 0, 0], held);
+            rows.push((
+                image,
+                "(b) WaitForSingleObject",
+                held,
+                answer == WAIT_TIMEOUT,
+                after,
+                counted,
+            ));
+        }
+    }
+    let wrong: Vec<String> = rows
+        .iter()
+        .filter(|(image, _, held, answered, after, counted)| {
+            let word_right = *after == if *held { OWNER as u32 } else { 0 };
+            let count_right = *image == "untimed" || *counted == u64::from(!*held);
+            !(*answered && word_right && count_right)
+        })
+        .map(|(image, call, held, answered, after, counted)| {
+            format!(
+                "{image} {call}, the word held before {held}: answered as Windows {answered}, the word {after} after, \
+                     {counted} of the C's takings counted"
+            )
+        })
+        .collect();
+    for (image, call, held, answered, after, counted) in &rows {
+        eprintln!("{image} {call}, held before {held}: answered {answered}, the word {after} after, {counted} counted");
+    }
+    assert!(
+        wrong.is_empty(),
+        "a call made holding the word leaves it this owner's and counts no taking; one made with it free leaves it free \
+         and counts one; against {wrong:?}"
     );
 }
 

@@ -77,17 +77,19 @@ static int inherited_ready;
 static u32 handles_lock;
 
 /* The table held: compare-and-swap of 0 for 1, acquire, as thread_storage.c's `hold_slots` (CASA), a waiter reading the
- * word by plain loads until it reads 0 before it tries the swap. Nothing reenters it. */
-static void hold_handles(void) {
+ * word by plain loads until it reads 0 before it tries the swap. Nothing reenters it. Its answer, 1, is its guard's
+ * (W2M_HELD, runtime.h; Sprint 359). */
+static int hold_handles(void) {
 #ifdef W2M_TIME_LOCKS
     w2m_lock_take(&handles_lock, W2M_LOCK_HANDLES);      /* timed (Sprint 358, runtime.h) */
 #else
     for (;;) {
         while (__atomic_load_n(&handles_lock, __ATOMIC_RELAXED)) {}
         u32 free = 0;
-        if (__atomic_compare_exchange_n(&handles_lock, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+        if (__atomic_compare_exchange_n(&handles_lock, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
     }
 #endif
+    return 1;
 }
 
 /* The table let go: a store of 0, release (STLR), as `let_slots_go`. */
@@ -97,12 +99,15 @@ static void let_handles_go(void) { w2m_lock_let_go(&handles_lock, W2M_LOCK_HANDL
 static void let_handles_go(void) { __atomic_store_n(&handles_lock, 0, __ATOMIC_RELEASE); }
 #endif
 
-/* runtime.c (Sprint 355): the runtime word taken by a call whose bridge holds none, 1 when this call took it; and let
- * go when it did. A named event's EVENT_OPEN and DuplicateHandle's look at the file table and the standard handles take
- * it so, with no other lock held, and the waits and releases to park, to ready and for the host's objects (Sprint
- * 356). */
-int w2m_take_runtime_word(void);
-void w2m_let_runtime_word_go(int taken);
+/* The table's guard's end (W2M_HELD, runtime.h; Sprint 359): the lock let go unless let go early. */
+static void handles_guard_end(int *held) {
+    if (*held) let_handles_go();
+}
+
+/* The runtime word, taken by a call whose bridge holds none (runtime.c, Sprint 355; runtime.h declares it, with its
+ * guard W2M_HELD(runtime_word)): a named event's EVENT_OPEN and DuplicateHandle's look at the file table and the
+ * standard handles take it so, with no other lock held, and the waits and releases to park, to ready and for the host's
+ * objects (Sprint 356). */
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 static u32 current_tid(void);
@@ -152,12 +157,14 @@ static int new_object(u32 kind, s64 count, s64 max) {
  * its handle is published and another vCPU's lookup of the handle reads it whole. A full table or a full slot list
  * lets the lock go, then stops the run. */
 static u64 publish(u64 api, u32 kind, s64 count, s64 max, u32 flags) {
-    hold_handles();
-    int o = new_object(kind, count, max);
-    u64 h = o < 0 ? 0 : handle_for(o);
-    if (h) handle_flags[(h - OBJECT_BASE) / 4] = flags;
-    else if (o >= 0) objects[o].kind = FREE;
-    let_handles_go();
+    u64 h;
+    {
+        W2M_HELD(handles);
+        int o = new_object(kind, count, max);
+        h = o < 0 ? 0 : handle_for(o);
+        if (h) handle_flags[(h - OBJECT_BASE) / 4] = flags;
+        else if (o >= 0) objects[o].kind = FREE;
+    }
     if (!h) w2m_unimplemented(api, OBJECTS);
     return h;
 }
@@ -190,19 +197,17 @@ static void unref(struct object *o) {
  * The reference is taken, and dropped, under the table's lock (Sprint 355), as ReactOS takes it with the handle entry
  * locked (ob/obref.c 633-672). */
 static struct object *object_of(u64 h) {
-    hold_handles();
+    W2M_HELD(handles);
     int i = slot_of(h);
     struct object *o = i < 0 ? 0 : &objects[handle_object[i] - 1];
     if (o) o->refs++;
-    let_handles_go();
     return o;
 }
 
 static void object_done(struct object *o) {
     if (!o) return;
-    hold_handles();
+    W2M_HELD(handles);
     unref(o);
-    let_handles_go();
 }
 
 /* For token.c: a process token's handle, from this table so CloseHandle closes it; and whether h is one. The
@@ -240,19 +245,20 @@ int w2m_object_mapping_of(u64 h, u64 *fd, u64 *size) {
  * table's lock; the host's closes are made after it is let go (a leaf makes no host request), from the kind and id
  * read under it, since once the reference is dropped another vCPU may make the entry a new object (Sprint 355). */
 int w2m_object_close(u64 h) {
-    hold_handles();
-    int i = slot_of(h);
-    if (i < 0) {
-        let_handles_go();
-        return 0;
+    int last;
+    u32 kind;
+    s64 id;
+    {
+        W2M_HELD(handles);
+        int i = slot_of(h);
+        if (i < 0) return 0;
+        struct object *o = &objects[handle_object[i] - 1];
+        handle_object[i] = 0;
+        last = --o->handles == 0;
+        kind = o->kind;
+        id = changes(o) ? 0 : o->count;       /* a semaphore's, an event's, a mutex's: `sync_lock`'s, and unused here */
+        unref(o);
     }
-    struct object *o = &objects[handle_object[i] - 1];
-    handle_object[i] = 0;
-    int last = --o->handles == 0;
-    u32 kind = o->kind;
-    s64 id = changes(o) ? 0 : o->count;       /* a semaphore's, an event's, a mutex's: `sync_lock`'s, and unused here */
-    unref(o);
-    let_handles_go();
     if (last) {
         if (kind == MAPPING) w2m_host(W2M_FILE_CLOSE, (u64)id, 0, 0, 0, 0);       /* the views keep their copy */
         if (kind == SHARED_EVENT || kind == PIPE_READ || kind == PIPE_WRITE ||
@@ -277,10 +283,11 @@ static u64 create_event(u64 api, u64 attributes, u64 manual, u64 initial, u64 na
     if (api != W2M_API_CreateEventW && api != W2M_API_CreateEventExW) w2m_unimplemented(api, name);   /* ANSI names */
     u64 chars = 0;
     while (((const unsigned short *)name)[chars]) chars++;
-    u64 existed = 0;
-    int took = w2m_take_runtime_word();             /* the transport page is every vCPU's; no other lock held */
-    u64 id = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_OPEN, name, chars, (manual ? 1 : 0) | (initial ? 2 : 0), &existed);
-    w2m_let_runtime_word_go(took);
+    u64 existed = 0, id;
+    {
+        W2M_HELD(runtime_word);                     /* the transport page is every vCPU's; no other lock held */
+        id = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_OPEN, name, chars, (manual ? 1 : 0) | (initial ? 2 : 0), &existed);
+    }
     u64 h = publish(api, SHARED_EVENT, (s64)id, 0, 0);
     set_error(existed ? ERROR_ALREADY_EXISTS : 0);
     return w2m_logged(api, existed, h);
@@ -336,17 +343,18 @@ static int nwaiters;
 static u32 sync_lock;
 
 /* The state held, in the form of `hold_handles`: compare-and-swap of 0 for 1, acquire (CASA), plain loads while
- * another vCPU holds it. Nothing reenters it. */
-static void hold_sync(void) {
+ * another vCPU holds it. Nothing reenters it. Its answer, 1, is its guard's (W2M_HELD, runtime.h; Sprint 359). */
+static int hold_sync(void) {
 #ifdef W2M_TIME_LOCKS
     w2m_lock_take(&sync_lock, W2M_LOCK_SYNC_OBJECTS);    /* timed (Sprint 358, runtime.h) */
 #else
     for (;;) {
         while (__atomic_load_n(&sync_lock, __ATOMIC_RELAXED)) {}
         u32 free = 0;
-        if (__atomic_compare_exchange_n(&sync_lock, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+        if (__atomic_compare_exchange_n(&sync_lock, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
     }
 #endif
+    return 1;
 }
 
 /* The state let go: a store of 0, release (STLR). */
@@ -356,9 +364,16 @@ static void let_sync_go(void) { w2m_lock_let_go(&sync_lock, W2M_LOCK_SYNC_OBJECT
 static void let_sync_go(void) { __atomic_store_n(&sync_lock, 0, __ATOMIC_RELEASE); }
 #endif
 
-/* The runtime word as a wait or a release holds it, taken with no leaf held: `held` while this call holds it, `taken`
- * when this call took it (a traced call's bridge holds it already, as does a run on the host's clock, `services.rs`
- * `lock_in`, and this call then keeps it). */
+/* The state's guard's end (W2M_HELD, runtime.h; Sprint 359): the lock let go unless let go early. */
+static void sync_guard_end(int *held) {
+    if (*held) let_sync_go();
+}
+
+/* The runtime word as a release holds it when it may need it, taken with no leaf held, at the first `take_word`:
+ * `held` while this call holds it, `taken` when this call took it (a traced call's bridge holds it already, as does a
+ * run on the host's clock, `services.rs` `lock_in`, and this call then keeps it). WORD_WHEN_NEEDED declares one as a
+ * guard (Sprint 359): clang's `cleanup` attribute, as W2M_HELD's (runtime.h), calls `let_word_go` at the scope's end,
+ * which lets the word go when this call took it. */
 struct word { int held, taken; };
 static void take_word(struct word *w) {
     if (w->held) return;
@@ -370,6 +385,7 @@ static void let_word_go(struct word *w) {
     w2m_let_runtime_word_go(w->taken);
     w->held = w->taken = 0;
 }
+#define WORD_WHEN_NEEDED(name) struct word name __attribute__((cleanup(let_word_go))) = {0, 0}
 
 /* threads.c (Sprint 356): the running thread's woken mark armed, at a wait's check under `sync_lock`, so a readying
  * between the check and the park marks it and the park leaves it ready (Sprint 354's Deferred (a)); and the mark set on
@@ -393,9 +409,8 @@ static void ready_all(struct readied *r, struct word *w) {
 
 /* A wait's park (W2M_SCHEDULE_RETRY), the runtime word taken around `w2m_block` alone, `sync_lock` let go. */
 static void park(u64 deadline, u64 key) {
-    int took = w2m_take_runtime_word();
+    W2M_HELD(runtime_word);
     w2m_block(deadline, key);
-    w2m_let_runtime_word_go(took);
 }
 
 static int waiter_of(u32 tid) {
@@ -543,10 +558,8 @@ int w2m_thread_ended(u32 tid);        /* threads.c */
  * (crates/w2m_vm/src/kernel.rs 209-211). Host requests: the runtime word held, `sync_lock` not. */
 static int host_signaled(struct object *o) {
     if (o->kind == SHARED_EVENT || o->kind == PROCESS) {               /* `handles` is the table's (Sprint 355) */
-        hold_handles();
-        u32 open = o->handles;
-        let_handles_go();
-        if (!open) return 0;
+        W2M_HELD(handles);
+        if (!o->handles) return 0;                                     /* the guard's end lets the table go first */
     }
     if (o->kind == THREAD) return w2m_thread_ended((u32)o->count);
     if (o->kind == PROCESS)                                    /* this process runs; another's is the host's */
@@ -597,29 +610,32 @@ static void grant_all(const struct object *released, struct readied *r) {
  * granted readied under the word; the references dropped under the table's lock. */
 void w2m_mutexes_abandoned(u32 tid) {
     int held[OBJECTS], n = 0;
-    hold_handles();
-    for (int i = 0; i < OBJECTS; i++)
-        if (objects[i].kind == MUTEX && objects[i].refs) {
-            objects[i].refs++;
-            held[n++] = i;
-        }
-    let_handles_go();
+    {
+        W2M_HELD(handles);
+        for (int i = 0; i < OBJECTS; i++)
+            if (objects[i].kind == MUTEX && objects[i].refs) {
+                objects[i].refs++;
+                held[n++] = i;
+            }
+    }
     struct readied r;                                  /* its tids read only below n: not zeroed */
     r.n = 0;
-    hold_sync();
-    for (int k = 0; k < n; k++) {
-        struct object *o = &objects[held[k]];
-        if (!o->count || (u32)o->max != tid) continue;
-        o->count = 0;
-        o->max = 0;
-        o->abandoned = 1;
-        grant(o, &r);
-        grant_all(o, &r);
+    {
+        W2M_HELD(sync);
+        for (int k = 0; k < n; k++) {
+            struct object *o = &objects[held[k]];
+            if (!o->count || (u32)o->max != tid) continue;
+            o->count = 0;
+            o->max = 0;
+            o->abandoned = 1;
+            grant(o, &r);
+            grant_all(o, &r);
+        }
     }
-    let_sync_go();
-    struct word word = {0, 0};
-    ready_all(&r, &word);
-    let_word_go(&word);
+    {
+        WORD_WHEN_NEEDED(word);
+        ready_all(&r, &word);
+    }
     for (int k = 0; k < n; k++) object_done(&objects[held[k]]);
 }
 
@@ -635,41 +651,41 @@ static struct object *must(u64 api, u64 h, struct object *o, u32 kind1, u32 kind
  * and the signal of this process's waiters, under the word. */
 u64 k32_SetEvent(u64 h) {
     struct object *o = object_of(h);
-    struct word word = {0, 0};
-    if (o && o->kind == SHARED_EVENT) {
-        take_word(&word);
-        w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_SET, (u64)o->count, 0, 0, 0);
-        w2m_signal(0);
-    } else {
-        must(W2M_API_SetEvent, h, o, EVENT_MANUAL, EVENT_AUTO);
-        struct readied r;                              /* its tids read only below n: not zeroed */
-        r.n = 0;
-        hold_sync();
-        o->count = 1;
-        grant(o, &r);
-        grant_all(o, &r);
-        let_sync_go();
-        ready_all(&r, &word);                        /* an auto-reset event's grants ready its waiters (095) */
-        if (o->kind == EVENT_MANUAL) {
+    {
+        WORD_WHEN_NEEDED(word);
+        if (o && o->kind == SHARED_EVENT) {
             take_word(&word);
-            w2m_signal((u64)o);                      /* a manual-reset event releases every waiter */
+            w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_SET, (u64)o->count, 0, 0, 0);
+            w2m_signal(0);
+        } else {
+            must(W2M_API_SetEvent, h, o, EVENT_MANUAL, EVENT_AUTO);
+            struct readied r;                          /* its tids read only below n: not zeroed */
+            r.n = 0;
+            {
+                W2M_HELD(sync);
+                o->count = 1;
+                grant(o, &r);
+                grant_all(o, &r);
+            }
+            ready_all(&r, &word);                    /* an auto-reset event's grants ready its waiters (095) */
+            if (o->kind == EVENT_MANUAL) {
+                take_word(&word);
+                w2m_signal((u64)o);                  /* a manual-reset event releases every waiter */
+            }
         }
     }
-    let_word_go(&word);
     object_done(o);
     return w2m_logged(W2M_API_SetEvent, h, 1);
 }
 u64 k32_ResetEvent(u64 h) {
     struct object *o = object_of(h);
     if (o && o->kind == SHARED_EVENT) {
-        int took = w2m_take_runtime_word();
+        W2M_HELD(runtime_word);
         w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_RESET, (u64)o->count, 0, 0, 0);
-        w2m_let_runtime_word_go(took);
     } else {
         must(W2M_API_ResetEvent, h, o, EVENT_MANUAL, EVENT_AUTO);
-        hold_sync();
+        W2M_HELD(sync);
         o->count = 0;
-        let_sync_go();
     }
     object_done(o);
     return w2m_logged(W2M_API_ResetEvent, h, 1);
@@ -680,22 +696,25 @@ u64 k32_ReleaseSemaphore(u64 h, u64 count, u64 previous) {
     if ((s32)count <= 0) w2m_unimplemented(W2M_API_ReleaseSemaphore, count);
     struct readied r;                              /* its tids read only below n: not zeroed */
     r.n = 0;
-    hold_sync();
-    if (o->count + (s32)count > o->max) {
-        let_sync_go();
-        object_done(o);
-        set_error(ERROR_TOO_MANY_POSTS);
-        return w2m_logged(W2M_API_ReleaseSemaphore, h, 0);
+    s32 before;
+    {
+        W2M_HELD(sync);
+        if (o->count + (s32)count > o->max) {
+            W2M_LET_GO_EARLY(sync);
+            object_done(o);
+            set_error(ERROR_TOO_MANY_POSTS);
+            return w2m_logged(W2M_API_ReleaseSemaphore, h, 0);
+        }
+        before = (s32)o->count;
+        o->count += (s32)count;
+        grant(o, &r);
+        grant_all(o, &r);
     }
-    s32 before = (s32)o->count;
-    o->count += (s32)count;
-    grant(o, &r);
-    grant_all(o, &r);
-    let_sync_go();
     if (previous) *(s32 *)previous = before;
-    struct word word = {0, 0};
-    ready_all(&r, &word);
-    let_word_go(&word);
+    {
+        WORD_WHEN_NEEDED(word);
+        ready_all(&r, &word);
+    }
     object_done(o);
     return w2m_logged(W2M_API_ReleaseSemaphore, h, 1);
 }
@@ -705,22 +724,24 @@ u64 k32_ReleaseMutex(u64 h) {
     u32 me = current_tid();
     struct readied r;                              /* its tids read only below n: not zeroed */
     r.n = 0;
-    hold_sync();
-    if (o->count == 0 || (u32)o->max != me) {
-        let_sync_go();
-        object_done(o);
-        set_error(ERROR_NOT_OWNER);
-        return w2m_logged(W2M_API_ReleaseMutex, h, 0);
+    {
+        W2M_HELD(sync);
+        if (o->count == 0 || (u32)o->max != me) {
+            W2M_LET_GO_EARLY(sync);
+            object_done(o);
+            set_error(ERROR_NOT_OWNER);
+            return w2m_logged(W2M_API_ReleaseMutex, h, 0);
+        }
+        if (--o->count == 0) {
+            o->max = 0;
+            grant(o, &r);
+            grant_all(o, &r);
+        }
     }
-    if (--o->count == 0) {
-        o->max = 0;
-        grant(o, &r);
-        grant_all(o, &r);
+    {
+        WORD_WHEN_NEEDED(word);
+        ready_all(&r, &word);
     }
-    let_sync_go();
-    struct word word = {0, 0};
-    ready_all(&r, &word);
-    let_word_go(&word);
     object_done(o);
     return w2m_logged(W2M_API_ReleaseMutex, h, 1);
 }
@@ -773,12 +794,18 @@ static int timed_out_now(u32 ms, u64 *deadline) {
  * objects is checked under the word, held from the check to the park (`wait_one_held`). */
 static u64 wait_one_held(u64 api, u64 h, struct object *o, u32 ms, int retry);
 
+/* Sprint 359: each holding of `sync_lock` a guard's scope, the loop's body in the waits below. What must run with no
+ * leaf held after it, the counter's read, the park and the lookups' references dropped, runs after the scope's end:
+ * `need_now` and a `continue` bring the read to the loop's top, `parked` and a `break` the park to the loop's end. */
 static u64 wait_one(u64 api, u64 h, u32 ms) {
     u32 me = current_tid();
-    hold_sync();
-    int w = waiter_of(me);
-    struct object *o = w >= 0 ? &objects[waiters[w].object] : 0;  /* a retry: only this thread drops its entry */
-    let_sync_go();
+    int w;
+    struct object *o;
+    {
+        W2M_HELD(sync);
+        w = waiter_of(me);
+        o = w >= 0 ? &objects[waiters[w].object] : 0;          /* a retry: only this thread drops its entry */
+    }
     int retry = o != 0;
     if (!retry) o = object_of(h);
     if (!o) {
@@ -790,9 +817,14 @@ static u64 wait_one(u64 api, u64 h, u32 ms) {
     if (!sync_kind(o)) return wait_one_held(api, h, o, ms, retry);
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
     u64 ret = WAIT_OBJECT_0, now = 0, deadline = 0;
-    int have_now = 0;
+    int have_now = 0, need_now = 0, parked = 0;
     for (;;) {
-        hold_sync();
+        if (need_now) {                                        /* a host request on the host's clock: no leaf held */
+            now = w2m_counter_now();
+            have_now = 1;
+            need_now = 0;
+        }
+        W2M_HELD(sync);
         w = waiter_of(me);
         if (w >= 0 && waiters[w].granted) {                    /* a release handed it over while this thread waited */
             sc->wait_deadline = 0;
@@ -800,23 +832,20 @@ static u64 wait_one(u64 api, u64 h, u32 ms) {
         } else if (!sync_signaled(o, me)) {
             int t = timed_out_at(ms, have_now, now, &deadline);
             if (t < 0) {
-                let_sync_go();
-                now = w2m_counter_now();
-                have_now = 1;
+                need_now = 1;
                 continue;
             }
             if (!t) {                                          /* retried: the bridge does not return */
                 if (w < 0) {
                     if (nwaiters == WAITERS) {
-                        let_sync_go();
+                        W2M_LET_GO_EARLY(sync);
                         w2m_unimplemented(api, WAITERS);
                     }
                     waiter_add(me, o, -1);                     /* the lookup's reference, kept */
                 }
                 w2m_wait_armed();
-                let_sync_go();
-                park(deadline, (u64)o);
-                return 0;
+                parked = 1;
+                break;
             }
             ret = WAIT_TIMEOUT;
         } else {
@@ -824,8 +853,11 @@ static u64 wait_one(u64 api, u64 h, u32 ms) {
             if (sync_take(o, me)) ret = WAIT_ABANDONED;         /* its owner ended holding it (amendment) */
         }
         if (w >= 0) waiters_out(me);
-        let_sync_go();
         break;
+    }
+    if (parked) {
+        park(deadline, (u64)o);
+        return 0;
     }
     object_done(o);                                            /* the entry's reference, or the lookup's */
     return w2m_logged(api, h, ret);
@@ -835,23 +867,20 @@ static u64 wait_one(u64 api, u64 h, u32 ms) {
  * so no readying of the host's, nor this process's signal of a shared event, falls between them; its entry, never
  * granted, made and taken out under `sync_lock`, taken under the word as the order allows. */
 static u64 wait_one_held(u64 api, u64 h, struct object *o, u32 ms, int retry) {
-    struct word word = {0, 0};
-    take_word(&word);
+    W2M_HELD(runtime_word);
     u64 ret = WAIT_OBJECT_0, deadline = 0;
     if (!host_signaled(o)) {
         if (!timed_out_now(ms, &deadline)) {                  /* retried: the bridge does not return */
             if (!retry) {
-                hold_sync();
+                W2M_HELD(sync);
                 if (nwaiters == WAITERS) {
-                    let_sync_go();
+                    W2M_LET_GO_EARLY(sync);
                     w2m_unimplemented(api, WAITERS);
                 }
                 waiter_add(current_tid(), o, -1);              /* the lookup's reference, kept */
-                let_sync_go();
             }
             w2m_block(deadline, (u64)o);
-            let_word_go(&word);
-            return 0;
+            return 0;                                          /* the word's guard lets it go after the block */
         }
         ret = WAIT_TIMEOUT;
     } else {
@@ -859,11 +888,10 @@ static u64 wait_one_held(u64 api, u64 h, struct object *o, u32 ms, int retry) {
         host_take(o);
     }
     if (retry) {
-        hold_sync();
+        W2M_HELD(sync);
         waiters_out(current_tid());
-        let_sync_go();
     }
-    let_word_go(&word);
+    W2M_LET_GO_EARLY(runtime_word);
     object_done(o);
     return w2m_logged(api, h, ret);
 }
@@ -897,9 +925,14 @@ static u64 wait_any(u32 n, struct object **os, u32 ms, int retry) {
     u32 me = current_tid();
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
     u64 ret, now = 0, deadline = 0;
-    int have_now = 0;
+    int have_now = 0, need_now = 0, parked = 0;
     for (;;) {
-        hold_sync();
+        if (need_now) {                                        /* a host request on the host's clock: no leaf held */
+            now = w2m_counter_now();
+            have_now = 1;
+            need_now = 0;
+        }
+        W2M_HELD(sync);
         ret = granted_slot(me);                                /* a release handed one over while this thread waited */
         if (ret != WAIT_TIMEOUT) sc->wait_deadline = 0;
         for (u32 i = 0; ret == WAIT_TIMEOUT && i < n; i++)
@@ -910,28 +943,28 @@ static u64 wait_any(u32 n, struct object **os, u32 ms, int retry) {
         if (ret == WAIT_TIMEOUT) {
             int t = timed_out_at(ms, have_now, now, &deadline);
             if (t < 0) {
-                let_sync_go();
-                now = w2m_counter_now();
-                have_now = 1;
+                need_now = 1;
                 continue;
             }
             if (!t) {                                          /* retried: the bridge does not return */
                 if (!retry) {
                     if (nwaiters + (int)n > WAITERS) {
-                        let_sync_go();
+                        W2M_LET_GO_EARLY(sync);
                         w2m_unimplemented(W2M_API_WaitForMultipleObjects, WAITERS);
                     }
                     for (u32 i = 0; i < n; i++) waiter_add(me, os[i], (int)i);   /* the lookups' references, kept */
                 }
                 w2m_wait_armed();
-                let_sync_go();
-                park(deadline, 0);
-                return 0;
+                parked = 1;
+                break;
             }
         }
         if (retry) waiters_out(me);
-        let_sync_go();
         break;
+    }
+    if (parked) {
+        park(deadline, 0);
+        return 0;
     }
     objects_done(os, n);
     return w2m_logged(W2M_API_WaitForMultipleObjects, n, ret);
@@ -946,27 +979,31 @@ static u64 wait_any(u32 n, struct object **os, u32 ms, int retry) {
 static u64 wait_any_held(u32 n, struct object **os, u32 ms, int retry) {
     u32 me = current_tid();
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
-    struct word word = {0, 0};
-    take_word(&word);
-    hold_sync();
-    u64 granted = granted_slot(me);
+    W2M_HELD(runtime_word);
+    u64 granted;
+    {
+        W2M_HELD(sync);
+        granted = granted_slot(me);
+    }
     int host = -1;
-    let_sync_go();
     for (u32 i = 0; granted == WAIT_TIMEOUT && i < n; i++) {
         if (sync_kind(os[i])) {
-            hold_sync();
-            int s = sync_signaled(os[i], me);
-            let_sync_go();
-            if (s) break;
+            W2M_HELD(sync);
+            if (sync_signaled(os[i], me)) break;               /* the guard's end lets the state go first */
         } else if (host_signaled(os[i])) {
             host = (int)i;
             break;
         }
     }
     u64 ret, now = 0, deadline = 0;
-    int have_now = 0;
+    int have_now = 0, need_now = 0, parked = 0;
     for (;;) {
-        hold_sync();
+        if (need_now) {                                        /* a host request on the host's clock: no leaf held */
+            now = w2m_counter_now();
+            have_now = 1;
+            need_now = 0;
+        }
+        W2M_HELD(sync);
         ret = granted_slot(me);
         for (u32 i = 0; ret == WAIT_TIMEOUT && i < n; i++)
             if ((int)i == host || (sync_kind(os[i]) && sync_signaled(os[i], me)))
@@ -974,33 +1011,32 @@ static u64 wait_any_held(u32 n, struct object **os, u32 ms, int retry) {
         if (ret == WAIT_TIMEOUT) {
             int t = timed_out_at(ms, have_now, now, &deadline);
             if (t < 0) {
-                let_sync_go();
-                now = w2m_counter_now();
-                have_now = 1;
+                need_now = 1;
                 continue;
             }
             if (!t) {                                          /* retried: the bridge does not return */
                 if (!retry) {
                     if (nwaiters + (int)n > WAITERS) {
-                        let_sync_go();
+                        W2M_LET_GO_EARLY(sync);
                         w2m_unimplemented(W2M_API_WaitForMultipleObjects, WAITERS);
                     }
                     for (u32 i = 0; i < n; i++) waiter_add(me, os[i], (int)i);   /* the lookups' references, kept */
                 }
-                let_sync_go();
-                w2m_block(deadline, 0);
-                let_word_go(&word);
-                return 0;
+                parked = 1;
+                break;
             }
         } else {
             sc->wait_deadline = 0;
         }
         if (retry) waiters_out(me);
-        let_sync_go();
         break;
     }
+    if (parked) {
+        w2m_block(deadline, 0);
+        return 0;                                              /* the word's guard lets it go after the block */
+    }
     if (host >= 0 && ret == WAIT_OBJECT_0 + (u32)host) host_take(os[host]);
-    let_word_go(&word);
+    W2M_LET_GO_EARLY(runtime_word);
     objects_done(os, n);
     return w2m_logged(W2M_API_WaitForMultipleObjects, n, ret);
 }
@@ -1011,9 +1047,14 @@ static u64 wait_all(u32 n, struct object **os, u32 ms) {
     u32 me = current_tid();
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
     u64 ret, now = 0, deadline = 0;
-    int have_now = 0;
+    int have_now = 0, need_now = 0, parked = 0;
     for (;;) {
-        hold_sync();
+        if (need_now) {                                        /* a host request on the host's clock: no leaf held */
+            now = w2m_counter_now();
+            have_now = 1;
+            need_now = 0;
+        }
+        W2M_HELD(sync);
         int a = all_of(me);
         ret = WAIT_OBJECT_0;
         if (a >= 0 && all_waiters[a].granted) {
@@ -1025,15 +1066,13 @@ static u64 wait_all(u32 n, struct object **os, u32 ms) {
             if (i < n) {
                 int t = timed_out_at(ms, have_now, now, &deadline);
                 if (t < 0) {
-                    let_sync_go();
-                    now = w2m_counter_now();
-                    have_now = 1;
+                    need_now = 1;
                     continue;
                 }
                 if (!t) {                                      /* retried: the bridge does not return */
                     if (a < 0) {
                         if (nall == ALL_WAITERS) {
-                            let_sync_go();
+                            W2M_LET_GO_EARLY(sync);
                             w2m_unimplemented(W2M_API_WaitForMultipleObjects, ALL_WAITERS);
                         }
                         all_waiters[nall] = (struct all_waiter){me, n, 0, 0, {0}};
@@ -1042,9 +1081,8 @@ static u64 wait_all(u32 n, struct object **os, u32 ms) {
                         nall++;
                     }
                     w2m_wait_armed();
-                    let_sync_go();
-                    park(deadline, 0);
-                    return 0;
+                    parked = 1;
+                    break;
                 }
                 ret = WAIT_TIMEOUT;
             } else {
@@ -1053,8 +1091,11 @@ static u64 wait_all(u32 n, struct object **os, u32 ms) {
             }
         }
         if (a >= 0) all_out(a);
-        let_sync_go();
         break;
+    }
+    if (parked) {
+        park(deadline, 0);
+        return 0;
     }
     objects_done(os, n);
     return w2m_logged(W2M_API_WaitForMultipleObjects, n, ret);
@@ -1071,24 +1112,27 @@ static u64 wait_all(u32 n, struct object **os, u32 ms) {
 static u64 wait_all_held(u32 n, struct object **os, u32 ms, int retry) {
     u32 me = current_tid();
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
-    struct word word = {0, 0};
-    take_word(&word);
+    W2M_HELD(runtime_word);
     u32 k = 0;
     for (; k < n; k++) {
         int s;
         if (sync_kind(os[k])) {
-            hold_sync();
+            W2M_HELD(sync);
             s = sync_signaled(os[k], me);
-            let_sync_go();
         } else {
             s = host_signaled(os[k]);
         }
         if (!s) break;
     }
     u64 ret, now = 0, deadline = 0;
-    int have_now = 0;
+    int have_now = 0, need_now = 0, parked = 0, again = 0;
     for (;;) {
-        hold_sync();
+        if (need_now) {                                        /* a host request on the host's clock: no leaf held */
+            now = w2m_counter_now();
+            have_now = 1;
+            need_now = 0;
+        }
+        W2M_HELD(sync);
         int a = all_of(me), every = k == n;
         for (u32 i = 0; every && i < n; i++)
             if (sync_kind(os[i]) && !sync_signaled(os[i], me)) every = 0;
@@ -1098,15 +1142,13 @@ static u64 wait_all_held(u32 n, struct object **os, u32 ms, int retry) {
         } else {
             int t = timed_out_at(ms, have_now, now, &deadline);
             if (t < 0) {
-                let_sync_go();
-                now = w2m_counter_now();
-                have_now = 1;
+                need_now = 1;
                 continue;
             }
             if (!t) {                                          /* retried: the bridge does not return */
                 if (!retry) {
                     if (nall == ALL_WAITERS) {
-                        let_sync_go();
+                        W2M_LET_GO_EARLY(sync);
                         w2m_unimplemented(W2M_API_WaitForMultipleObjects, ALL_WAITERS);
                     }
                     all_waiters[nall] = (struct all_waiter){me, n, 0, 1, {0}};
@@ -1114,23 +1156,24 @@ static u64 wait_all_held(u32 n, struct object **os, u32 ms, int retry) {
                         all_waiters[nall].objects[i] = (int)(os[i] - objects);
                     nall++;
                 }
-                int again = k < n && sync_kind(os[k]) && sync_signaled(os[k], me);
-                let_sync_go();
-                if (again) w2m_wait_again();
-                w2m_block(deadline, 0);
-                let_word_go(&word);
-                return 0;
+                again = k < n && sync_kind(os[k]) && sync_signaled(os[k], me);
+                parked = 1;
+                break;
             }
             ret = WAIT_TIMEOUT;
         }
         if (a >= 0) all_out(a);
-        let_sync_go();
         break;
+    }
+    if (parked) {
+        if (again) w2m_wait_again();
+        w2m_block(deadline, 0);
+        return 0;                                              /* the word's guard lets it go after the block */
     }
     if (ret != WAIT_TIMEOUT)                                   /* WAIT_OBJECT_0, or WAIT_ABANDONED_0 + k */
         for (u32 i = 0; i < n; i++)
             if (!sync_kind(os[i])) host_take(os[i]);
-    let_word_go(&word);
+    W2M_LET_GO_EARLY(runtime_word);
     objects_done(os, n);
     return w2m_logged(W2M_API_WaitForMultipleObjects, n, ret);
 }
@@ -1154,14 +1197,16 @@ u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms) {
     u32 me = current_tid();
     struct object *os[64];
     u32 got = n;
-    hold_sync();                                               /* a retry: only this thread drops its entries */
-    int a = (u32)all ? all_of(me) : -1;
-    int retry = (u32)all ? a >= 0 : waiter_of(me) >= 0;
-    if (retry && (u32)all)
-        for (u32 i = 0; i < n; i++) os[i] = &objects[all_waiters[a].objects[i]];
-    else if (retry)
-        got = entries_of(me, os);
-    let_sync_go();
+    int retry;
+    {
+        W2M_HELD(sync);                                        /* a retry: only this thread drops its entries */
+        int a = (u32)all ? all_of(me) : -1;
+        retry = (u32)all ? a >= 0 : waiter_of(me) >= 0;
+        if (retry && (u32)all)
+            for (u32 i = 0; i < n; i++) os[i] = &objects[all_waiters[a].objects[i]];
+        else if (retry)
+            got = entries_of(me, os);
+    }
     if (got != n)
         w2m_unimplemented(W2M_API_WaitForMultipleObjects, n);    /* a retry with another count: not in the rows */
     for (u32 i = 0; !retry && i < n; i++) {
@@ -1198,27 +1243,26 @@ u32 w2m_object_kind(u64 h, s64 *count) {
  * object. Until Sprint 355 it answered a pointer into `handle_flags` that file.c read and wrote after the lookup
  * returned, with the slot's state no longer held. */
 u32 w2m_object_flags(u64 h, u32 mask, u32 values) {
-    hold_handles();
+    W2M_HELD(handles);
     int i = slot_of(h);
     u32 before = i < 0 ? 0 : handle_flags[i];
     if (i >= 0) handle_flags[i] = (before & ~mask) | (values & mask);
-    let_handles_go();
     return before;
 }
 /* For processes.c's CreateProcessW: every inheritable slot, read under the table's lock, which a form not in the rows
  * lets go before it stops the run. */
 int w2m_object_inheritable(u64 (*out)[3], int room) {
     int n = 0;
-    hold_handles();
+    W2M_HELD(handles);
     for (int i = 0; i < OBJECTS; i++)
         if (handle_object[i] && (handle_flags[i] & 1)) {
             if (n == room) {
-                let_handles_go();
+                W2M_LET_GO_EARLY(handles);
                 w2m_unimplemented(W2M_API_CreateProcessW, room);   /* more than the list holds */
             }
             struct object *o = &objects[handle_object[i] - 1];
             if (o->kind != SHARED_EVENT && o->kind != PIPE_READ && o->kind != PIPE_WRITE && o->kind != PROCESS) {
-                let_handles_go();
+                W2M_LET_GO_EARLY(handles);
                 w2m_unimplemented(W2M_API_CreateProcessW, o->kind);    /* inheriting such a handle: not in the rows */
             }
             out[n][0] = OBJECT_BASE + 4 * (u64)i;
@@ -1226,12 +1270,11 @@ int w2m_object_inheritable(u64 (*out)[3], int room) {
             out[n][2] = (u64)o->count;
             n++;
         }
-    let_handles_go();
     return n;
 }
 
-/* The parent's handles installed at their values, once. The table held; a form not in the rows, or a full table, lets
- * it go before it stops the run. */
+/* The parent's handles installed at their values, once. The table held, by its caller's guard (`slot_of`'s and
+ * `handle_for`'s callers'); a form not in the rows, or a full table, lets it go before it stops the run. */
 static void inherit_init(void) {
     if (inherited_ready) return;
     inherited_ready = 1;
@@ -1240,12 +1283,12 @@ static void inherit_init(void) {
         u64 h = t[4 + 3 * k], kind = t[5 + 3 * k], id = t[6 + 3 * k];
         int i = (int)((h - OBJECT_BASE) / 4);
         if (h < OBJECT_BASE || (h - OBJECT_BASE) % 4 || i >= OBJECTS) {
-            let_handles_go();
+            W2M_LET_GO_BEFORE_STOP(handles);
             w2m_unimplemented(W2M_API_CreateProcessW, h);
         }
         int o = new_object((u32)kind, (s64)id, 0);
         if (o < 0) {
-            let_handles_go();
+            W2M_LET_GO_BEFORE_STOP(handles);
             w2m_unimplemented(W2M_API_CreateProcessW, OBJECTS);
         }
         handle_object[i] = o + 1;
@@ -1299,17 +1342,21 @@ u64 k32_DuplicateHandle(u64 source_process, u64 source, u64 target_process, u64 
                                      : publish(W2M_API_DuplicateHandle, PROCESS, current_pid(), 0, 0);
     } else {
         /* the source's lookup and the copy's slot under one holding, so no close between them frees its object */
-        hold_handles();
-        int i = slot_of(source);
-        h = 0;
-        if (i >= 0) h = options & DUPLICATE_CLOSE_SOURCE ? source         /* the copy keeps the slot (row dup.close_source) */
-                                                         : handle_for(handle_object[i] - 1);
-        let_handles_go();
+        int i;
+        {
+            W2M_HELD(handles);
+            i = slot_of(source);
+            h = 0;
+            if (i >= 0) h = options & DUPLICATE_CLOSE_SOURCE ? source     /* the copy keeps the slot (row dup.close_source) */
+                                                             : handle_for(handle_object[i] - 1);
+        }
         if (i < 0) {
             /* the file table and the standard handles are the runtime word's, which this call's bridge does not hold */
-            int took = w2m_take_runtime_word();
-            int other = w2m_is_file_handle(source) || w2m_is_std_handle(source);
-            w2m_let_runtime_word_go(took);
+            int other;
+            {
+                W2M_HELD(runtime_word);
+                other = w2m_is_file_handle(source) || w2m_is_std_handle(source);
+            }
             if (other) w2m_unimplemented(W2M_API_DuplicateHandle, source);   /* a file's or the console's: not in the rows */
             *(u64 *)out = 0;
             set_error(ERROR_INVALID_HANDLE);

@@ -82,7 +82,9 @@ const DEPARTURES: [(&str, &str); 12] = [
         "Sprint 343: the process heap's own lock around its free list, bump pointer and set-up, for its five \
          services, which take no runtime word; Sprint 358: its take and release timed in an image built with \
          W2M_TIME_LOCKS (runtime.h), and w2m_lock_timing_areas, the symbol by which the host knows that image; \
-         without the define the image is the one built before, byte for byte",
+         without the define the image is the one built before, byte for byte; Sprint 359: the heap's take a scoped \
+         guard, W2M_HELD(heap) (runtime.h), whose clang cleanup lets the lock go at its scope's end, hold and let_go \
+         renamed hold_heap and let_heap_go, no release by hand left",
     ),
     (
         "tools/guest_runtime/processes.c",
@@ -97,14 +99,20 @@ const DEPARTURES: [(&str, &str); 12] = [
          w2m_let_runtime_word_go, the word taken and let go by a service whose bridge holds none, for a named event's \
          EVENT_OPEN and DuplicateHandle's look at the file table; Sprint 358's amendment: in an image built with \
          W2M_TIME_LOCKS, w2m_take_runtime_word's takings timed and counted in the runtime word's timing area as the \
-         site runtime, their wait start in the vCPU's own monitor data words",
+         site runtime, their wait start in the vCPU's own monitor data words; Sprint 359: its compare-and-swap take \
+         renamed claim_runtime_word, the name hold_runtime_word now the runtime word's guard's take (runtime.h)",
     ),
     (
         "tools/guest_runtime/runtime.h",
         "Sprint 358: the leaf locks' timed take and release (w2m_lock_take, w2m_lock_let_go) and their four timing \
          areas at the monitor region's end, declared only under W2M_TIME_LOCKS, which the host defines for a run \
          that times its runtime word: a taking's wait start and taken time in its vCPU's own monitor data words, its \
-         count by an atomic add, its whole entry written while the lock is held",
+         count by an atomic add, its whole entry written while the lock is held; Sprint 359: the locks' scoped \
+         guard, W2M_HELD(lock), a variable whose clang cleanup attribute lets its lock go at its scope's end, and \
+         the two named releases by hand, W2M_LET_GO_EARLY before a call of w2m_unimplemented or w2m_logged in the \
+         guard's scope and W2M_LET_GO_BEFORE_STOP in a function its caller's guard holds the lock for; the runtime \
+         word's guard (hold_runtime_word, runtime_word_guard_end), which lets it go only when its take took it, and \
+         w2m_take_runtime_word and w2m_let_runtime_word_go declared here",
     ),
     (
         "tools/guest_runtime/sync_objects.c",
@@ -125,7 +133,11 @@ const DEPARTURES: [(&str, &str); 12] = [
          read a count only of the kinds fixed at creation; Sprint 356's amendment: a mutex whose owner thread ends \
          is abandoned (w2m_mutexes_abandoned), granted to its first waiter or taken by the next wait, which answers \
          WAIT_ABANDONED (WAIT_ABANDONED_0 + index for several) once; Sprint 358: the handle table's and the sync \
-         objects' takes and releases timed in an image built with W2M_TIME_LOCKS (runtime.h)",
+         objects' takes and releases timed in an image built with W2M_TIME_LOCKS (runtime.h); Sprint 359: every take \
+         of the handle table, the sync objects and the runtime word a scoped guard (W2M_HELD, runtime.h; \
+         WORD_WHEN_NEEDED for a release that may take the word), each holding a block and let go at its end, the \
+         counter's read and the park of a wait moved after its holding's end, and a release by hand only before \
+         w2m_unimplemented or w2m_logged, named",
     ),
     (
         "tools/guest_runtime/thread_storage.c",
@@ -135,7 +147,9 @@ const DEPARTURES: [(&str, &str); 12] = [
          give the first thread its expansion array, so it can use an index past 63 another thread allocated; Sprint \
          348: the run table's count read with acquire (LDAPR), pairing with the host's release store of it after a new entry's \
          words, since the slots' lock is not the runtime word the host's writer holds; Sprint 358: the slots' take \
-         and release timed in an image built with W2M_TIME_LOCKS (runtime.h)",
+         and release timed in an image built with W2M_TIME_LOCKS (runtime.h); Sprint 359: the slots' take a scoped \
+         guard (W2M_HELD, runtime.h) let go at its scope's end, a release by hand only before w2m_unimplemented or \
+         w2m_logged, named",
     ),
     (
         "tools/guest_runtime/threads.c",

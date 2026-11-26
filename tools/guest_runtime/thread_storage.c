@@ -61,8 +61,9 @@ static void tls_init(void) {
 }
 
 /* The slots held: compare-and-swap of 0 for 1, acquire, as heap.c's `hold` and lock_runtime (CASA), a waiter reading
- * the word by plain loads until it reads 0 before it tries the swap; then the TLS set-up. Nothing reenters it. */
-static void hold_slots(void) {
+ * the word by plain loads until it reads 0 before it tries the swap; then the TLS set-up. Nothing reenters it. Its
+ * answer, 1, is its guard's (W2M_HELD, runtime.h; Sprint 359). */
+static int hold_slots(void) {
 #ifdef W2M_TIME_LOCKS
     w2m_lock_take(&slots_lock, W2M_LOCK_SLOTS);          /* timed (Sprint 358, runtime.h) */
 #else
@@ -73,23 +74,29 @@ static void hold_slots(void) {
     }
 #endif
     tls_init();
+    return 1;
 }
 
-/* The slots let go: a store of 0, release (STLR), as heap.c's `let_go`. */
+/* The slots let go: a store of 0, release (STLR), as heap.c's `let_heap_go`. */
 #ifdef W2M_TIME_LOCKS
 static void let_slots_go(void) { w2m_lock_let_go(&slots_lock, W2M_LOCK_SLOTS); }
 #else
 static void let_slots_go(void) { __atomic_store_n(&slots_lock, 0, __ATOMIC_RELEASE); }
 #endif
 
-/* The calling thread's FLS block; `make`: create it (the thread's first FlsSetValue). Called with the slots held; a
- * full arena lets them go before it stops the run. */
+/* The slots' guard's end (W2M_HELD, runtime.h; Sprint 359): the lock let go unless let go early. */
+static void slots_guard_end(int *held) {
+    if (*held) let_slots_go();
+}
+
+/* The calling thread's FLS block; `make`: create it (the thread's first FlsSetValue). Called with the slots held, by
+ * its caller's guard; a full arena lets them go before it stops the run. */
 static struct fls_block *fls_mine(int make) {
     struct fls_block **slot = (struct fls_block **)((u8 *)w2m_teb() + TEB_FLS_DATA);
     if (!*slot && make) {
         struct fls_block *b = (struct fls_block *)w2m_heap_take(sizeof *b);
         if (!b) {
-            let_slots_go();
+            W2M_LET_GO_BEFORE_STOP(slots);
             w2m_unimplemented(W2M_API_FlsSetValue, sizeof *b);   /* the heap's arena is full */
         }
         u8 *bytes = (u8 *)b;
@@ -165,16 +172,18 @@ static void tls_clear_everywhere(u64 index) {
     }
 }
 
+/* The services below take the slots by their guard (W2M_HELD, runtime.h; Sprint 359), each let go at its scope's end
+ * or, on a path that then calls w2m_logged or w2m_unimplemented in that scope, early by name. */
 u64 k32_TlsAlloc(void) {
-    hold_slots();
+    W2M_HELD(slots);
     for (u64 i = 0; i < TLS_INDICES; i++) {
         if (tls_used[i]) continue;
         tls_used[i] = 1;
         tls_clear_everywhere(i);
-        let_slots_go();
+        W2M_LET_GO_EARLY(slots);
         return w2m_logged(W2M_API_TlsAlloc, 0, i);
     }
-    let_slots_go();
+    W2M_LET_GO_EARLY(slots);
     w2m_unimplemented(W2M_API_TlsAlloc, TLS_INDICES);      /* out of indices: not observed */
     return TLS_OUT_OF_INDEXES;
 }
@@ -203,39 +212,43 @@ u64 k32_TlsSetValue(u64 index, u64 value) {
 }
 
 u64 k32_TlsFree(u64 index) {
-    hold_slots();
     index = (u32)index;
-    if (index >= TLS_INDICES || !tls_used[index]) {
-        let_slots_go();
-        w2m_unimplemented(W2M_API_TlsFree, index);
+    {
+        W2M_HELD(slots);
+        if (index >= TLS_INDICES || !tls_used[index]) {
+            W2M_LET_GO_EARLY(slots);
+            w2m_unimplemented(W2M_API_TlsFree, index);
+        }
+        tls_used[index] = 0;
+        tls_clear_everywhere(index);
     }
-    tls_used[index] = 0;
-    tls_clear_everywhere(index);
-    let_slots_go();
     return w2m_logged(W2M_API_TlsFree, index, 1);
 }
 
 u64 k32_FlsAlloc(u64 callback) {
-    hold_slots();
+    W2M_HELD(slots);
     for (u64 i = 1; i < FLS_INDICES; i++) {
         if (fls_used[i]) continue;
         fls_used[i] = 1;
         for (struct fls_block *b = fls_blocks; b; b = b->next) b->value[i] = 0;
         fls_callback[i] = callback;
-        let_slots_go();
+        W2M_LET_GO_EARLY(slots);
         return w2m_logged(W2M_API_FlsAlloc, callback, i);
     }
-    let_slots_go();
+    W2M_LET_GO_EARLY(slots);
     w2m_unimplemented(W2M_API_FlsAlloc, FLS_INDICES);
     return TLS_OUT_OF_INDEXES;
 }
 
 u64 k32_FlsGetValue(u64 index) {
     index = (u32)index;
-    hold_slots();
-    struct fls_block *b = fls_mine(0);
-    u64 v = b && index < FLS_INDICES ? b->value[index] : 0;
-    let_slots_go();
+    struct fls_block *b;
+    u64 v;
+    {
+        W2M_HELD(slots);
+        b = fls_mine(0);
+        v = b && index < FLS_INDICES ? b->value[index] : 0;
+    }
     if (!b || index >= FLS_INDICES) {
         set_error(ERROR_INVALID_PARAMETER);
         return w2m_logged(W2M_API_FlsGetValue, index, 0);
@@ -248,10 +261,12 @@ u64 k32_FlsGetValue(u64 index) {
  * and TlsGetValue, the last error left in every case (contracts/windows.thread_storage.get2). */
 u64 k32_FlsGetValue2(u64 index) {
     index = (u32)index;
-    hold_slots();
-    struct fls_block *b = fls_mine(0);
-    u64 v = b && index < FLS_INDICES ? b->value[index] : 0;
-    let_slots_go();
+    u64 v;
+    {
+        W2M_HELD(slots);
+        struct fls_block *b = fls_mine(0);
+        v = b && index < FLS_INDICES ? b->value[index] : 0;
+    }
     return w2m_logged(W2M_API_FlsGetValue2, index, v);
 }
 
@@ -263,31 +278,33 @@ u64 k32_TlsGetValue2(u64 index) {
 
 u64 k32_FlsSetValue(u64 index, u64 value) {
     index = (u32)index;
-    hold_slots();
-    if (index >= FLS_INDICES || !fls_used[index]) {
-        let_slots_go();
-        set_error(ERROR_INVALID_PARAMETER);
-        return w2m_logged(W2M_API_FlsSetValue, index, 0);
+    {
+        W2M_HELD(slots);
+        if (index >= FLS_INDICES || !fls_used[index]) {
+            W2M_LET_GO_EARLY(slots);
+            set_error(ERROR_INVALID_PARAMETER);
+            return w2m_logged(W2M_API_FlsSetValue, index, 0);
+        }
+        fls_mine(1)->value[index] = value;
     }
-    fls_mine(1)->value[index] = value;
-    let_slots_go();
     return w2m_logged(W2M_API_FlsSetValue, index, 1);
 }
 
 u64 k32_FlsFree(u64 index) {
     index = (u32)index;
-    hold_slots();
-    if (index >= FLS_INDICES || !fls_used[index]) {
-        let_slots_go();
-        w2m_unimplemented(W2M_API_FlsFree, index);
-    }
-    for (struct fls_block *b = fls_blocks; b; b = b->next)
-        if (fls_callback[index] && b->value[index]) {
-            let_slots_go();
-            w2m_unimplemented(W2M_API_FlsFree, index);    /* the callback would run in guest code */
+    {
+        W2M_HELD(slots);
+        if (index >= FLS_INDICES || !fls_used[index]) {
+            W2M_LET_GO_EARLY(slots);
+            w2m_unimplemented(W2M_API_FlsFree, index);
         }
-    fls_used[index] = 0;
-    for (struct fls_block *b = fls_blocks; b; b = b->next) b->value[index] = 0;
-    let_slots_go();
+        for (struct fls_block *b = fls_blocks; b; b = b->next)
+            if (fls_callback[index] && b->value[index]) {
+                W2M_LET_GO_EARLY(slots);
+                w2m_unimplemented(W2M_API_FlsFree, index);    /* the callback would run in guest code */
+            }
+        fls_used[index] = 0;
+        for (struct fls_block *b = fls_blocks; b; b = b->next) b->value[index] = 0;
+    }
     return w2m_logged(W2M_API_FlsFree, index, 1);
 }
