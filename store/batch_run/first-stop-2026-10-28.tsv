@@ -39,6 +39,7 @@ calls in flight	0
 calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	crosswake	ExitProcess { code: 0 }	ExitProcess	done\n
+guest	handle_values	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	handshake	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	lost_wakeup	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	model_steps	ExitProcess { code: 0 }	ExitProcess	48743d4d4fd79694\nc00000917f800000\n

@@ -70,6 +70,24 @@ static void hold_runtime_word(void) {
     }
 }
 
+/* The runtime word taken as `hold_runtime_word` takes it, for a host request or a read of the word's state made by a
+ * service whose bridge holds no word, with no other lock held (Sprint 355: a named event's EVENT_OPEN and
+ * DuplicateHandle's look at the file table, card 4 of docs/design-handles-and-sync-objects-2026-11-26.md); 1 when this
+ * call took it, 0 when this vCPU held it already (a traced call's bridge takes it whatever the service's class) and
+ * keeps it. */
+int w2m_take_runtime_word(void) {
+    u32 *word = (u32 *)(W2M_RUN_TABLE_VA + W2M_RUNTIME_LOCK_OFF);
+    u32 own = (u32)*(const volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_LOCK_OWNER_OFF);
+    if (__atomic_load_n(word, __ATOMIC_RELAXED) == own) return 0;
+    hold_runtime_word();
+    return 1;
+}
+
+/* The word let go when `taken`: a store of 0, release (STLR), as a bridge's `unlock_runtime`. */
+void w2m_let_runtime_word_go(int taken) {
+    if (taken) __atomic_store_n((u32 *)(W2M_RUN_TABLE_VA + W2M_RUNTIME_LOCK_OFF), 0, __ATOMIC_RELEASE);
+}
+
 void w2m_unimplemented(u64 api, u64 detail) {
     hold_runtime_word();
     host_call(W2M_HOST_UNIMPLEMENTED, api, detail);     /* the host stops the run; no return */

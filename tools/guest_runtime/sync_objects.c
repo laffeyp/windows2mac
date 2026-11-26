@@ -56,12 +56,45 @@ static int handle_object[OBJECTS];              /* handle slot -> object index +
 static u32 handle_flags[OBJECTS];               /* HANDLE_FLAG_INHERIT, HANDLE_FLAG_PROTECT_FROM_CLOSE (Sprint 055) */
 static int inherited_ready;
 
+/* The handle table's own lock (Sprint 355; card 4 of docs/design-handles-and-sync-objects-2026-11-26.md, "Which lock
+ * guards which state"): 0 free, 1 held, in the image's zeroed data. It guards the slots (`handle_object`), their flags
+ * (`handle_flags`), the one-time install of a parent's handles (`inherited_ready`, and the inherit table it reads), the
+ * allocation of an entry of `objects` (`new_object`), a FREE entry's `kind`, and every entry's `refs` and `handles`.
+ * An object's `kind`, `count` and `max` are written before its handle is published under the lock and are read with no
+ * lock by a holder of a reference; a semaphore's, an event's and a mutex's `count` and `max` stay the runtime word's
+ * until card 5. CreateSemaphoreExW, CreateSemaphoreW, CreateMutexA, CreateEventW, CreateEventA, CreateEventExW,
+ * DuplicateHandle, OpenThread, GetThreadId and GetProcessId take no runtime word (`services.rs` `HANDLES_LOCK`); every
+ * other caller takes the lock inside the word. It is a leaf: held, it takes no other lock, makes no host request,
+ * readies no thread and calls neither w2m_unimplemented nor w2m_logged, so it never waits on the runtime word, whose
+ * holder may want it. */
+static u32 handles_lock;
+
+/* The table held: compare-and-swap of 0 for 1, acquire, as thread_storage.c's `hold_slots` (CASA), a waiter reading the
+ * word by plain loads until it reads 0 before it tries the swap. Nothing reenters it. */
+static void hold_handles(void) {
+    for (;;) {
+        while (__atomic_load_n(&handles_lock, __ATOMIC_RELAXED)) {}
+        u32 free = 0;
+        if (__atomic_compare_exchange_n(&handles_lock, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+    }
+}
+
+/* The table let go: a store of 0, release (STLR), as `let_slots_go`. */
+static void let_handles_go(void) { __atomic_store_n(&handles_lock, 0, __ATOMIC_RELEASE); }
+
+/* runtime.c (Sprint 355): the runtime word taken by a call whose bridge holds none, 1 when this call took it; and let
+ * go when it did. A named event's EVENT_OPEN and DuplicateHandle's look at the file table and the standard handles take
+ * it so, with no other lock held. */
+int w2m_take_runtime_word(void);
+void w2m_let_runtime_word_go(int taken);
+
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 static u32 current_tid(void);
 
 static void inherit_init(void);
 
-static u64 handle_for(u64 api, int object) {
+/* A free slot taken for entry `object`, its counts raised: the handle; 0 when every slot is taken. The table held. */
+static u64 handle_for(int object) {
     inherit_init();
     for (int i = 0; i < OBJECTS; i++)
         if (!handle_object[i]) {
@@ -71,26 +104,40 @@ static u64 handle_for(u64 api, int object) {
             objects[object].handles++;
             return OBJECT_BASE + 4 * (u64)i;
         }
-    w2m_unimplemented(api, OBJECTS);
     return 0;
 }
 
-static int new_object(u64 api, u32 kind, s64 count, s64 max) {
+/* The first FREE entry made an object: its index; -1 when none is FREE. The table held. */
+static int new_object(u32 kind, s64 count, s64 max) {
     for (int i = 0; i < OBJECTS; i++)
         if (objects[i].kind == FREE) {
             objects[i] = (struct object){kind, count, max, 0, 0};
             return i;
         }
-    w2m_unimplemented(api, OBJECTS);
-    return 0;
+    return -1;
+}
+
+/* A new object and a handle naming it, its slot's flags `flags`, under the table's lock, so the object is whole before
+ * its handle is published and another vCPU's lookup of the handle reads it whole. A full table or a full slot list
+ * lets the lock go, then stops the run. */
+static u64 publish(u64 api, u32 kind, s64 count, s64 max, u32 flags) {
+    hold_handles();
+    int o = new_object(kind, count, max);
+    u64 h = o < 0 ? 0 : handle_for(o);
+    if (h) handle_flags[(h - OBJECT_BASE) / 4] = flags;
+    else if (o >= 0) objects[o].kind = FREE;
+    let_handles_go();
+    if (!h) w2m_unimplemented(api, OBJECTS);
+    return h;
 }
 
 static u64 make(u64 api, u32 kind, s64 count, s64 max) {
-    u64 h = handle_for(api, new_object(api, kind, count, max));
+    u64 h = publish(api, kind, count, max, 0);
     set_error(0);                                  /* rows *.create: err 0 */
     return w2m_logged(api, kind, h);
 }
 
+/* The slot h names, -1 when none. The table held. */
 static int slot_of(u64 h) {
     inherit_init();
     if (h < OBJECT_BASE || (h - OBJECT_BASE) % 4 || (h - OBJECT_BASE) / 4 >= OBJECTS) return -1;
@@ -99,7 +146,7 @@ static int slot_of(u64 h) {
 }
 
 /* One reference to `o` dropped, a handle's, a lookup's or a waiter entry's; at none its index is free. No host request:
- * the host's closes are the last handle's (w2m_object_close). */
+ * the host's closes are the last handle's (w2m_object_close). The table held. */
 static void unref(struct object *o) {
     if (--o->refs == 0) o->kind = FREE;
 }
@@ -108,23 +155,29 @@ static void unref(struct object *o) {
  * 352, card 2 of docs/design-handles-and-sync-objects-2026-11-26.md), as an NT lookup holds one: "Incrementing this
  * count prevents the object from being deleted while the pointer is being referenced. The caller must decrement the
  * reference count with ObDereferenceObject as soon as it is done with the object" (Microsoft Learn,
- * ObReferenceObjectByHandle). A wait that blocks keeps its lookups' references in its entry instead. 0: no object. */
+ * ObReferenceObjectByHandle). A wait that blocks keeps its lookups' references in its entry instead. 0: no object.
+ * The reference is taken, and dropped, under the table's lock (Sprint 355), as ReactOS takes it with the handle entry
+ * locked (ob/obref.c 633-672). */
 static struct object *object_of(u64 h) {
+    hold_handles();
     int i = slot_of(h);
-    if (i < 0) return 0;
-    struct object *o = &objects[handle_object[i] - 1];
-    o->refs++;
+    struct object *o = i < 0 ? 0 : &objects[handle_object[i] - 1];
+    if (o) o->refs++;
+    let_handles_go();
     return o;
 }
 
 static void object_done(struct object *o) {
-    if (o) unref(o);
+    if (!o) return;
+    hold_handles();
+    unref(o);
+    let_handles_go();
 }
 
 /* For token.c: a process token's handle, from this table so CloseHandle closes it; and whether h is one. The
  * last error is left (row open). Each accessor below answers a value, never an object, and drops its lookup's
  * reference before it returns, so file.c, processes.c, token.c and threads.c hold none. */
-u64 w2m_object_token(u64 api) { return handle_for(api, new_object(api, TOKEN, 0, 0)); }
+u64 w2m_object_token(u64 api) { return publish(api, TOKEN, 0, 0, 0); }
 int w2m_object_is_token(u64 h) {
     struct object *o = object_of(h);
     int token = o && o->kind == TOKEN;
@@ -139,7 +192,7 @@ int w2m_object_is_open(u64 h) {                                     /* file.c's 
 
 /* For file.c's CreateFileMappingW and MapViewOfFile (Sprint 049): a mapping's handle, holding host descriptor fd
  * and the mapping's size; and a mapping's descriptor and size by handle (0 when h names no mapping). */
-u64 w2m_object_mapping(u64 api, u64 fd, u64 size) { return handle_for(api, new_object(api, MAPPING, (s64)fd, (s64)size)); }
+u64 w2m_object_mapping(u64 api, u64 fd, u64 size) { return publish(api, MAPPING, (s64)fd, (s64)size, 0); }
 int w2m_object_mapping_of(u64 h, u64 *fd, u64 *size) {
     struct object *o = object_of(h);
     int mapping = o && o->kind == MAPPING;
@@ -152,19 +205,29 @@ int w2m_object_mapping_of(u64 h, u64 *fd, u64 *size) {
 }
 
 /* file.c's CloseHandle, for a handle that is not a file's: 1 when it named an object. The last handle makes the
- * host's closes, though a wait's entry may still hold the object. */
+ * host's closes, though a wait's entry may still hold the object. The slot is freed and both counts dropped under the
+ * table's lock; the host's closes are made after it is let go (a leaf makes no host request), from the kind and id
+ * read under it, since once the reference is dropped another vCPU may make the entry a new object (Sprint 355). */
 int w2m_object_close(u64 h) {
+    hold_handles();
     int i = slot_of(h);
-    if (i < 0) return 0;
+    if (i < 0) {
+        let_handles_go();
+        return 0;
+    }
     struct object *o = &objects[handle_object[i] - 1];
     handle_object[i] = 0;
-    if (--o->handles == 0) {
-        if (o->kind == MAPPING) w2m_host(W2M_FILE_CLOSE, (u64)o->count, 0, 0, 0, 0);   /* the views keep their copy */
-        if (o->kind == SHARED_EVENT || o->kind == PIPE_READ || o->kind == PIPE_WRITE ||
-            (o->kind == PROCESS && (u32)o->count != (u32)w2m_teb()->client_process))
-            w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_CLOSE, (u64)o->count, 0, 0, 0);   /* the host's handle count */
-    }
+    int last = --o->handles == 0;
+    u32 kind = o->kind;
+    s64 id = o->count;
     unref(o);
+    let_handles_go();
+    if (last) {
+        if (kind == MAPPING) w2m_host(W2M_FILE_CLOSE, (u64)id, 0, 0, 0, 0);       /* the views keep their copy */
+        if (kind == SHARED_EVENT || kind == PIPE_READ || kind == PIPE_WRITE ||
+            (kind == PROCESS && (u32)id != (u32)w2m_teb()->client_process))
+            w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_CLOSE, (u64)id, 0, 0, 0);   /* the host's handle count */
+    }
     return 1;
 }
 
@@ -184,8 +247,10 @@ static u64 create_event(u64 api, u64 attributes, u64 manual, u64 initial, u64 na
     u64 chars = 0;
     while (((const unsigned short *)name)[chars]) chars++;
     u64 existed = 0;
+    int took = w2m_take_runtime_word();             /* the transport page is every vCPU's; no other lock held */
     u64 id = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_OPEN, name, chars, (manual ? 1 : 0) | (initial ? 2 : 0), &existed);
-    u64 h = handle_for(api, new_object(api, SHARED_EVENT, (s64)id, 0));
+    w2m_let_runtime_word_go(took);
+    u64 h = publish(api, SHARED_EVENT, (s64)id, 0, 0);
     set_error(existed ? ERROR_ALREADY_EXISTS : 0);
     return w2m_logged(api, existed, h);
 }
@@ -240,16 +305,19 @@ static void waiter_add(u32 tid, struct object *o, int slot) {
 }
 
 static void waiter_drop(int i) {
-    unref(&objects[waiters[i].object]);
+    object_done(&objects[waiters[i].object]);
     for (; i + 1 < nwaiters; i++) waiters[i] = waiters[i + 1];
     nwaiters--;
 }
 
+/* The entry's list is the runtime word's (its callers hold it); the references it drops, the table's (Sprint 355). */
 static void waiters_drop(u32 tid) {
     int k = 0;
+    hold_handles();
     for (int i = 0; i < nwaiters; i++)
         if (waiters[i].tid != tid) waiters[k++] = waiters[i];
         else unref(&objects[waiters[i].object]);
+    let_handles_go();
     nwaiters = k;
 }
 
@@ -301,7 +369,9 @@ static int all_of(u32 tid) {
 }
 
 static void all_drop(int i) {
+    hold_handles();
     for (u32 k = 0; k < all_waiters[i].n; k++) unref(&objects[all_waiters[i].objects[k]]);   /* its references */
+    let_handles_go();
     for (; i + 1 < nall; i++) all_waiters[i] = all_waiters[i + 1];
     nall--;
 }
@@ -398,7 +468,12 @@ int w2m_thread_ended(u32 tid);        /* threads.c */
  * all still holds after its last handle closed (Sprint 350) reads unsignaled: its host object is closed, and the host
  * refuses an event request on an id no longer an event (crates/w2m_vm/src/kernel.rs 209-211). */
 static int signaled(struct object *o) {
-    if (!o->handles && (o->kind == SHARED_EVENT || o->kind == PROCESS)) return 0;
+    if (o->kind == SHARED_EVENT || o->kind == PROCESS) {               /* `handles` is the table's (Sprint 355) */
+        hold_handles();
+        u32 open = o->handles;
+        let_handles_go();
+        if (!open) return 0;
+    }
     if (o->kind == THREAD) return w2m_thread_ended((u32)o->count);
     if (o->kind == PROCESS)                                    /* this process runs; another's is the host's */
         return (u32)o->count != (u32)w2m_teb()->client_process &&
@@ -585,11 +660,7 @@ u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms) {
 
 /* For processes.c (Sprint 055): a new handle on a new object; a handle's kind (0: no object) and `count`; its
  * flags; the inheritable handles; and the handles a parent passed, installed at their values on first use. */
-u64 w2m_object_new(u64 api, u32 kind, s64 count, u32 flags) {
-    u64 h = handle_for(api, new_object(api, kind, count, 0));
-    handle_flags[(h - OBJECT_BASE) / 4] = flags;
-    return h;
-}
+u64 w2m_object_new(u64 api, u32 kind, s64 count, u32 flags) { return publish(api, kind, count, 0, flags); }
 u32 w2m_object_kind(u64 h, s64 *count) {
     struct object *o = object_of(h);
     if (!o) return 0;
@@ -598,26 +669,45 @@ u32 w2m_object_kind(u64 h, s64 *count) {
     object_done(o);
     return kind;
 }
-u32 *w2m_object_flags(u64 h) {
+/* For file.c's GetHandleInformation and SetHandleInformation on a pipe's handle (Sprint 055): h's flags before the
+ * change, and the mask's bits made `values`' (mask 0: read alone), both under the table's lock; 0 when h names no
+ * object. Until Sprint 355 it answered a pointer into `handle_flags` that file.c read and wrote after the lookup
+ * returned, with the slot's state no longer held. */
+u32 w2m_object_flags(u64 h, u32 mask, u32 values) {
+    hold_handles();
     int i = slot_of(h);
-    return i < 0 ? 0 : &handle_flags[i];
+    u32 before = i < 0 ? 0 : handle_flags[i];
+    if (i >= 0) handle_flags[i] = (before & ~mask) | (values & mask);
+    let_handles_go();
+    return before;
 }
+/* For processes.c's CreateProcessW: every inheritable slot, read under the table's lock, which a form not in the rows
+ * lets go before it stops the run. */
 int w2m_object_inheritable(u64 (*out)[3], int room) {
     int n = 0;
+    hold_handles();
     for (int i = 0; i < OBJECTS; i++)
         if (handle_object[i] && (handle_flags[i] & 1)) {
-            if (n == room) w2m_unimplemented(W2M_API_CreateProcessW, room);   /* more than the list holds */
+            if (n == room) {
+                let_handles_go();
+                w2m_unimplemented(W2M_API_CreateProcessW, room);   /* more than the list holds */
+            }
             struct object *o = &objects[handle_object[i] - 1];
-            if (o->kind != SHARED_EVENT && o->kind != PIPE_READ && o->kind != PIPE_WRITE && o->kind != PROCESS)
+            if (o->kind != SHARED_EVENT && o->kind != PIPE_READ && o->kind != PIPE_WRITE && o->kind != PROCESS) {
+                let_handles_go();
                 w2m_unimplemented(W2M_API_CreateProcessW, o->kind);    /* inheriting such a handle: not in the rows */
+            }
             out[n][0] = OBJECT_BASE + 4 * (u64)i;
             out[n][1] = o->kind;
             out[n][2] = (u64)o->count;
             n++;
         }
+    let_handles_go();
     return n;
 }
 
+/* The parent's handles installed at their values, once. The table held; a form not in the rows, or a full table, lets
+ * it go before it stops the run. */
 static void inherit_init(void) {
     if (inherited_ready) return;
     inherited_ready = 1;
@@ -625,8 +715,15 @@ static void inherit_init(void) {
     for (u64 k = 0; k < t[0]; k++) {
         u64 h = t[4 + 3 * k], kind = t[5 + 3 * k], id = t[6 + 3 * k];
         int i = (int)((h - OBJECT_BASE) / 4);
-        if (h < OBJECT_BASE || (h - OBJECT_BASE) % 4 || i >= OBJECTS) w2m_unimplemented(W2M_API_CreateProcessW, h);
-        int o = new_object(W2M_API_CreateProcessW, (u32)kind, (s64)id, 0);
+        if (h < OBJECT_BASE || (h - OBJECT_BASE) % 4 || i >= OBJECTS) {
+            let_handles_go();
+            w2m_unimplemented(W2M_API_CreateProcessW, h);
+        }
+        int o = new_object((u32)kind, (s64)id, 0);
+        if (o < 0) {
+            let_handles_go();
+            w2m_unimplemented(W2M_API_CreateProcessW, OBJECTS);
+        }
         handle_object[i] = o + 1;
         handle_flags[i] = 1;                                    /* inherited handles stay inheritable */
         objects[o].refs = objects[o].handles = 1;
@@ -655,7 +752,7 @@ static u32 current_tid(void) { return (u32)w2m_teb()->client_thread; }
 static u32 current_pid(void) { return (u32)w2m_teb()->client_process; }
 
 /* For threads.c (Sprint 051): a new handle on thread tid's object, and the thread a handle names. */
-u64 w2m_object_thread(u64 api, u32 tid) { return handle_for(api, new_object(api, THREAD, tid, 0)); }
+u64 w2m_object_thread(u64 api, u32 tid) { return publish(api, THREAD, tid, 0, 0); }
 int w2m_object_thread_of(u64 h, u32 *tid) {
     struct object *o = object_of(h);
     int thread = o && o->kind == THREAD;
@@ -674,19 +771,27 @@ u64 k32_DuplicateHandle(u64 source_process, u64 source, u64 target_process, u64 
     u64 h;
     if (source == CURRENT_THREAD || source == CURRENT_PROCESS) {
         if (options & DUPLICATE_CLOSE_SOURCE) w2m_unimplemented(W2M_API_DuplicateHandle, source);
-        h = source == CURRENT_THREAD ? handle_for(W2M_API_DuplicateHandle, new_object(W2M_API_DuplicateHandle, THREAD, current_tid(), 0))
-                                     : handle_for(W2M_API_DuplicateHandle, new_object(W2M_API_DuplicateHandle, PROCESS, current_pid(), 0));
+        h = source == CURRENT_THREAD ? publish(W2M_API_DuplicateHandle, THREAD, current_tid(), 0, 0)
+                                     : publish(W2M_API_DuplicateHandle, PROCESS, current_pid(), 0, 0);
     } else {
+        /* the source's lookup and the copy's slot under one holding, so no close between them frees its object */
+        hold_handles();
         int i = slot_of(source);
+        h = 0;
+        if (i >= 0) h = options & DUPLICATE_CLOSE_SOURCE ? source         /* the copy keeps the slot (row dup.close_source) */
+                                                         : handle_for(handle_object[i] - 1);
+        let_handles_go();
         if (i < 0) {
-            if (w2m_is_file_handle(source) || w2m_is_std_handle(source))   /* a file's or the console's: not in the rows */
-                w2m_unimplemented(W2M_API_DuplicateHandle, source);
+            /* the file table and the standard handles are the runtime word's, which this call's bridge does not hold */
+            int took = w2m_take_runtime_word();
+            int other = w2m_is_file_handle(source) || w2m_is_std_handle(source);
+            w2m_let_runtime_word_go(took);
+            if (other) w2m_unimplemented(W2M_API_DuplicateHandle, source);   /* a file's or the console's: not in the rows */
             *(u64 *)out = 0;
             set_error(ERROR_INVALID_HANDLE);
             return w2m_logged(W2M_API_DuplicateHandle, source, 0);
         }
-        if (options & DUPLICATE_CLOSE_SOURCE) h = source;          /* the copy keeps the slot (row dup.close_source) */
-        else h = handle_for(W2M_API_DuplicateHandle, handle_object[i] - 1);
+        if (!h) w2m_unimplemented(W2M_API_DuplicateHandle, OBJECTS);
     }
     *(u64 *)out = h;
     return w2m_logged(W2M_API_DuplicateHandle, source, 1);
@@ -700,7 +805,7 @@ u64 k32_OpenThread(u64 access, u64 inherit, u64 tid) {
         set_error(ERROR_INVALID_PARAMETER);
         return w2m_logged(W2M_API_OpenThread, tid, 0);
     }
-    return w2m_logged(W2M_API_OpenThread, tid, handle_for(W2M_API_OpenThread, new_object(W2M_API_OpenThread, THREAD, current_tid(), 0)));
+    return w2m_logged(W2M_API_OpenThread, tid, publish(W2M_API_OpenThread, THREAD, current_tid(), 0, 0));
 }
 
 u64 k32_GetThreadId(u64 h) {

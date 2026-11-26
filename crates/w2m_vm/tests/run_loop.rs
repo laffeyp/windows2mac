@@ -1817,6 +1817,88 @@ fn the_lost_wakeup_guest_ends_inside_its_limit_on_two_vcpus() {
     );
 }
 
+/// The floor on each handle_values thread's rounds that saw the other's round count move, on two vCPUs (Sprint 355).
+const HANDLE_OVERLAP_FLOOR: u64 = 1_000;
+
+/// Sprint 355 (card 4 of `docs/design-handles-and-sync-objects-2026-11-26.md`, its judge "Handles from two vCPUs"):
+/// `tests/data/timed_waits/handle_values`, two threads each creating 10,000 unnamed events and duplicating one of the
+/// main thread's five objects 10,000 times (two unnamed manual-reset events, one set, one never; a named event; a
+/// semaphore and an auto-reset event that a third thread waits on, blocking, and gives, while it also makes pipes and
+/// sets and reads their flags), waiting on the first three's duplicates and the new event with a zero timeout and
+/// closing both; then 1,000 bursts each of 16 duplicates of each event, a zero-timeout wait for any of the set one's,
+/// every 8th burst 1 ms waits for any and for all of the unset one's, which block and drop their entries' references
+/// at the timeout, and the 32 closes. CreateEventA and DuplicateHandle take the handle table's lock and no runtime word,
+/// CloseHandle and the waits take the word; meanwhile the main thread's 1 ms waits for any and for all of those events
+/// block too. Its `.counts` section holds the values claimed and those two threads held at once, the closes answered
+/// TRUE and FALSE, the waits and duplicates that answered unlike their object, the first create's value with the value
+/// of the first of 256 creates after every handle is closed, each thread's rounds that saw the other's move, and the
+/// main thread's and the third thread's rounds. One run on one vCPU and 20 on two, each printed; every run must end at
+/// ExitProcess with "done", its counts whole (104,064 values claimed, none at once with another, 104,332 closes TRUE,
+/// none FALSE, none unlike its object, 256 made, the first value again), and on two vCPUs each thread's overlap above
+/// `HANDLE_OVERLAP_FLOOR`, a round of the main thread's and of the third's, and the second vCPU running a thread. The failed runs are
+/// counted before the assertion, so a plant's result says in how many of 20 runs it failed.
+#[test]
+fn two_vcpus_creating_duplicating_and_closing_handles_keep_every_value_distinct_and_every_slot() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let data = fs::read(root.join("tests/data/timed_waits/handle_values.exe")).unwrap();
+    let loaded = load(&data, None, "probe.exe").unwrap();
+    let program = &loaded.images[0];
+    let section = program
+        .pe
+        .sections
+        .iter()
+        .find(|s| s.name == ".counts")
+        .expect("handle_values' .counts section");
+    let counts_va = program.base + u64::from(section.virtual_address);
+    const NAMES: [&str; 12] = [
+        "claimed", "collided", "closed", "refused", "wrong", "first", "again", "made", "overlap1", "overlap2", "waits",
+        "third",
+    ];
+    let whole: [u64; 8] = [104_064, 0, 104_332, 0, 0, 0x2000, 0x2000, 256];
+    let mut failed = Vec::new();
+    for (run, vcpus) in std::iter::once((0, 1)).chain((1..=20).map(|run| (run, 2))) {
+        let mut start = Start::console("probe.exe");
+        start.vcpus = vcpus;
+        let mut guest = guest_with(&root, &loaded, &start);
+        let out = run_limited(
+            &mut guest,
+            &loaded,
+            &mut HostCompiler::default(),
+            Some(Duration::from_secs(60)),
+        );
+        let at = guest.offset(counts_va).expect("the .counts section mapped");
+        let words: Vec<u64> = (0..12).map(|i| guest.memory_view().read_u64(at + 8 * i)).collect();
+        let stdout = String::from_utf8_lossy(&guest.served.stdout).into_owned();
+        let counts: Vec<String> = NAMES.iter().zip(&words).map(|(n, w)| format!("{n} {w:#x}")).collect();
+        println!(
+            "handle_values on {vcpus} vCPU(s), run {run}: stop {:?}, output {stdout:?}, {}, runs by vCPU {:?}",
+            out.stop,
+            counts.join(", "),
+            out.runs_by_vcpu
+        );
+        let overlapped = vcpus == 1
+            || (words[8] > HANDLE_OVERLAP_FLOOR
+                && words[9] > HANDLE_OVERLAP_FLOOR
+                && words[10] > 0
+                && words[11] > 0
+                && out.runs_by_vcpu.len() == 2
+                && out.runs_by_vcpu[1] > 0);
+        if out.stop != (Stop::ExitProcess { code: 0 }) || stdout != "done\n" || words[..8] != whole || !overlapped {
+            failed.push(format!(
+                "{vcpus} vCPU(s) run {run}: stop {:?}, output {stdout:?}, {}",
+                out.stop,
+                counts.join(", ")
+            ));
+        }
+    }
+    assert!(
+        failed.is_empty(),
+        "handle_values: {} of 21 runs failed (one on one vCPU, 20 on two): {failed:#?}",
+        failed.len()
+    );
+}
+
 /// Sprint 350's amendment (found by builder-350's reading of `sync_objects.c`): `probes/wait_closed_handle`. A worker
 /// waits 1000 ms on a semaphore; the main thread closes its only handle, makes a new semaphore, releases it once and
 /// waits on it with a zero timeout. The main thread's row, which Windows defines, is held on one vCPU and on two to the

@@ -67,10 +67,15 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 
 /// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
 /// is the frozen one with these changes, which their own tests judge (Sprint 272).
-const DEPARTURES: [(&str, &str); 9] = [
+const DEPARTURES: [(&str, &str); 11] = [
     (
         "tools/guest_runtime/block_compiler.c",
         "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
+    ),
+    (
+        "tools/guest_runtime/file.c",
+        "Sprint 355: Get/SetHandleInformation on a pipe read and change its flags through w2m_object_flags, which does \
+         both under the handle table's lock, not through a pointer into the slots' flags used after the lookup returned",
     ),
     (
         "tools/guest_runtime/heap.c",
@@ -78,10 +83,17 @@ const DEPARTURES: [(&str, &str); 9] = [
          services, which take no runtime word",
     ),
     (
+        "tools/guest_runtime/processes.c",
+        "Sprint 355: w2m_object_flags declared with its new form, the flags read and changed under the handle table's \
+         lock",
+    ),
+    (
         "tools/guest_runtime/runtime.c",
         "Sprint 341: w2m_logged's counts by atomic add and each record at the index its add reserved, for callers on \
          several vCPUs at once; Sprint 342: w2m_unimplemented holds the runtime word before its host request, which \
-         a service of lock class none makes without it",
+         a service of lock class none makes without it; Sprint 355: w2m_take_runtime_word and \
+         w2m_let_runtime_word_go, the word taken and let go by a service whose bridge holds none, for a named event's \
+         EVENT_OPEN and DuplicateHandle's look at the file table",
     ),
     (
         "tools/guest_runtime/sync_objects.c",
@@ -90,7 +102,10 @@ const DEPARTURES: [(&str, &str); 9] = [
          last handle's close; a retried WaitForSingleObject waits on its entry's object; the WAIT_FAILED path clears \
          the deadline; Sprint 352: a lookup holds a reference its caller drops, every blocked wait of any kind keeps \
          its lookups' references in its entry and its retry, WaitForMultipleObjects's too, reads its objects there, \
-         and WaitForMultipleObjects of a handle naming no object answers WAIT_FAILED and ERROR_INVALID_HANDLE",
+         and WaitForMultipleObjects of a handle naming no object answers WAIT_FAILED and ERROR_INVALID_HANDLE; \
+         Sprint 355: the handle table's own lock around its slots, their flags, the parent's handles' install, an \
+         entry's allocation and both its counts, for the ten creates, duplicates and id lookups that take no runtime \
+         word and inside the word for every other caller; a named event's EVENT_OPEN takes the word in the C",
     ),
     (
         "tools/guest_runtime/thread_storage.c",

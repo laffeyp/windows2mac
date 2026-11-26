@@ -356,11 +356,13 @@ static struct open_file *file_or_stop(u64 api, u64 handle) {
 
 /* GetHandleInformation on a file handle (Sprint 048, contracts/windows.file.security): HANDLE_FLAG_INHERIT (1) as
  * CreateFileW's SECURITY_ATTRIBUTES set it, and both flags as SetHandleInformation set them (Sprint 049). */
-u32 *w2m_object_flags(u64 h);          /* sync_objects.c (Sprint 055): a pipe's or an event's handle */
+/* sync_objects.c (Sprint 055): a pipe's or an event's handle's flags before the change, the mask's bits made the
+ * values', read and written under the handle table's lock (Sprint 355) */
+u32 w2m_object_flags(u64 h, u32 mask, u32 values);
 
 u64 k32_GetHandleInformation(u64 handle, u64 flags) {
     if (!file_of(handle) && w2m_is_pipe(handle)) {
-        *(u32 *)flags = *w2m_object_flags(handle);
+        *(u32 *)flags = w2m_object_flags(handle, 0, 0);
         return w2m_logged(W2M_API_GetHandleInformation, handle, 1);
     }
     struct open_file *f = file_or_stop(W2M_API_GetHandleInformation, handle);
@@ -373,8 +375,7 @@ u64 k32_GetHandleInformation(u64 handle, u64 flags) {
  * values; other bits are ignored, and the answer is still TRUE (row set.unknown_bit). */
 u64 k32_SetHandleInformation(u64 handle, u64 mask, u64 flags) {
     if (!file_of(handle) && w2m_is_pipe(handle)) {
-        u32 m = (u32)mask & (HANDLE_FLAG_INHERIT | HANDLE_FLAG_PROTECT_FROM_CLOSE), *f = w2m_object_flags(handle);
-        *f = (*f & ~m) | ((u32)flags & m);
+        w2m_object_flags(handle, (u32)mask & (HANDLE_FLAG_INHERIT | HANDLE_FLAG_PROTECT_FROM_CLOSE), (u32)flags);
         return w2m_logged(W2M_API_SetHandleInformation, handle, 1);
     }
     struct open_file *f = file_or_stop(W2M_API_SetHandleInformation, handle);

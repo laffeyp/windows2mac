@@ -1806,9 +1806,9 @@ mod tests {
             );
             // Sprint 343: the heap's class takes its lock in the C (`heap.c` `hold`), so its bridge is class none's,
             // word for word, untraced and traced; Sprint 345: so does the slots' class (`thread_storage.c`
-            // `hold_slots`)
+            // `hold_slots`); Sprint 355: so does the handle table's class (`sync_objects.c` `hold_handles`)
             for traced in [false, true] {
-                for (class, lock) in [("heap", Lock::Heap), ("slots", Lock::Slots)] {
+                for (class, lock) in [("heap", Lock::Heap), ("slots", Lock::Slots), ("handles", Lock::Handles)] {
                     assert_eq!(
                         bridge_words(lock, traced, timed),
                         bridge_words(Lock::None, traced, timed),

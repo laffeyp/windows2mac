@@ -43,7 +43,7 @@ typedef unsigned short u16;
 
 u64 w2m_object_new(u64 api, u32 kind, s64 count, u32 flags);    /* sync_objects.c */
 u32 w2m_object_kind(u64 h, s64 *count);
-u32 *w2m_object_flags(u64 h);
+u32 w2m_object_flags(u64 h, u32 mask, u32 values);
 int w2m_object_inheritable(u64 (*out)[3], int room);
 const u16 *w2m_working_directory(void);                         /* paths.c */
 u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms);
