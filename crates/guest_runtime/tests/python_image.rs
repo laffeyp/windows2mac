@@ -75,7 +75,8 @@ const DEPARTURES: [(&str, &str); 5] = [
     (
         "tools/guest_runtime/runtime.c",
         "Sprint 341: w2m_logged's counts by atomic add and each record at the index its add reserved, for callers on \
-         several vCPUs at once",
+         several vCPUs at once; Sprint 342: w2m_unimplemented holds the runtime word before its host request, which \
+         a service of lock class none makes without it",
     ),
     (
         "tools/vm_compiler/vm_compiler.c",

@@ -1197,10 +1197,9 @@ fn statsize_through_w2m_vm_on_two_vcpus_reads_its_own_stat() {
     }
 }
 
-/// The threads family's probe through `w2m-vm` on `vcpus` vCPUs, with the binary and DLL its row in
-/// `store/family_runs/known-2026-10-29.tsv` names, as the gates run it (Sprint 330).
-fn threads_probe(vcpus: u32) -> (String, String, String) {
-    let root = root();
+/// The threads family's probe as its row in `store/family_runs/known-2026-10-29.tsv` names it: the program, the DLL's
+/// name beside it and the DLL's file.
+fn threads_probe_files(root: &Path) -> (PathBuf, String, PathBuf) {
     let known = fs::read_to_string(root.join("store/family_runs/known-2026-10-29.tsv")).unwrap();
     let row: Vec<&str> = known
         .lines()
@@ -1211,15 +1210,118 @@ fn threads_probe(vcpus: u32) -> (String, String, String) {
     let (binary, beside, options) = (row[2], row[4], row[6]);
     let (name, dll) = beside.split_once(':').expect("the threads probe's DLL");
     assert_eq!(options, "-", "the threads probe takes no start options");
+    (
+        root.join(format!("store/binaries/{binary}.exe")),
+        name.to_string(),
+        root.join(format!("store/binaries/{dll}.dll")),
+    )
+}
+
+/// The threads family's probe through `w2m-vm` on `vcpus` vCPUs, with the binary and DLL its row names, as the gates
+/// run it (Sprint 330).
+fn threads_probe(vcpus: u32) -> (String, String, String) {
+    let (program, name, dll) = threads_probe_files(&root());
     let extra = [
         "--beside".to_string(),
-        name.to_string(),
-        root.join(format!("store/binaries/{dll}.dll")).to_string_lossy().into(),
+        name,
+        dll.to_string_lossy().into(),
         "--max-steps".into(),
         "20000000000".into(),
     ];
-    let program = root.join(format!("store/binaries/{binary}.exe"));
     program_through_w2m_vm("threads", &program, &extra, vcpus)
+}
+
+/// Sprint 342 (Sprint 341's Deferred: the none-class bridges let a guest's own calls judge the ring): the threads
+/// family's probe runs in this process, as `w2m-vm` runs it (its DLL beside it, its file bridge on a fresh directory,
+/// its 20,000,000,000 steps), on two vCPUs to its ExitProcess. Its main thread and its worker, which runs on vCPU 1
+/// while the main thread goes on (Sprint 330), each call GetCurrentThreadId, GetLastError, SetLastError, TlsGetValue
+/// and TlsSetValue (`probes/threads/threads.c` 79-91, 114-157), services of lock class none whose bridges take no
+/// runtime word. After the run the call ring's `count` is its `per_api` total, each of those five counted, and the
+/// 0x1000 bytes of the exception area past the ring are as before the run.
+#[test]
+fn the_threads_probes_own_calls_keep_the_ring_exact_on_two_vcpus() {
+    use guest_runtime::layout::{EXCEPTION_OFF, RING_OFF};
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let (program, name, dll) = threads_probe_files(&root);
+    let (data, dll_bytes) = (fs::read(&program).unwrap(), fs::read(&dll).unwrap());
+    let supply = |d: &str| name.eq_ignore_ascii_case(d).then(|| dll_bytes.clone());
+    let loaded = load(&data, Some(&supply), "probe.exe").unwrap();
+    let app = std::env::temp_dir().join(format!("w2m-ring-threads-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&app);
+    fs::create_dir_all(&app).unwrap();
+    fs::write(app.join("probe.exe"), &data).unwrap();
+    fs::write(app.join(&name), &dll_bytes).unwrap();
+    let mut start = Start::console("probe.exe");
+    start.vcpus = 2;
+    start.app_root = Some(app.clone());
+    let mut guest = guest_with(&root, &loaded, &start);
+    guest.served.files = Some(w2m_vm::file_bridge::FileBridge::new(&app, false, None).unwrap());
+    guest.limited = true;
+    let (ring, exception) = (
+        guest.offset(PROCESS_VA + RING_OFF).unwrap(),
+        guest.offset(PROCESS_VA + EXCEPTION_OFF).unwrap(),
+    );
+    let mut exception_before = vec![0u8; 0x1000];
+    guest.memory_view().read(exception, &mut exception_before);
+    let vm = Vm::new(40).unwrap();
+    vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
+        .unwrap();
+    let limit = Some(Duration::from_secs(60));
+    let out = run_compiling(
+        &mut guest,
+        &loaded,
+        &vm,
+        limit,
+        20_000_000_000,
+        &mut HostCompiler::default(),
+    )
+    .unwrap();
+    drop(guest.served.files.take());
+    let _ = fs::remove_dir_all(&app);
+    assert_eq!(
+        out.stop,
+        Stop::ExitProcess { code: 0 },
+        "the threads probe on two vCPUs"
+    );
+    assert!(
+        out.runs_by_vcpu.len() == 2 && out.runs_by_vcpu[1] > 0,
+        "the threads probe: vCPU 1 ran no guest code, runs {:?}",
+        out.runs_by_vcpu
+    );
+    let view = guest.memory_view();
+    let count = view.read_u64(ring);
+    let per_api = |id: u64| view.read_u64(ring + 16 + 8 * id);
+    let total: u64 = (0..512).map(per_api).sum();
+    let names = guest_runtime::services::api_names(&guest.services).unwrap();
+    let id = |n: &str| names.iter().position(|m| m == n).unwrap() as u64 + 1;
+    let none: Vec<(&str, u64)> = [
+        "GetCurrentThreadId",
+        "GetLastError",
+        "SetLastError",
+        "TlsGetValue",
+        "TlsSetValue",
+    ]
+    .iter()
+    .map(|n| (*n, per_api(id(n))))
+    .collect();
+    let mut after = vec![0u8; 0x1000];
+    view.read(exception, &mut after);
+    let changed = (0..0x1000).find(|&i| after[i] != exception_before[i]);
+    eprintln!(
+        "the threads probe on two vCPUs: the ring's count {count}, per_api's total {total}, the none-class calls \
+         {none:?}, runs by vCPU {:?}, the exception area's first change {changed:?}",
+        out.runs_by_vcpu
+    );
+    assert_eq!(count, total, "the ring's count against per_api's total");
+    assert!(
+        none.iter().all(|(_, n)| *n > 0),
+        "a none-class service not called: {none:?}"
+    );
+    assert_eq!(
+        changed, None,
+        "the exception area's first changed byte past EXCEPTION_OFF"
+    );
 }
 
 /// Sprint 330 (the run-loop design's 4c3b3, the kick): SuspendThread of the threads probe's spinner, which runs on vCPU

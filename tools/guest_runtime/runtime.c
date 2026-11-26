@@ -52,7 +52,26 @@ void *memset(void *dst, int c, unsigned long n) {
 
 void bzero(void *dst, unsigned long n) { memset(dst, 0, n); }
 
+/* The runtime word, RUN_TABLE + 0x80: `monitor_code::RUNTIME_LOCK` (crates/w2m_vm), which guest.rs's tests hold this
+ * line to. */
+#define W2M_RUNTIME_LOCK_OFF 0x80
+
+/* The runtime word held by this vCPU (Sprint 342): a service of lock class none reaches w2m_unimplemented without it
+ * (QueryPerformanceCounter's null `out`, TlsSetValue's slot never made), and the transport page is every vCPU's, so the
+ * request waits for the word as a bridge's take does, by compare-and-swap of 0 for this vCPU's owner word (lock_runtime:
+ * CASA, acquire); a caller that holds it already keeps it. The run ends at the request, which lets the word go. */
+static void hold_runtime_word(void) {
+    u32 *word = (u32 *)(W2M_RUN_TABLE_VA + W2M_RUNTIME_LOCK_OFF);
+    u32 own = (u32)*(const volatile u64 *)(W2M_MONITOR_DATA_VA + W2M_LOCK_OWNER_OFF);
+    if (__atomic_load_n(word, __ATOMIC_RELAXED) == own) return;
+    for (;;) {
+        u32 free = 0;
+        if (__atomic_compare_exchange_n(word, &free, own, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+    }
+}
+
 void w2m_unimplemented(u64 api, u64 detail) {
+    hold_runtime_word();
     host_call(W2M_HOST_UNIMPLEMENTED, api, detail);     /* the host stops the run; no return */
     for (;;) {}
 }

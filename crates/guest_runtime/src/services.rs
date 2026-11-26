@@ -7,13 +7,55 @@
 
 use std::collections::BTreeMap;
 
-/// One service: its DLL ("KERNEL32", "WS2_32.DLL", ...), import name, C symbol, and whether it sets RAX.
+/// One service: its DLL ("KERNEL32", "WS2_32.DLL", ...), import name, C symbol, whether it sets RAX, and its lock
+/// class.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Service {
     pub dll: String,
     pub name: String,
     pub symbol: String,
     pub sets_rax: bool,
+    pub lock: Lock,
+}
+
+/// What a service's bridge holds around its call into the C (Change 1 of the host design,
+/// `docs/design-rust-host-2026-10-24.md` 95-140, "a runtime call takes the lock of what it touches, or none"): the
+/// runtime word, which every service took until Sprint 342, or none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lock {
+    RuntimeWord,
+    None,
+}
+
+/// KERNEL32's services of lock class none (Sprint 342; Sprint 339's proof, re-read on Sprint 341's tree): each stores
+/// only to its calling thread's own state (its TEB's last error and TLS slots, `last_error.c` 8, `thread_storage.c`
+/// 58-65 and 108) or its caller's memory (QueryPerformanceCounter's `*out`, `process.c` 55), and to the call ring by
+/// atomic add (`w2m_logged`, `runtime.c` 84-94); its one host request, `w2m_unimplemented`'s, takes the word itself.
+/// FlsGetValue and FlsSetValue wait for the TLS and FLS slots' lock, Change 1's next class: FlsSetValue's first set
+/// links a block into the process-wide list (`thread_storage.c` 50-51).
+pub const NO_LOCK: [&str; 7] = [
+    "GetCurrentProcessId",
+    "GetCurrentThreadId",
+    "GetLastError",
+    "QueryPerformanceCounter",
+    "SetLastError",
+    "TlsGetValue",
+    "TlsSetValue",
+];
+
+/// The clock mode in which QueryPerformanceCounter reads `CNTVCT_EL0` alone (`process.c` 42-47): mode 1 asks the host
+/// through the shared transport page (`w2m_host`, `runtime.c` 26-35), and mode 2 reads the shared warp word.
+pub const GUEST_COUNTER: u64 = 0;
+
+impl Service {
+    /// The lock its bridge holds in a run of clock mode `clock_mode` (the monitor's `CLOCK_MODE` word, set once at the
+    /// load): its class, but QueryPerformanceCounter's on any clock but the guest's counter is the runtime word.
+    pub fn lock_in(&self, clock_mode: u64) -> Lock {
+        if self.name == "QueryPerformanceCounter" && clock_mode != GUEST_COUNTER {
+            return Lock::RuntimeWord;
+        }
+        self.lock
+    }
 }
 
 /// Python's `\s`: space, tab, newline, carriage return, form feed, vertical tab.
@@ -103,11 +145,17 @@ pub fn services(texts: &BTreeMap<String, String>) -> Result<Vec<Service>, String
                 if out.iter().any(|s| s.dll == dll && s.name == name) {
                     return Err(format!("{file}: {prefix}_{name} is defined twice"));
                 }
+                let lock = if dll == "KERNEL32" && NO_LOCK.contains(&name.as_str()) {
+                    Lock::None
+                } else {
+                    Lock::RuntimeWord
+                };
                 out.push(Service {
                     dll,
                     symbol: format!("{prefix}_{name}"),
                     name,
                     sets_rax: !void,
+                    lock,
                 });
                 continue;
             }
@@ -176,6 +224,44 @@ mod tests {
                 ("WS2_32.DLL".to_string(), "WSAStartup".to_string(), true),
             ]
         );
+    }
+
+    /// Sprint 342: in the runtime's own C, the services of lock class none are the seven `NO_LOCK` names, each
+    /// KERNEL32's, and every other service takes the runtime word; QueryPerformanceCounter is none on the guest's
+    /// counter alone, and a service of the word's class stays on it on every clock.
+    #[test]
+    fn the_seven_services_of_lock_class_none_are_the_proofs() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let all = services(&crate::texts(&root).unwrap()).unwrap();
+        let mut none: Vec<String> = all
+            .iter()
+            .filter(|s| s.lock == Lock::None)
+            .map(|s| format!("{}!{}", s.dll, s.name))
+            .collect();
+        none.sort();
+        assert_eq!(
+            none,
+            [
+                "KERNEL32!GetCurrentProcessId",
+                "KERNEL32!GetCurrentThreadId",
+                "KERNEL32!GetLastError",
+                "KERNEL32!QueryPerformanceCounter",
+                "KERNEL32!SetLastError",
+                "KERNEL32!TlsGetValue",
+                "KERNEL32!TlsSetValue",
+            ],
+            "the services of lock class none"
+        );
+        let named = |n: &str| all.iter().find(|s| s.name == n).unwrap();
+        let qpc = named("QueryPerformanceCounter");
+        assert_eq!(
+            [0, 1, 2].map(|mode| qpc.lock_in(mode)),
+            [Lock::None, Lock::RuntimeWord, Lock::RuntimeWord],
+            "QueryPerformanceCounter's lock in clock modes 0, 1 and 2"
+        );
+        for n in ["FlsGetValue", "FlsSetValue", "CreateEventW"] {
+            assert_eq!(named(n).lock_in(GUEST_COUNTER), Lock::RuntimeWord, "{n}'s lock");
+        }
     }
 
     #[test]

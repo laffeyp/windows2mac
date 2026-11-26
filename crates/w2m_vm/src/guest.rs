@@ -16,7 +16,7 @@ use guest_runtime::layout::{
     RUNTIME_STACK, RUNTIME_STACK_SIZE, SLICE_UNTIL, SPLIT_TABLES, SPLIT_TABLES_SIZE, STATE_OFF, TIME_SLICE,
     TRANSLATION_TABLES, VM_COMPILER,
 };
-use guest_runtime::services::Service;
+use guest_runtime::services::{Lock, Service};
 use pe_loader::{Loaded, THUNK_BASE};
 use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, VirtualMemory};
 
@@ -542,16 +542,41 @@ fn traced_form(
     symbols.get("w2m_traced").copied()
 }
 
+/// The run's clock mode, the monitor's `CLOCK_MODE` word on vCPU 0's page: `process::write` sets it once at the load
+/// from the start options (`process.rs` 280-287), before any bridge is built, and the host only reads it after; the
+/// mode a bridge's lock is chosen for (Sprint 342, `Service::lock_in`).
+fn clock_mode_at_load(mem: ConcurrentGuestMemory<'_>) -> u64 {
+    mem.read_u64(VcpuPages::FIRST.monitor + process::CLOCK_MODE)
+}
+
+/// The words `code` would emit, branched over (Sprint 342): a `b` past as many words, the rest `UDF #0`, never reached,
+/// so the code after lies where it would with them.
+fn branched_over(a: &mut Assembler, code: impl FnOnce(&mut Assembler)) {
+    let mut probe = Assembler::new(a.here());
+    code(&mut probe);
+    let words = probe.finish().len();
+    let past = a.label();
+    a.branch(a64::b, past);
+    a.emit(&vec![0; words - 1]);
+    a.bind(past);
+}
+
+/// A service's bridge (`_bridge`, vm_backend 3746). `service`: its address, whether it sets RAX, and the lock its call
+/// holds (`Service::lock_in`). Change 1's class none (Sprint 342): a call of class none takes no runtime word, and a
+/// traced call takes it whatever its class, since `w2m_traced` writes the process-wide trace area. The take's and the
+/// release's words are branched over for it, not dropped, so every later bridge and block lies where the frozen host
+/// put it: `run_loop.rs`' `qpc_runs_past_its_first_decline_compiling_as_the_python_host` holds each host compile's code
+/// address to the Python host's.
 fn bridge(
     a: &mut Assembler,
-    service: Option<(u64, bool)>,
+    service: Option<(u64, bool, Lock)>,
     thunk: u64,
     resume_va: u64,
     switch_va: u64,
     timed: bool,
     traced: Option<u64>,
 ) {
-    let Some((service_va, sets_rax)) = service else {
+    let Some((service_va, sets_rax, lock)) = service else {
         a.emit(&[a64::hvc(HVC_NO_SERVICE)]);
         return;
     };
@@ -573,12 +598,21 @@ fn bridge(
         }
         None => service_va,
     };
+    let word = lock == Lock::RuntimeWord || traced.is_some();
     a.emit(&count_from_budget());
-    take_runtime(a, timed);
+    if word {
+        take_runtime(a, timed);
+    } else {
+        branched_over(a, |a| take_runtime(a, timed));
+    }
     a.emit(&a64::mov_imm(16, target));
     a.emit(&[a64::blr(16)]);
     a.emit(&budget_from_count());
-    release_runtime(a, timed, Site::Bridge, (16, 1, 2));
+    if word {
+        release_runtime(a, timed, Site::Bridge, (16, 1, 2));
+    } else {
+        branched_over(a, |a| release_runtime(a, timed, Site::Bridge, (16, 1, 2)));
+    }
     a.emit(&a64::mov_imm(16, state));
     if sets_rax {
         a.emit(&[a64::str(8, 0, 16, 0)]);
@@ -904,6 +938,7 @@ impl Guest {
         let mut cache = CodeCache {
             mem: memory_view(&memory),
         };
+        let clock_mode = clock_mode_at_load(cache.mem);
         let switch_va = cache.put(|a| switch_stub(a, false, switch, code.dispatch_va, timed))?;
         let switch_slice_va = cache.put(|a| switch_stub(a, true, switch, code.dispatch_va, timed))?;
         let thunks = loaded.thunks.clone();
@@ -912,7 +947,8 @@ impl Guest {
         let mut bridges = BTreeMap::new();
         let mut bind = |cache: &mut CodeCache<'_>, thunk: u64, name: &str| -> Result<(), GuestError> {
             let (dll, function) = name.split_once('!').unwrap_or((name, ""));
-            let service = service_for(services, dll, function).map(|s| (image.symbols[&s.symbol], s.sets_rax));
+            let service = service_for(services, dll, function)
+                .map(|s| (image.symbols[&s.symbol], s.sets_rax, s.lock_in(clock_mode)));
             let traced = traced_form(&start.call_trace, function, &image.symbols, cache.mem, thunk);
             let va = cache.put(|a| bridge(a, service, thunk, code.dispatch_va, switch_va, timed, traced))?;
             bridges.insert(thunk, va);
@@ -1331,7 +1367,9 @@ impl Guest {
         let thunk = THUNK_BASE + 16 * self.served.thunks.len() as u64;
         self.served.thunks.insert(thunk, name.to_string());
         let (dll, function) = name.split_once('!').unwrap_or((name, ""));
-        let service = service_for(&self.services, dll, function).map(|s| (self.symbols[&s.symbol], s.sets_rax));
+        let clock_mode = clock_mode_at_load(memory_view(&self.memory));
+        let service = service_for(&self.services, dll, function)
+            .map(|s| (self.symbols[&s.symbol], s.sets_rax, s.lock_in(clock_mode)));
         let (dispatch_va, switch_va, timed) = (self.code.dispatch_va, self.switch_va, self.time_runtime_word);
         let traced = traced_form(
             &self.call_trace,
@@ -1692,7 +1730,80 @@ impl Guest {
 
 #[cfg(test)]
 mod tests {
-    use super::init_stub_code;
+    use super::{Assembler, CODE_CACHE, Lock, MONITOR_VA, THUNK_BASE, a64, bridge, init_stub_code};
+
+    /// A bridge's words for a service of `lock`, traced or not, timed or not.
+    fn bridge_words(lock: Lock, traced: bool, timed: bool) -> Vec<u32> {
+        let at = MONITOR_VA + CODE_CACHE;
+        let mut a = Assembler::new(at);
+        let traced = traced.then_some(at + 0x2000);
+        bridge(
+            &mut a,
+            Some((at + 0x3000, true, lock)),
+            THUNK_BASE + 16,
+            at + 0x1000,
+            at + 0x1800,
+            timed,
+            traced,
+        );
+        a.finish()
+    }
+
+    /// Sprint 342: the runtime's C takes the runtime word where the monitor code does (`runtime.c`'s
+    /// `W2M_RUNTIME_LOCK_OFF`, read by `w2m_unimplemented` for a service of lock class none).
+    #[test]
+    fn the_cs_runtime_word_is_the_monitor_codes() {
+        let c = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tools/guest_runtime/runtime.c"
+        ))
+        .unwrap();
+        let off = c
+            .lines()
+            .find_map(|l| l.strip_prefix("#define W2M_RUNTIME_LOCK_OFF 0x"))
+            .map(|h| u64::from_str_radix(h.trim(), 16).unwrap());
+        assert_eq!(
+            off,
+            Some(crate::monitor_code::RUNTIME_LOCK),
+            "runtime.c's W2M_RUNTIME_LOCK_OFF"
+        );
+    }
+
+    /// Sprint 342 (Change 1's class none): a bridge of lock class none, untraced, holds no `lock_runtime` (its CASA) and
+    /// no `unlock_runtime` (its STLR), timed or not, and is as long as the runtime word's, so the code after it does not
+    /// move; a bridge of the runtime word's class holds both, and a traced bridge of class none is the word's, word for
+    /// word.
+    #[test]
+    fn a_bridge_of_lock_class_none_takes_no_runtime_word() {
+        let has = |words: &[u32], w: u32| words.contains(&w);
+        for timed in [false, true] {
+            let none = bridge_words(Lock::None, false, timed);
+            let word = bridge_words(Lock::RuntimeWord, false, timed);
+            let traced = bridge_words(Lock::None, true, timed);
+            assert!(
+                !has(&none, a64::CASA_WZR_W18_X16) && !has(&none, a64::STLR_WZR_X16),
+                "a bridge of class none, timed {timed}: lock_runtime's CASA {} and unlock_runtime's STLR {}",
+                has(&none, a64::CASA_WZR_W18_X16),
+                has(&none, a64::STLR_WZR_X16)
+            );
+            for (what, words) in [("the runtime word's class", &word), ("class none, traced", &traced)] {
+                assert!(
+                    has(words, a64::CASA_WZR_W18_X16) && has(words, a64::STLR_WZR_X16),
+                    "a bridge of {what}, timed {timed}, takes and releases no runtime word"
+                );
+            }
+            assert_eq!(
+                none.len(),
+                word.len(),
+                "timed {timed}: the bridge of class none's length"
+            );
+            assert_eq!(
+                traced,
+                bridge_words(Lock::RuntimeWord, true, timed),
+                "timed {timed}: a traced bridge of class none against the runtime word's"
+            );
+        }
+    }
 
     /// vm_backend 4002-4021's bytes, instruction by instruction, for mono's base and entry as the batch run maps
     /// them (0x1180010000, RVA 0x31953c), a failure thunk and the trace header (Sprint 205's card; Sprint 207).
