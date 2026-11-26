@@ -1736,6 +1736,15 @@
     "block_starts": 298,
     "undecodable": 0
   },
+  "af9e903d12825b807699d6750f08a498194e281816fb716f1e3e325d7e11e083.exe": {
+    "reachable_instructions": 654,
+    "walked": 654,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 179,
+    "undecodable": 0
+  },
   "b08ba1fef04feddc4e5dad53663c5873a0322e162316b54247fa0565c9f05c4b.exe": {
     "reachable_instructions": 2831,
     "walked": 2831,

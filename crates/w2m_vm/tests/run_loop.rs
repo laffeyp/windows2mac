@@ -1718,6 +1718,94 @@ fn a_semaphore_made_after_a_waited_handle_is_closed_keeps_its_unit_on_one_and_tw
     }
 }
 
+/// Sprint 352 (card 2 of `docs/design-handles-and-sync-objects-2026-11-26.md`): `probes/wait_closed_kinds`. The rows
+/// Windows defines, held on one vCPU and on two to the Windows runner's (run 45813040124, three runs, those rows alike),
+/// field by field, each unlike field named: WaitForMultipleObjects of a closed handle beside a set event, for any and
+/// for all, its return, last error and the event left set (`any_closed`, `all_closed`); the main thread's calls
+/// (`main`); and 600 rounds over every caller of the object lookup (`cycles`), more than the 256 objects, so a lookup's
+/// reference left undropped stops the run at a create. The rows Microsoft Learn leaves undefined, a manual-reset event's
+/// handle closed during a wait and then set through a duplicate (`manual_worker`), and a wait for any of a closed and
+/// an open event, the open one then set (`any_worker`), are recorded and held to the design's range: the outcome the
+/// wait would have had, WAIT_OBJECT_0 (the set event's index) at the set, or its timeout. Before the change the run
+/// stopped at the first row, "WaitForMultipleObjects argument form 0x2004" (`sync_objects.c` 461).
+#[test]
+fn the_waits_keep_their_objects_and_a_closed_handle_fails_wait_for_multiple_objects_on_one_and_two_vcpus() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let run = root.join("store/probe-runs/45813040124");
+    let row_of = |body: &str, name: &str| -> serde_json::Map<String, serde_json::Value> {
+        let line = body
+            .lines()
+            .find(|l| l.starts_with(&format!("{{\"s\":\"{name}\",")))
+            .unwrap_or_else(|| panic!("no {name} row in {body}"));
+        match serde_json::from_str(line).unwrap() {
+            serde_json::Value::Object(m) => m,
+            other => panic!("a row not an object: {other}"),
+        }
+    };
+    let defined = ["any_closed", "all_closed", "main", "cycles"];
+    let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
+    eprintln!("wait_closed_kinds on Windows:\n{windows}");
+    for i in [2, 3] {
+        let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
+        for name in defined {
+            assert_eq!(
+                row_of(&body, name),
+                row_of(&windows, name),
+                "the Windows run's body-{i} {name} row against body-1's"
+            );
+        }
+    }
+    let binary = fs::read_to_string(run.join("probe.sha256")).unwrap();
+    let program = root.join(format!("store/binaries/{}.exe", binary.trim()));
+    for vcpus in [1, 2] {
+        let (stopped, said, stderr) = program_through_w2m_vm("wait_closed_kinds", &program, &[], vcpus);
+        eprintln!("wait_closed_kinds on {vcpus} vCPUs:\n{said}");
+        assert_eq!(
+            stopped, "ExitProcess { code: 0 }",
+            "wait_closed_kinds on {vcpus} vCPUs; its rows {said}; stderr {stderr}"
+        );
+        let names: Vec<&str> = said.lines().map(|l| l.split('"').nth(3).unwrap_or("?")).collect();
+        assert_eq!(
+            names,
+            [
+                "any_closed",
+                "all_closed",
+                "main",
+                "manual_worker",
+                "any_worker",
+                "cycles"
+            ],
+            "wait_closed_kinds's rows on {vcpus} vCPUs"
+        );
+        let mut unlike = Vec::new();
+        for name in defined {
+            let (expected, seen) = (row_of(&windows, name), row_of(&said, name));
+            for (k, v) in &expected {
+                if seen.get(k) != Some(v) {
+                    let had = seen.get(k).map_or("none".into(), |x| x.to_string());
+                    unlike.push(format!("{name}.{k}: {had} against {v}"));
+                }
+            }
+            if seen.len() != expected.len() {
+                unlike.push(format!("{name}: {} fields against {}", seen.len(), expected.len()));
+            }
+        }
+        assert!(
+            unlike.is_empty(),
+            "wait_closed_kinds on {vcpus} vCPUs, fields unlike Windows' {unlike:?}"
+        );
+        for (name, set) in [("manual_worker", 0), ("any_worker", 1)] {
+            let wait = row_of(&said, name)["wait"].as_u64();
+            assert!(
+                wait == Some(set) || wait == Some(258),
+                "wait_closed_kinds on {vcpus} vCPUs, {name}.wait {wait:?} outside the design's range \
+                 [{set}, 258]: the set's index or the timeout"
+            );
+        }
+    }
+}
+
 /// Deferred (Sprint 329), met at Sprint 330: the single-process guests no other test runs on two vCPUs, through
 /// `w2m-vm`, each held to its stop and output in `store/batch_run/first-stop-2026-10-28.tsv` (`qpc2`'s clock reading by
 /// its form, as `batch_run.rs` holds it).

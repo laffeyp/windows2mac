@@ -88,7 +88,9 @@ const DEPARTURES: [(&str, &str); 8] = [
         "Sprint 350: a blocked wait's entry holds a reference to its object, so CloseHandle of its last handle leaves \
          it alive and its index unused until the wait ends, its handles counted apart so the host's closes stay at the \
          last handle's close; a retried WaitForSingleObject waits on its entry's object; the WAIT_FAILED path clears \
-         the deadline",
+         the deadline; Sprint 352: a lookup holds a reference its caller drops, every blocked wait of any kind keeps \
+         its lookups' references in its entry and its retry, WaitForMultipleObjects's too, reads its objects there, \
+         and WaitForMultipleObjects of a handle naming no object answers WAIT_FAILED and ERROR_INVALID_HANDLE",
     ),
     (
         "tools/guest_runtime/thread_storage.c",

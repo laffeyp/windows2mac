@@ -42,7 +42,8 @@ enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN, THREAD, PRO
 /* Objects, and the handles that name them (Sprint 049: DuplicateHandle gives a second handle to one object, which
  * lives until its last handle closes). count: semaphore count, event 0/1, mutex recursion, a thread's id, a file
  * mapping's host descriptor (its own; closed with the mapping); max: a mapping's size. refs: its handles and the
- * blocked waits' entries that name it (Sprint 350), so an object outlives its last handle while a waiter holds it, as
+ * blocked waits' entries that name it (Sprint 350), and each lookup in flight (`object_of`, Sprint 352), every blocked
+ * wait of any kind holding an entry, so an object outlives its last handle while a waiter holds it, as
  * Windows keeps one while a pointer reference holds it ("Such objects can still be accessed by pointer as long as their
  * reference count remains greater than zero", Microsoft Learn, Life Cycle of an Object): before, CloseHandle freed it
  * under a waiter's entry, the next object took its index, and that object's first release went to the stale entry
@@ -97,32 +98,57 @@ static int slot_of(u64 h) {
     return handle_object[i] ? i : -1;
 }
 
+/* One reference to `o` dropped, a handle's, a lookup's or a waiter entry's; at none its index is free. No host request:
+ * the host's closes are the last handle's (w2m_object_close). */
+static void unref(struct object *o) {
+    if (--o->refs == 0) o->kind = FREE;
+}
+
+/* The object h names, holding a reference the caller drops by `object_done` when it is done with the object (Sprint
+ * 352, card 2 of docs/design-handles-and-sync-objects-2026-11-26.md), as an NT lookup holds one: "Incrementing this
+ * count prevents the object from being deleted while the pointer is being referenced. The caller must decrement the
+ * reference count with ObDereferenceObject as soon as it is done with the object" (Microsoft Learn,
+ * ObReferenceObjectByHandle). A wait that blocks keeps its lookups' references in its entry instead. 0: no object. */
 static struct object *object_of(u64 h) {
     int i = slot_of(h);
-    return i < 0 ? 0 : &objects[handle_object[i] - 1];
+    if (i < 0) return 0;
+    struct object *o = &objects[handle_object[i] - 1];
+    o->refs++;
+    return o;
+}
+
+static void object_done(struct object *o) {
+    if (o) unref(o);
 }
 
 /* For token.c: a process token's handle, from this table so CloseHandle closes it; and whether h is one. The
- * last error is left (row open). */
+ * last error is left (row open). Each accessor below answers a value, never an object, and drops its lookup's
+ * reference before it returns, so file.c, processes.c, token.c and threads.c hold none. */
 u64 w2m_object_token(u64 api) { return handle_for(api, new_object(api, TOKEN, 0, 0)); }
-int w2m_object_is_token(u64 h) { struct object *o = object_of(h); return o && o->kind == TOKEN; }
-int w2m_object_is_open(u64 h) { return object_of(h) != 0; }        /* file.c's handle calls (Sprint 049) */
+int w2m_object_is_token(u64 h) {
+    struct object *o = object_of(h);
+    int token = o && o->kind == TOKEN;
+    object_done(o);
+    return token;
+}
+int w2m_object_is_open(u64 h) {                                     /* file.c's handle calls (Sprint 049) */
+    struct object *o = object_of(h);
+    object_done(o);
+    return o != 0;
+}
 
 /* For file.c's CreateFileMappingW and MapViewOfFile (Sprint 049): a mapping's handle, holding host descriptor fd
  * and the mapping's size; and a mapping's descriptor and size by handle (0 when h names no mapping). */
 u64 w2m_object_mapping(u64 api, u64 fd, u64 size) { return handle_for(api, new_object(api, MAPPING, (s64)fd, (s64)size)); }
 int w2m_object_mapping_of(u64 h, u64 *fd, u64 *size) {
     struct object *o = object_of(h);
-    if (!o || o->kind != MAPPING) return 0;
-    *fd = (u64)o->count;
-    *size = (u64)o->max;
-    return 1;
-}
-
-/* One reference to `o` dropped, a handle's or a waiter entry's; at none its index is free. No host request: the host's
- * closes are the last handle's (w2m_object_close). */
-static void unref(struct object *o) {
-    if (--o->refs == 0) o->kind = FREE;
+    int mapping = o && o->kind == MAPPING;
+    if (mapping) {
+        *fd = (u64)o->count;
+        *size = (u64)o->max;
+    }
+    object_done(o);
+    return mapping;
 }
 
 /* file.c's CloseHandle, for a handle that is not a file's: 1 when it named an object. The last handle makes the
@@ -191,7 +217,8 @@ u64 k32_CreateMutexA(u64 attributes, u64 owned, u64 name) {
  * A granted waiter's retried wait returns WAIT_OBJECT_0 without taking the object again. Before this, the running
  * thread took each unit ahead of the waiters it woke: the game's Background Job.Worker 1-15 never returned from
  * their wait (frontier 643a6283510c-1791830368398119000; game run 38216081440 seq 1402-1508). A thread waiting on any
- * of several objects is a waiter on each that hands over, `slot` its index in the wait's array (-1 for a wait on one):
+ * of several objects is a waiter on each (from Sprint 352 on every one, not only those that hand over, so its retry
+ * reads them all from its entries), `slot` its index in the wait's array (-1 for a wait on one):
  * a release grants it the object unless another of its entries was granted first, and its retried wait returns that
  * slot (laptop run lap-20261014T094031671Z-93f645c3, row event_auto.multiple_waiter: the waiter gets the second event,
  * the setter's zero-timeout wait finds it taken). A wait for all of several re-checks as before (no row). */
@@ -205,9 +232,10 @@ static int waiter_of(u32 tid) {
     return -1;
 }
 
-/* A waiter entered, holding a reference to its object (Sprint 350); dropped, letting it go. */
+/* A waiter entered, holding a reference to its object (Sprint 350): from Sprint 352 its lookup's, which the entry keeps
+ * (design, "A wait that blocks keeps its lookups' references in its waiter entry"); dropped, letting it go. Every wait
+ * that blocks enters one, of any kind; only a semaphore's, an auto-reset event's and a mutex's are granted. */
 static void waiter_add(u32 tid, struct object *o, int slot) {
-    o->refs++;
     waiters[nwaiters++] = (struct waiter){tid, (int)(o - objects), 0, slot};
 }
 
@@ -236,6 +264,7 @@ static int handed_over(struct object *o) {
 }
 
 static void grant(struct object *o) {
+    if (!handed_over(o)) return;           /* a manual-reset event's waiters re-check its state (w2m_signal) */
     int index = (int)(o - objects);
     for (int i = 0; i < nwaiters; i++) {
         if (waiters[i].object != index || waiters[i].granted) continue;
@@ -302,8 +331,8 @@ static void grant_all(void) {
     }
 }
 
-static struct object *must(u64 api, u64 h, u32 kind1, u32 kind2) {
-    struct object *o = object_of(h);
+/* The object of one of two kinds that h's lookup gave, its reference the caller's; any other stops the run. */
+static struct object *must(u64 api, u64 h, struct object *o, u32 kind1, u32 kind2) {
     if (!o || (o->kind != kind1 && o->kind != kind2)) w2m_unimplemented(api, h);   /* not in the rows */
     return o;
 }
@@ -312,26 +341,29 @@ u64 k32_SetEvent(u64 h) {
     struct object *o = object_of(h);
     if (o && o->kind == SHARED_EVENT) w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_SET, (u64)o->count, 0, 0, 0);
     else {
-        o = must(W2M_API_SetEvent, h, EVENT_MANUAL, EVENT_AUTO);
+        must(W2M_API_SetEvent, h, o, EVENT_MANUAL, EVENT_AUTO);
         o->count = 1;
         grant(o);
         grant_all();
     }
-    if (!o || o->kind != EVENT_AUTO)                    /* an auto-reset event's grants readied its waiters (095) */
-        w2m_signal(o && o->kind != SHARED_EVENT ? (u64)o : 0);     /* a manual-reset event releases every waiter */
+    if (o->kind != EVENT_AUTO)                          /* an auto-reset event's grants readied its waiters (095) */
+        w2m_signal(o->kind != SHARED_EVENT ? (u64)o : 0);          /* a manual-reset event releases every waiter */
+    object_done(o);
     return w2m_logged(W2M_API_SetEvent, h, 1);
 }
 u64 k32_ResetEvent(u64 h) {
     struct object *o = object_of(h);
     if (o && o->kind == SHARED_EVENT) w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_RESET, (u64)o->count, 0, 0, 0);
-    else must(W2M_API_ResetEvent, h, EVENT_MANUAL, EVENT_AUTO)->count = 0;
+    else must(W2M_API_ResetEvent, h, o, EVENT_MANUAL, EVENT_AUTO)->count = 0;
+    object_done(o);
     return w2m_logged(W2M_API_ResetEvent, h, 1);
 }
 
 u64 k32_ReleaseSemaphore(u64 h, u64 count, u64 previous) {
-    struct object *o = must(W2M_API_ReleaseSemaphore, h, SEMAPHORE, SEMAPHORE);
+    struct object *o = must(W2M_API_ReleaseSemaphore, h, object_of(h), SEMAPHORE, SEMAPHORE);
     if ((s32)count <= 0) w2m_unimplemented(W2M_API_ReleaseSemaphore, count);
     if (o->count + (s32)count > o->max) {
+        object_done(o);
         set_error(ERROR_TOO_MANY_POSTS);
         return w2m_logged(W2M_API_ReleaseSemaphore, h, 0);
     }
@@ -339,12 +371,14 @@ u64 k32_ReleaseSemaphore(u64 h, u64 count, u64 previous) {
     o->count += (s32)count;
     grant(o);
     grant_all();
+    object_done(o);
     return w2m_logged(W2M_API_ReleaseSemaphore, h, 1);
 }
 
 u64 k32_ReleaseMutex(u64 h) {
-    struct object *o = must(W2M_API_ReleaseMutex, h, MUTEX, MUTEX);
+    struct object *o = must(W2M_API_ReleaseMutex, h, object_of(h), MUTEX, MUTEX);
     if (o->count == 0 || (u32)o->max != current_tid()) {
+        object_done(o);
         set_error(ERROR_NOT_OWNER);
         return w2m_logged(W2M_API_ReleaseMutex, h, 0);
     }
@@ -353,6 +387,7 @@ u64 k32_ReleaseMutex(u64 h) {
         grant(o);
         grant_all();
     }
+    object_done(o);
     return w2m_logged(W2M_API_ReleaseMutex, h, 1);
 }
 
@@ -402,41 +437,42 @@ static int timed_out(u32 ms, u64 key) {
     return 0;
 }
 
-/* Every way out (Sprint 350): a handle below the objects' stops the run; WAIT_FAILED clears the deadline, and the thread
- * has no entry then; a grant, a signaled object and a timeout each drop the entry if there is one and clear the
- * deadline (`timed_out` clears its own); a block keeps both, its entry holding the object, and a full list stops the
- * run. A retried wait whose thread has an entry waits on the entry's object, not on what `h` names now: the object
- * outlives a handle closed meanwhile, as an NT wait holds its object by reference (ReactOS NtWaitForSingleObject,
+/* Every way out (Sprint 350; Sprint 352 every kind): a handle below the objects' stops the run; one that names no object
+ * answers WAIT_FAILED and ERROR_INVALID_HANDLE and clears the deadline, and only a first try meets it, a retry reading
+ * its entry; a grant, a signaled object and a timeout each take the object if signaled, then drop the entry on a retry
+ * or the lookup's reference on a first try, and clear the deadline (`timed_out` clears its own); a block keeps the
+ * deadline and, on a first try, enters the thread's entry with the lookup's reference (a full list stops the run), of
+ * any kind of object. A retried wait waits on the entry's object, not on what `h` names now: the object outlives a
+ * handle closed meanwhile, as an NT wait holds its object by reference (ReactOS NtWaitForSingleObject,
  * ObReferenceObjectByHandle before KeWaitForSingleObject and ObDereferenceObject after). */
 static u64 wait_one(u64 api, u64 h, u32 ms) {
     int w = waiter_of(current_tid());
     struct object *o = w >= 0 ? &objects[waiters[w].object] : object_of(h);
     if (!o) {
         if (h < OBJECT_BASE) w2m_unimplemented(api, h);         /* a file, a process, a pseudo-handle: not in the rows */
-        w2m_thread_scratch()->wait_deadline = 0;                /* a blocked wait on an object no entry held */
+        w2m_thread_scratch()->wait_deadline = 0;
         set_error(ERROR_INVALID_HANDLE);
         return w2m_logged(api, h, WAIT_FAILED);
     }
+    u64 ret = WAIT_OBJECT_0;
     if (w >= 0 && waiters[w].granted) {                        /* a release handed it over while this thread waited */
-        waiter_drop(w);
         w2m_thread_scratch()->wait_deadline = 0;
-        return w2m_logged(api, h, WAIT_OBJECT_0);
-    }
-    if (!signaled(o)) {
+    } else if (!signaled(o)) {
         if (!timed_out(ms, (u64)o)) {                                  /* retried: the bridge does not return */
-            if (w < 0 && handed_over(o)) {
+            if (w < 0) {
                 if (nwaiters == WAITERS) w2m_unimplemented(api, WAITERS);
-                waiter_add(current_tid(), o, -1);
+                waiter_add(current_tid(), o, -1);                      /* the lookup's reference, kept */
             }
             return 0;
         }
-        if (w >= 0) waiter_drop(w);
-        return w2m_logged(api, h, WAIT_TIMEOUT);
+        ret = WAIT_TIMEOUT;
+    } else {
+        w2m_thread_scratch()->wait_deadline = 0;
+        take(o);
     }
     if (w >= 0) waiter_drop(w);
-    w2m_thread_scratch()->wait_deadline = 0;
-    take(o);
-    return w2m_logged(api, h, WAIT_OBJECT_0);
+    else object_done(o);
+    return w2m_logged(api, h, ret);
 }
 
 u64 k32_WaitForSingleObject(u64 h, u64 ms) { return wait_one(W2M_API_WaitForSingleObject, h, (u32)ms); }
@@ -446,76 +482,103 @@ u64 k32_WaitForSingleObjectEx(u64 h, u64 ms, u64 alertable) {
     return wait_one(W2M_API_WaitForSingleObjectEx, h, (u32)ms);
 }
 
-/* Every way out (Sprint 350): a count of 0 or past 64, a handle naming no object (a retry's too, its entries left: the
- * run ends there) and a full list stop the run; for all, a grant and every object signaled drop its entry and its
- * references and clear the deadline, a timeout drops them (`timed_out` clears the deadline), a block keeps them; for
- * any, a grant and a signaled object drop every entry of the thread and clear the deadline, a timeout drops them, a
- * block keeps them, each entry holding its object. A retry looks its handles up again. */
+/* The objects of thread tid's blocked wait for any, by their index in its array, from its entries (Sprint 352); n. */
+static u32 entries_of(u32 tid, struct object **os) {
+    u32 n = 0;
+    for (int w = 0; w < nwaiters; w++)
+        if (waiters[w].tid == tid && waiters[w].slot >= 0) {
+            os[waiters[w].slot] = &objects[waiters[w].object];
+            n++;
+        }
+    return n;
+}
+
+/* The lookups' references of a first try, dropped. */
+static void objects_done(struct object **os, u32 n) {
+    for (u32 i = 0; i < n; i++) object_done(os[i]);
+}
+
+/* Every way out (Sprint 350; Sprint 352): a count of 0 or past 64, a handle below the objects' and a full list stop the
+ * run. A first try looks its handles up, each lookup holding a reference; a handle that names no object answers
+ * WAIT_FAILED and ERROR_INVALID_HANDLE, as Microsoft Learn's WaitForMultipleObjects documents a failure ("WAIT_FAILED
+ * (DWORD)0xFFFFFFFF: The function has failed. To get extended error information, call GetLastError."), the references
+ * taken dropped and the deadline cleared. A retry reads its objects from its entries, not by its handles again, so a
+ * handle closed during the wait leaves the wait on its object. For all, a grant and every object signaled (taken then)
+ * and a timeout drop its entry or the lookups' references and clear the deadline (`timed_out` clears its own on a
+ * timeout); a block keeps them, a first try's references entering a wait-all's entry. For any, likewise, with an entry
+ * for each object, of any kind, holding its lookup's reference; only the handed-over kinds' entries are granted. */
 u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms) {
     const u64 *hs = (const u64 *)handles;
     u32 n = (u32)count;
     if (n == 0 || n > 64) w2m_unimplemented(W2M_API_WaitForMultipleObjects, n);
+    u32 me = current_tid();
     struct object *os[64];
-    for (u32 i = 0; i < n; i++) {
+    int a = (u32)all ? all_of(me) : -1;
+    int retry = (u32)all ? a >= 0 : waiter_of(me) >= 0;
+    if (retry && (u32)all)
+        for (u32 i = 0; i < n; i++) os[i] = &objects[all_waiters[a].objects[i]];
+    else if (retry && entries_of(me, os) != n)
+        w2m_unimplemented(W2M_API_WaitForMultipleObjects, n);    /* a retry with another count: not in the rows */
+    for (u32 i = 0; !retry && i < n; i++) {
         os[i] = object_of(hs[i]);
-        if (!os[i]) w2m_unimplemented(W2M_API_WaitForMultipleObjects, hs[i]);   /* not in the rows */
+        if (os[i]) continue;
+        if (hs[i] < OBJECT_BASE) w2m_unimplemented(W2M_API_WaitForMultipleObjects, hs[i]);   /* not in the rows */
+        objects_done(os, i);
+        w2m_thread_scratch()->wait_deadline = 0;
+        set_error(ERROR_INVALID_HANDLE);
+        return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_FAILED);
     }
     if ((u32)all) {
-        u32 me = current_tid();
-        int a = all_of(me);
+        u64 ret = WAIT_OBJECT_0;
         if (a >= 0 && all_waiters[a].granted) {               /* a release took them for this thread (Sprint 095) */
-            all_drop(a);
             w2m_thread_scratch()->wait_deadline = 0;
-            return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_OBJECT_0);
-        }
-        for (u32 i = 0; i < n; i++)
-            if (!signaled(os[i])) {
+        } else {
+            u32 i = 0;
+            while (i < n && signaled(os[i])) i++;
+            if (i < n) {
                 if (!timed_out((u32)ms, 0)) {                   /* retried: the bridge does not return */
                     if (a < 0) {
                         if (nall == ALL_WAITERS) w2m_unimplemented(W2M_API_WaitForMultipleObjects, ALL_WAITERS);
                         all_waiters[nall] = (struct all_waiter){me, n, 0, {0}};
-                        for (u32 k = 0; k < n; k++) {                /* each held by reference (Sprint 350) */
+                        for (u32 k = 0; k < n; k++)              /* the lookups' references, kept */
                             all_waiters[nall].objects[k] = (int)(os[k] - objects);
-                            os[k]->refs++;
-                        }
                         nall++;
                     }
                     return 0;
                 }
-                if (a >= 0) all_drop(a);
-                return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_TIMEOUT);
+                ret = WAIT_TIMEOUT;
+            } else {
+                w2m_thread_scratch()->wait_deadline = 0;
+                for (i = 0; i < n; i++) take(os[i]);
             }
+        }
         if (a >= 0) all_drop(a);
-        w2m_thread_scratch()->wait_deadline = 0;
-        for (u32 i = 0; i < n; i++) take(os[i]);
-        return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_OBJECT_0);
+        else objects_done(os, n);
+        return w2m_logged(W2M_API_WaitForMultipleObjects, n, ret);
     }
-    u32 me = current_tid();
+    u64 ret = WAIT_TIMEOUT;
     for (int w = 0; w < nwaiters; w++)
         if (waiters[w].tid == me && waiters[w].granted) {        /* a release handed one over while this thread waited */
-            u32 slot = (u32)waiters[w].slot;
-            waiters_drop(me);
+            ret = WAIT_OBJECT_0 + (u32)waiters[w].slot;
             w2m_thread_scratch()->wait_deadline = 0;
-            return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_OBJECT_0 + slot);
+            break;
         }
-    for (u32 i = 0; i < n; i++)
+    for (u32 i = 0; ret == WAIT_TIMEOUT && i < n; i++)
         if (signaled(os[i])) {
-            waiters_drop(me);
             w2m_thread_scratch()->wait_deadline = 0;
             take(os[i]);
-            return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_OBJECT_0 + i);
+            ret = WAIT_OBJECT_0 + i;
         }
-    if (!timed_out((u32)ms, 0)) {                                /* retried: the bridge does not return */
-        if (waiter_of(me) < 0)
-            for (u32 i = 0; i < n; i++)
-                if (handed_over(os[i])) {
-                    if (nwaiters == WAITERS) w2m_unimplemented(W2M_API_WaitForMultipleObjects, WAITERS);
-                    waiter_add(me, os[i], (int)i);
-                }
+    if (ret == WAIT_TIMEOUT && !timed_out((u32)ms, 0)) {         /* retried: the bridge does not return */
+        if (!retry) {
+            if (nwaiters + (int)n > WAITERS) w2m_unimplemented(W2M_API_WaitForMultipleObjects, WAITERS);
+            for (u32 i = 0; i < n; i++) waiter_add(me, os[i], (int)i);   /* the lookups' references, kept */
+        }
         return 0;
     }
-    waiters_drop(me);
-    return w2m_logged(W2M_API_WaitForMultipleObjects, n, WAIT_TIMEOUT);
+    if (retry) waiters_drop(me);
+    else objects_done(os, n);
+    return w2m_logged(W2M_API_WaitForMultipleObjects, n, ret);
 }
 
 /* Sleep: threads.c (Sprint 051), which lets other threads run while it waits. */
@@ -531,7 +594,9 @@ u32 w2m_object_kind(u64 h, s64 *count) {
     struct object *o = object_of(h);
     if (!o) return 0;
     *count = o->count;
-    return o->kind;
+    u32 kind = o->kind;
+    object_done(o);
+    return kind;
 }
 u32 *w2m_object_flags(u64 h) {
     int i = slot_of(h);
@@ -593,9 +658,10 @@ static u32 current_pid(void) { return (u32)w2m_teb()->client_process; }
 u64 w2m_object_thread(u64 api, u32 tid) { return handle_for(api, new_object(api, THREAD, tid, 0)); }
 int w2m_object_thread_of(u64 h, u32 *tid) {
     struct object *o = object_of(h);
-    if (!o || o->kind != THREAD) return 0;
-    *tid = (u32)o->count;
-    return 1;
+    int thread = o && o->kind == THREAD;
+    if (thread) *tid = (u32)o->count;
+    object_done(o);
+    return thread;
 }
 
 /* DuplicateHandle(hSourceProcessHandle, hSourceHandle, hTargetProcessHandle, lpTargetHandle, dwDesiredAccess,
@@ -639,16 +705,18 @@ u64 k32_OpenThread(u64 access, u64 inherit, u64 tid) {
 
 u64 k32_GetThreadId(u64 h) {
     if (h == CURRENT_THREAD) return w2m_logged(W2M_API_GetThreadId, h, current_tid());
-    struct object *o = object_of(h);
-    if (!o || o->kind != THREAD) w2m_unimplemented(W2M_API_GetThreadId, h);           /* not in the rows */
-    return w2m_logged(W2M_API_GetThreadId, h, (u64)o->count);
+    struct object *o = must(W2M_API_GetThreadId, h, object_of(h), THREAD, THREAD);   /* else not in the rows */
+    u64 tid = (u64)o->count;
+    object_done(o);
+    return w2m_logged(W2M_API_GetThreadId, h, tid);
 }
 
 u64 k32_GetProcessId(u64 h) {
     if (h == CURRENT_PROCESS) return w2m_logged(W2M_API_GetProcessId, h, current_pid());
-    struct object *o = object_of(h);
-    if (!o || o->kind != PROCESS) w2m_unimplemented(W2M_API_GetProcessId, h);         /* not in the rows */
-    return w2m_logged(W2M_API_GetProcessId, h, (u64)o->count);
+    struct object *o = must(W2M_API_GetProcessId, h, object_of(h), PROCESS, PROCESS);   /* else not in the rows */
+    u64 pid = (u64)o->count;
+    object_done(o);
+    return w2m_logged(W2M_API_GetProcessId, h, pid);
 }
 
 u64 k32_CreateSemaphoreW(u64 attributes, u64 initial, u64 maximum, u64 name) {

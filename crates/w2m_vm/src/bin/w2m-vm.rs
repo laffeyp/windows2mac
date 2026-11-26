@@ -548,6 +548,25 @@ mod run {
         Ok(())
     }
 
+    /// An exit ledger at `path`, its process column hashed with the runtime image's addresses named against the frozen
+    /// host's image (Sprint 352, `exit_ledger::Renaming`), as the frozen-host fixture the ledger is compared with holds
+    /// them. The frozen image is the one `batch_run.rs` reads; without it the ledger is refused, not hashed raw.
+    fn ledger_at(root: &Path, path: &Path) -> Result<w2m_vm::exit_ledger::Ledger, String> {
+        use guest_runtime::layout::RUNTIME_IMAGE_SIZE;
+        let (_, ours) = guest_runtime::build(root, &runtime_defines(), RUNTIME_IMAGE_VA)
+            .map_err(|e| format!("the guest runtime's build: {e:?}"))?;
+        let (_, frozen) = guest_runtime::frozen_python_image(root, &runtime_defines(), RUNTIME_IMAGE_VA)
+            .map_err(|e| format!("the exit ledger's frozen image: {e:?}"))?;
+        let mut ledger = w2m_vm::exit_ledger::Ledger::create(path)?;
+        ledger.renaming = Some(w2m_vm::exit_ledger::Renaming::new(
+            &ours,
+            &frozen,
+            RUNTIME_IMAGE_VA,
+            RUNTIME_IMAGE_SIZE,
+        ));
+        Ok(ledger)
+    }
+
     /// The guest for `loaded` and `start`: the runtime image the build makes, its services, the exported modules and
     /// the VM compiler's symbols, as `tests/test_timed_waits.py` builds a VM.
     fn guest_of(root: &Path, loaded: &pe_loader::Loaded, start: &Start) -> Result<Guest, String> {
@@ -726,7 +745,7 @@ mod run {
             // the parent's exit ledger, this process's rows beside it (Sprint 206)
             if let Some(base) = text("exit_ledger") {
                 let path = std::path::PathBuf::from(format!("{base}.{pid}"));
-                guest.exit_ledger = Some(w2m_vm::exit_ledger::Ledger::create(&path)?);
+                guest.exit_ledger = Some(ledger_at(&root, &path)?);
             }
             guest.served.link = Some(w2m_vm::turns::Link::Child(w2m_vm::turns::ChildLink::open(
                 page_fd, slot, pid,
@@ -945,7 +964,7 @@ mod run {
         // the depot mounted read-only, as `run_frontier.py` 268 makes it (Sprint 204)
         guest.served.files = Some(w2m_vm::file_bridge::FileBridge::new(directory, true, None)?);
         if let Some(path) = ledger {
-            guest.exit_ledger = Some(w2m_vm::exit_ledger::Ledger::create(&root.join(path))?);
+            guest.exit_ledger = Some(ledger_at(&root, &root.join(path))?);
         }
         if let Some(path) = judge {
             guest.block_judge = Some(w2m_vm::block_judge::BlockJudge::create(&root.join(path))?);
