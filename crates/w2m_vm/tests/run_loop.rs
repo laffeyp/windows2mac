@@ -1446,6 +1446,72 @@ fn each_threads_last_error_tls_value_and_id_stay_its_own_on_two_vcpus() {
     }
 }
 
+/// Sprint 345 (Change 1's TLS and FLS slots' lock): `probes/thread_slots_race`. Part 1: threads A and B each 20,000
+/// rounds at once, each round taking 8 TLS indices by TlsAlloc, marking each by a compare-and-swap on a shared owner
+/// word, then clearing the marks and freeing them by TlsFree; an index found marked by the other is a `duplicate`.
+/// Part 2: 16 threads each make their FLS data by a first FlsSetValue of one index at once, the main thread frees it,
+/// and a value read back after the free is `stale`. Its rows on two vCPUs and on one, but `tls.overlap`, are held to the
+/// Windows runner's (run 45763850660, three runs alike but `tls.overlap`): `duplicate` 0 and `stale` 0. `tls.overlap`
+/// counts the rounds in which a thread saw the other's round count move: measured before the floor on the slots' lock,
+/// 191 and 191 in each of 21 runs on one vCPU, where the loops meet only at the time slices' switches, and on two, in
+/// 71 runs, 3,072 to 19,633, with one run at 0 and 0 (one thread's 20,000 rounds done before the other's began). On
+/// two vCPUs each is held above `OVERLAP_FLOOR`, which shows the loops ran at once. With the seven
+/// services off the runtime word and no lock, five runs of five on two vCPUs stopped at TlsFree of an index the other
+/// thread had freed ("TlsFree argument form 0x5"), two threads given one index. Ignored until card 346: on two vCPUs
+/// the probe stops at a guest runtime fault inside the code cache ("ESR 0x2000000 (EC 0x0)") in some runs, on HEAD's
+/// C and service classes before this card as after it; it is run by hand, `--run-ignored only`.
+#[test]
+#[ignore = "Sprint 346: the code-cache fault, ELR in MONITOR_VA + 0x640a0..0x68134, EC 0"]
+fn two_threads_taking_and_freeing_tls_and_fls_slots_at_once_never_share_one_on_two_vcpus() {
+    const OVERLAP_FLOOR: u64 = 1_000;
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let run = root.join("store/probe-runs/45763850660");
+    let but_overlap = |body: &str| -> String {
+        body.lines()
+            .filter(|l| !l.starts_with("{\"s\":\"tls.overlap\","))
+            .map(|l| format!("{l}\n"))
+            .collect()
+    };
+    let windows = but_overlap(&fs::read_to_string(run.join("body-1.jsonl")).unwrap());
+    for i in [2, 3] {
+        let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
+        assert_eq!(
+            but_overlap(&body),
+            windows,
+            "the Windows run's body-{i} but tls.overlap against body-1"
+        );
+    }
+    let binary = fs::read_to_string(run.join("probe.sha256")).unwrap();
+    let program = root.join(format!("store/binaries/{}.exe", binary.trim()));
+    for vcpus in [2, 1] {
+        let (stopped, said, stderr) = program_through_w2m_vm("thread_slots_race", &program, &[], vcpus);
+        eprintln!("thread_slots_race on {vcpus} vCPUs:\n{said}");
+        assert_eq!(
+            stopped, "ExitProcess { code: 0 }",
+            "thread_slots_race on {vcpus} vCPUs; its rows {said}; stderr {stderr}"
+        );
+        assert_eq!(
+            but_overlap(&said),
+            windows,
+            "thread_slots_race's rows but tls.overlap on {vcpus} vCPUs as on Windows"
+        );
+        let overlap: serde_json::Value = said
+            .lines()
+            .find(|l| l.starts_with("{\"s\":\"tls.overlap\","))
+            .map(|l| serde_json::from_str(l).unwrap())
+            .expect("thread_slots_race's tls.overlap row");
+        let seen = ["a_saw_b_move", "b_saw_a_move"].map(|k| overlap[k].as_u64().unwrap());
+        if vcpus == 2 {
+            assert!(
+                seen.iter().all(|&n| n > OVERLAP_FLOOR),
+                "thread_slots_race's loops on 2 vCPUs overlapped too little to judge, {seen:?}, floor \
+                 {OVERLAP_FLOOR}"
+            );
+        }
+    }
+}
+
 /// Deferred (Sprint 329), met at Sprint 330: the single-process guests no other test runs on two vCPUs, through
 /// `w2m-vm`, each held to its stop and output in `store/batch_run/first-stop-2026-10-28.tsv` (`qpc2`'s clock reading by
 /// its form, as `batch_run.rs` holds it).

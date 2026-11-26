@@ -20,6 +20,14 @@
  * blocks are listed so FlsFree clears the index on every thread. Before, one set of values served every thread, and
  * the game's new threads read the C runtime's per-thread data of the first (game run 38203364352, Sprint 060).
  * TlsGetValue is the game's second-hottest import (23,291,261 calls in 180 s): it never leaves the guest.
+ *
+ * The slots' own lock (Sprint 345; Change 1 of docs/design-rust-host-2026-10-24.md, "the TLS and FLS slots' lock"):
+ * TlsAlloc, TlsFree, FlsAlloc, FlsFree, FlsSetValue, FlsGetValue and FlsGetValue2 take no runtime word, so
+ * `hold_slots` and `let_slots_go` serialize the process's slot state alone: the bitmaps `tls_used` and `fls_used`, the
+ * callbacks, the list of every thread's FLS block and each block's values, and the TLS set-up, which runs under the
+ * lock. The heap's lock is taken under it (a thread's first FlsSetValue, `w2m_heap_take`), slots then heap, as the
+ * design's order has it; the lock is let go before every w2m_unimplemented and w2m_logged, so it never waits on the
+ * runtime word. TlsGetValue, TlsSetValue and TlsGetValue2 read and write the calling thread's TEB and take no lock.
  */
 #include "runtime.h"
 
@@ -38,13 +46,42 @@ struct fls_block { struct fls_block *next; u64 value[FLS_INDICES]; };
 static struct fls_block *fls_blocks;              /* every thread's block, for FlsFree */
 static u64 fls_callback[FLS_INDICES];
 static u8 fls_used[FLS_INDICES];
+static u32 slots_lock;                            /* 0 free, 1 held (Sprint 345); in the image's zeroed data */
+static int tls_ready;
 
-/* The calling thread's FLS block; `make`: create it (the thread's first FlsSetValue). */
+/* The TLS set-up, once: the two indices a fresh process holds. Run only with the slots held, so no thread finds
+ * `tls_ready` set before the indices are. */
+static void tls_init(void) {
+    if (tls_ready) return;
+    tls_ready = 1;
+    tls_used[0] = 1;                              /* held in a fresh process (row tls.alloc.first) */
+    tls_used[W2M_TLS_TAKEN] = 1;                  /* the other one (row tls.alloc.many.indices) */
+}
+
+/* The slots held: compare-and-swap of 0 for 1, acquire, as heap.c's `hold` and lock_runtime (CASA), a waiter reading
+ * the word by plain loads until it reads 0 before it tries the swap; then the TLS set-up. Nothing reenters it. */
+static void hold_slots(void) {
+    for (;;) {
+        while (__atomic_load_n(&slots_lock, __ATOMIC_RELAXED)) {}
+        u32 free = 0;
+        if (__atomic_compare_exchange_n(&slots_lock, &free, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) break;
+    }
+    tls_init();
+}
+
+/* The slots let go: a store of 0, release (STLR), as heap.c's `let_go`. */
+static void let_slots_go(void) { __atomic_store_n(&slots_lock, 0, __ATOMIC_RELEASE); }
+
+/* The calling thread's FLS block; `make`: create it (the thread's first FlsSetValue). Called with the slots held; a
+ * full arena lets them go before it stops the run. */
 static struct fls_block *fls_mine(int make) {
     struct fls_block **slot = (struct fls_block **)((u8 *)w2m_teb() + TEB_FLS_DATA);
     if (!*slot && make) {
         struct fls_block *b = (struct fls_block *)w2m_heap_take(sizeof *b);
-        if (!b) w2m_unimplemented(W2M_API_FlsSetValue, sizeof *b);   /* the heap's arena is full */
+        if (!b) {
+            let_slots_go();
+            w2m_unimplemented(W2M_API_FlsSetValue, sizeof *b);   /* the heap's arena is full */
+        }
         u8 *bytes = (u8 *)b;
         for (u64 i = 0; i < sizeof *b; i++) bytes[i] = 0;
         b->next = fls_blocks;
@@ -53,7 +90,6 @@ static struct fls_block *fls_mine(int make) {
     }
     return *slot;
 }
-static int tls_ready;
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
@@ -64,15 +100,8 @@ static u64 *tls_slot(u64 index) {
     return expansion ? expansion + (index - TLS_SLOTS) : 0;
 }
 
-static void tls_init(void) {
-    if (tls_ready) return;
-    tls_ready = 1;
-    tls_used[0] = 1;                              /* held in a fresh process (row tls.alloc.first) */
-    tls_used[W2M_TLS_TAKEN] = 1;                  /* the other one (row tls.alloc.many.indices) */
-}
-
 u64 k32_TlsAlloc(void) {
-    tls_init();
+    hold_slots();
     for (u64 i = 0; i < TLS_INDICES; i++) {
         if (tls_used[i]) continue;
         if (i >= TLS_SLOTS && *(u64 *)((u8 *)w2m_teb() + TEB_TLS_EXPANSION) == 0)
@@ -80,8 +109,10 @@ u64 k32_TlsAlloc(void) {
         tls_used[i] = 1;
         u64 *slot = tls_slot(i);
         *slot = 0;
+        let_slots_go();
         return w2m_logged(W2M_API_TlsAlloc, 0, i);
     }
+    let_slots_go();
     w2m_unimplemented(W2M_API_TlsAlloc, TLS_INDICES);      /* out of indices: not observed */
     return TLS_OUT_OF_INDEXES;
 }
@@ -110,44 +141,56 @@ u64 k32_TlsSetValue(u64 index, u64 value) {
 }
 
 u64 k32_TlsFree(u64 index) {
-    tls_init();
+    hold_slots();
     index = (u32)index;
-    if (index >= TLS_INDICES || !tls_used[index]) w2m_unimplemented(W2M_API_TlsFree, index);
+    if (index >= TLS_INDICES || !tls_used[index]) {
+        let_slots_go();
+        w2m_unimplemented(W2M_API_TlsFree, index);
+    }
     tls_used[index] = 0;
     u64 *slot = tls_slot(index);
     if (slot) *slot = 0;
+    let_slots_go();
     return w2m_logged(W2M_API_TlsFree, index, 1);
 }
 
 u64 k32_FlsAlloc(u64 callback) {
+    hold_slots();
     for (u64 i = 1; i < FLS_INDICES; i++) {
         if (fls_used[i]) continue;
         fls_used[i] = 1;
         for (struct fls_block *b = fls_blocks; b; b = b->next) b->value[i] = 0;
         fls_callback[i] = callback;
+        let_slots_go();
         return w2m_logged(W2M_API_FlsAlloc, callback, i);
     }
+    let_slots_go();
     w2m_unimplemented(W2M_API_FlsAlloc, FLS_INDICES);
     return TLS_OUT_OF_INDEXES;
 }
 
 u64 k32_FlsGetValue(u64 index) {
     index = (u32)index;
+    hold_slots();
     struct fls_block *b = fls_mine(0);
+    u64 v = b && index < FLS_INDICES ? b->value[index] : 0;
+    let_slots_go();
     if (!b || index >= FLS_INDICES) {
         set_error(ERROR_INVALID_PARAMETER);
         return w2m_logged(W2M_API_FlsGetValue, index, 0);
     }
     set_error(0);                                  /* a freed index too: NULL, error 0 (row fls2.freed, Server 2025) */
-    return w2m_logged(W2M_API_FlsGetValue, index, b->value[index]);
+    return w2m_logged(W2M_API_FlsGetValue, index, v);
 }
 
 /* FlsGetValue2 and TlsGetValue2 (Server 2025 exports them, 2022 does not): the same values as FlsGetValue
  * and TlsGetValue, the last error left in every case (contracts/windows.thread_storage.get2). */
 u64 k32_FlsGetValue2(u64 index) {
     index = (u32)index;
+    hold_slots();
     struct fls_block *b = fls_mine(0);
     u64 v = b && index < FLS_INDICES ? b->value[index] : 0;
+    let_slots_go();
     return w2m_logged(W2M_API_FlsGetValue2, index, v);
 }
 
@@ -159,21 +202,31 @@ u64 k32_TlsGetValue2(u64 index) {
 
 u64 k32_FlsSetValue(u64 index, u64 value) {
     index = (u32)index;
+    hold_slots();
     if (index >= FLS_INDICES || !fls_used[index]) {
+        let_slots_go();
         set_error(ERROR_INVALID_PARAMETER);
         return w2m_logged(W2M_API_FlsSetValue, index, 0);
     }
     fls_mine(1)->value[index] = value;
+    let_slots_go();
     return w2m_logged(W2M_API_FlsSetValue, index, 1);
 }
 
 u64 k32_FlsFree(u64 index) {
     index = (u32)index;
-    if (index >= FLS_INDICES || !fls_used[index]) w2m_unimplemented(W2M_API_FlsFree, index);
+    hold_slots();
+    if (index >= FLS_INDICES || !fls_used[index]) {
+        let_slots_go();
+        w2m_unimplemented(W2M_API_FlsFree, index);
+    }
     for (struct fls_block *b = fls_blocks; b; b = b->next)
-        if (fls_callback[index] && b->value[index])
+        if (fls_callback[index] && b->value[index]) {
+            let_slots_go();
             w2m_unimplemented(W2M_API_FlsFree, index);    /* the callback would run in guest code */
+        }
     fls_used[index] = 0;
     for (struct fls_block *b = fls_blocks; b; b = b->next) b->value[index] = 0;
+    let_slots_go();
     return w2m_logged(W2M_API_FlsFree, index, 1);
 }

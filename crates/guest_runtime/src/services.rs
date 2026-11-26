@@ -20,21 +20,23 @@ pub struct Service {
 
 /// What a service's bridge holds around its call into the C (Change 1 of the host design,
 /// `docs/design-rust-host-2026-10-24.md` 95-140, "a runtime call takes the lock of what it touches, or none"): the
-/// runtime word, which every service took until Sprint 342; none; or the process heap's own lock, which the C takes
-/// itself (Sprint 343, `heap.c` `hold`), so its bridge holds nothing, as for none.
+/// runtime word, which every service took until Sprint 342; none; the process heap's own lock, which the C takes
+/// itself (Sprint 343, `heap.c` `hold`), so its bridge holds nothing, as for none; or the TLS and FLS slots' lock, which
+/// the C takes itself too (Sprint 345, `thread_storage.c` `hold_slots`), its bridge holding nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lock {
     RuntimeWord,
     None,
     Heap,
+    Slots,
 }
 
 /// KERNEL32's services of lock class none (Sprint 342; Sprint 339's proof, re-read on Sprint 341's tree): each stores
 /// only to its calling thread's own state (its TEB's last error and TLS slots, `last_error.c` 8, `thread_storage.c`
 /// 58-65 and 108) or its caller's memory (QueryPerformanceCounter's `*out`, `process.c` 55), and to the call ring by
 /// atomic add (`w2m_logged`, `runtime.c` 84-94); its one host request, `w2m_unimplemented`'s, takes the word itself.
-/// FlsGetValue and FlsSetValue wait for the TLS and FLS slots' lock, Change 1's next class: FlsSetValue's first set
-/// links a block into the process-wide list (`thread_storage.c` 50-51).
+/// FlsGetValue and FlsSetValue take the TLS and FLS slots' lock (`SLOTS_LOCK`, Sprint 345): FlsSetValue's first set
+/// links a block into the process-wide list, and FlsAlloc and FlsFree write every thread's block.
 pub const NO_LOCK: [&str; 7] = [
     "GetCurrentProcessId",
     "GetCurrentThreadId",
@@ -51,6 +53,24 @@ pub const NO_LOCK: [&str; 7] = [
 /// holder owns; to the calling thread's last error (`set_error`); and to the call ring by atomic add (`w2m_logged`).
 /// Its one host request, `w2m_unimplemented`'s, takes the word itself and is never made with the heap's lock held.
 pub const HEAP_LOCK: [&str; 5] = ["GetProcessHeap", "HeapAlloc", "HeapFree", "HeapReAlloc", "HeapSize"];
+
+/// KERNEL32's services of lock class slots (Sprint 345, "the TLS and FLS slots' lock"), all in `thread_storage.c`. Each
+/// stores to the process's slot state, the TLS and FLS bitmaps (`tls_used`, `fls_used`), the FLS callbacks, the list
+/// of every thread's FLS block and each block's values, and the TLS set-up (`tls_ready`), only under the slots' lock
+/// (`hold_slots` and `let_slots_go`); FlsGetValue and FlsGetValue2 read a block FlsAlloc and FlsFree write, so they
+/// take it too. Their other stores are the calling thread's TEB (its TLS slots, its expansion pointer, its FLS block's
+/// address, its last error) and the call ring by atomic add (`w2m_logged`). The heap's lock is taken under it
+/// (FlsSetValue's first set, `w2m_heap_take`), slots then heap, as the design's order has it; `w2m_unimplemented` and
+/// `w2m_logged` are called only with it let go.
+pub const SLOTS_LOCK: [&str; 7] = [
+    "FlsAlloc",
+    "FlsFree",
+    "FlsGetValue",
+    "FlsGetValue2",
+    "FlsSetValue",
+    "TlsAlloc",
+    "TlsFree",
+];
 
 /// The clock mode in which QueryPerformanceCounter reads `CNTVCT_EL0` alone (`process.c` 42-47): mode 1 asks the host
 /// through the shared transport page (`w2m_host`, `runtime.c` 26-35), and mode 2 reads the shared warp word.
@@ -158,6 +178,8 @@ pub fn services(texts: &BTreeMap<String, String>) -> Result<Vec<Service>, String
                     Lock::None
                 } else if dll == "KERNEL32" && HEAP_LOCK.contains(&name.as_str()) {
                     Lock::Heap
+                } else if dll == "KERNEL32" && SLOTS_LOCK.contains(&name.as_str()) {
+                    Lock::Slots
                 } else {
                     Lock::RuntimeWord
                 };
@@ -270,9 +292,11 @@ mod tests {
             [Lock::None, Lock::RuntimeWord, Lock::RuntimeWord],
             "QueryPerformanceCounter's lock in clock modes 0, 1 and 2"
         );
-        for n in ["FlsGetValue", "FlsSetValue", "CreateEventW"] {
-            assert_eq!(named(n).lock_in(GUEST_COUNTER), Lock::RuntimeWord, "{n}'s lock");
-        }
+        assert_eq!(
+            named("CreateEventW").lock_in(GUEST_COUNTER),
+            Lock::RuntimeWord,
+            "CreateEventW's lock"
+        );
     }
 
     /// Sprint 343: in the runtime's own C, the services of lock class heap are the five `HEAP_LOCK` names, each
@@ -314,6 +338,54 @@ mod tests {
         }
         for n in ["LocalAlloc", "LocalFree"] {
             assert_eq!(named(n).lock_in(GUEST_COUNTER), Lock::RuntimeWord, "{n}'s lock");
+        }
+    }
+
+    /// Sprint 345: in the runtime's own C, the services of lock class slots are the seven `SLOTS_LOCK` names, each
+    /// KERNEL32's and defined in `thread_storage.c`, of class slots on every clock; TlsGetValue, TlsSetValue and
+    /// TlsGetValue2, which touch only the calling thread's TEB, are not of it.
+    #[test]
+    fn the_seven_services_of_lock_class_slots_are_the_tls_and_fls_slots() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let texts = crate::texts(&root).unwrap();
+        let all = services(&texts).unwrap();
+        let mut slots: Vec<String> = all
+            .iter()
+            .filter(|s| s.lock == Lock::Slots)
+            .map(|s| format!("{}!{}", s.dll, s.name))
+            .collect();
+        slots.sort();
+        assert_eq!(
+            slots,
+            [
+                "KERNEL32!FlsAlloc",
+                "KERNEL32!FlsFree",
+                "KERNEL32!FlsGetValue",
+                "KERNEL32!FlsGetValue2",
+                "KERNEL32!FlsSetValue",
+                "KERNEL32!TlsAlloc",
+                "KERNEL32!TlsFree",
+            ],
+            "the services of lock class slots"
+        );
+        let named = |n: &str| all.iter().find(|s| s.name == n).unwrap();
+        for n in SLOTS_LOCK {
+            assert!(
+                texts["thread_storage.c"].contains(&format!("u64 k32_{n}(")),
+                "{n} defined in thread_storage.c"
+            );
+            assert_eq!(
+                [0, 1, 2].map(|mode| named(n).lock_in(mode)),
+                [Lock::Slots; 3],
+                "{n}'s lock in clock modes 0, 1 and 2"
+            );
+        }
+        for (n, lock) in [
+            ("TlsGetValue", Lock::None),
+            ("TlsSetValue", Lock::None),
+            ("TlsGetValue2", Lock::RuntimeWord),
+        ] {
+            assert_eq!(named(n).lock_in(GUEST_COUNTER), lock, "{n}'s lock");
         }
     }
 

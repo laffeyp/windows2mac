@@ -1,0 +1,6 @@
+{"s":"tls.wait","ret":0}
+{"s":"tls.a","rounds":20000,"out_of_indexes":0,"out_of_range":0,"duplicate":0,"free_failed":0}
+{"s":"tls.b","rounds":20000,"out_of_indexes":0,"out_of_range":0,"duplicate":0,"free_failed":0}
+{"s":"tls.overlap","a_saw_b_move":15611,"b_saw_a_move":15611}
+{"s":"fls.alloc","allocated":1,"event":1}
+{"s":"fls","threads":16,"set_ok":16,"freed":1,"stale":0,"wait":0}
