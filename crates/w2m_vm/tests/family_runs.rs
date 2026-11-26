@@ -13,6 +13,13 @@
 //! Medium 1 of its project review, 2026-10-29), or the stop it makes ("stop: <stop>", a temporary drive's path and file
 //! name written as fixed marks). A run that conforms must not be held, and a held run that conforms or moves fails the
 //! test until the card that moved it rewrites the file.
+//!
+//! From Sprint 351 (census G2) `scripts/gates.sh` runs each row again on two vCPUs, `w2m-vm --vcpus 2`, writing
+//! build/family_runs/<family>-<run>-two-vcpus.txt and .stop, and each is held to its one-vCPU run's contract rows or
+//! held entry; a run the host refuses on two vCPUs is held instead by name to the refusal, in
+//! store/family_runs/two-vcpus-refused-2026-11-26.tsv: one that starts a child process to `MACHINE_ON_ONE` until the
+//! run-loop design's card 4f, and one whose family starts on the instruction clock to `vcpus_allowed`'s refusal, which
+//! `w2m-vm` writes as the run's stop, until the instruction clock's own card.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -1268,10 +1275,9 @@ fn a_moving_stop_is_written_steadily() {
     assert_eq!(steady("w2m12345.tmp"), "w2m12345.tmp");
 }
 
-#[test]
-fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
-    let root = root();
-    let held: BTreeMap<(String, String), String> = fs::read_to_string(root.join(HELD))
+/// A family file's rows by (family, run), its third column the value (`HELD`, `REFUSED`).
+fn by_run(root: &Path, file: &str) -> BTreeMap<(String, String), String> {
+    fs::read_to_string(root.join(file))
         .unwrap()
         .lines()
         .filter(|l| !l.starts_with('#'))
@@ -1279,69 +1285,150 @@ fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
             let mut c = l.splitn(3, '\t');
             Some(((c.next()?.into(), c.next()?.into()), c.next()?.into()))
         })
+        .collect()
+}
+
+/// The first line of the stop `w2m-vm` wrote at `<base>.stop`, or None, after a panic naming the missing file when
+/// `W2M_REQUIRE_CASE_RUNS=1` (the gates set it) or the reason on stderr, when there is none; None too for a stop not
+/// made from the work tree's sources (Sprint 288: its stamp stands for its printed rows).
+fn stop_at(root: &Path, base: &Path) -> Option<String> {
+    let file = base.with_extension("stop");
+    let Ok(stop) = fs::read_to_string(&file) else {
+        let what = format!(
+            "no {} (scripts/gates.sh writes it)",
+            file.strip_prefix(root).unwrap_or(&file).display()
+        );
+        if std::env::var("W2M_REQUIRE_CASE_RUNS").as_deref() == Ok("1") {
+            panic!("{what}, and W2M_REQUIRE_CASE_RUNS=1 requires it");
+        }
+        eprintln!("{what}: the families are not judged here");
+        return None;
+    };
+    if !w2m_vm::built_from::fresh(root, &file) {
+        return None;
+    }
+    Some(stop.lines().next().unwrap_or("").to_string())
+}
+
+/// How a run's outputs at `base` stand to Windows' rows: None when they conform, else the state it is held by.
+/// From Sprint 231 every run starts as its family starts (column 7, given to `w2m-vm` as --start). From Sprint 233 a run
+/// is judged as the frozen judge judges it (`family_run.py` 3141-3153 at the tag): one that ends, or stops on its
+/// family's expected stop (column 10, a prefix of the frozen host's name for the stop), on its rows after its rule with
+/// its excluded rows (column 9) dropped, by `exact_rows`; any other stop is held as a stop. `c` is the run's lookup row.
+fn state_of(root: &Path, c: &[&str], base: &Path, stop: &str) -> Option<String> {
+    let (family, run, contract, rule, excluded, expected) = (c[0], c[1], c[3], c[7], c[8], c[9]);
+    let ended = stop == "ExitProcess { code: 0 }";
+    let as_expected = expected != "-" && frozen_stop(stop).is_some_and(|frozen| frozen.starts_with(expected));
+    if !ended && !as_expected {
+        return Some(format!("stop: {}", steady(stop)));
+    }
+    let (id, version) = contract.split_once('@').unwrap();
+    let text = fs::read_to_string(root.join(format!("contracts/{id}/{version}.json"))).unwrap();
+    let contract: Value = serde_json::from_str(&text).unwrap();
+    let printed: Vec<Row> = fs::read_to_string(base.with_extension("txt"))
+        .unwrap()
+        .lines()
+        .filter_map(|l| match serde_json::from_str::<Value>(l) {
+            Ok(Value::Object(r)) => Some(r),
+            _ => None,
+        })
         .collect();
+    let name = rule.split(" excluded ").next().unwrap();
+    let mut derived = derive(family, name, printed).unwrap_or_else(|e| panic!("{family} run {run}: {e}"));
+    derived.retain(|r| {
+        !excluded
+            .split(' ')
+            .any(|x| x != "-" && r.get("s").and_then(Value::as_str) == Some(x))
+    });
+    let want = contract["acceptance"]["rows"].as_array().unwrap();
+    let how = if ended { "ended" } else { "stopped as expected" };
+    exact_rows(want, &derived).map(|divergence| format!("{how}; {divergence} ({id}@{version})"))
+}
+
+/// The runs held on two vCPUs by name to the host's refusal (Sprint 351): of a child process until the run-loop
+/// design's card 4f, and of the instruction clock until its own card.
+const REFUSED: &str = "store/family_runs/two-vcpus-refused-2026-11-26.tsv";
+
+/// The two refusals a stop of `REFUSED` may be, as `w2m-vm --vcpus 2` writes them.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn refusals() -> [String; 2] {
+    use w2m_vm::host_request::{HOST_KERNEL, MACHINE_ON_ONE};
+    [
+        // `Stop::HostRequest` of the kernel request (`HOST_KERNEL`) that would start a child
+        format!("HostRequest op {HOST_KERNEL}: {MACHINE_ON_ONE}"),
+        // `vcpus_allowed`'s refusal of a start on the instruction clock, written as the stop before any VM
+        w2m_vm::run::vcpus_allowed(2, Some(1), &[], false, true).unwrap_err(),
+    ]
+}
+
+/// Each stop `REFUSED` holds is one of the host's two refusals on two vCPUs, as `w2m-vm` names it (Sprint 351).
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn the_refused_runs_are_held_to_the_hosts_refusals() {
+    let refusals = refusals();
+    let refused = by_run(&root(), REFUSED);
+    assert!(!refused.is_empty(), "{REFUSED} holds no run");
+    for ((family, run), stop) in refused {
+        assert!(
+            refusals.contains(&stop),
+            "{REFUSED}: {family} run {run} holds {stop:?}, neither of the host's refusals {refusals:?}"
+        );
+    }
+}
+
+#[test]
+fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
+    let root = root();
+    let held = by_run(&root, HELD);
+    let refused = by_run(&root, REFUSED);
     let known = fs::read_to_string(root.join(KNOWN)).unwrap();
     let (mut seen, mut wrong) = (BTreeMap::new(), Vec::new());
     let (mut conformed, mut families) = (0, BTreeMap::<String, bool>::new());
+    // on two vCPUs: the runs held as on one, those conforming among them, and the refused runs by family
+    let (mut as_on_one, mut conformed_on_two) = (0, 0);
+    let mut refused_by_family = BTreeMap::<String, usize>::new();
     for line in known.lines().filter(|l| !l.starts_with('#')) {
         let c: Vec<&str> = line.split('\t').collect();
-        let (family, run, contract, rule) = (c[0], c[1], c[3], c[7]);
+        let (family, run) = (c[0], c[1]);
         let base = root.join(format!("build/family_runs/{family}-{run}"));
-        let Ok(stop) = fs::read_to_string(base.with_extension("stop")) else {
-            let what = format!("no build/family_runs/{family}-{run}.stop (scripts/gates.sh writes it)");
-            if std::env::var("W2M_REQUIRE_CASE_RUNS").as_deref() == Ok("1") {
-                panic!("{what}, and W2M_REQUIRE_CASE_RUNS=1 requires it");
-            }
-            eprintln!("{what}: the families are not judged here");
+        // the same run on two vCPUs (Sprint 351), its outputs beside the one-vCPU run's
+        let two = root.join(format!("build/family_runs/{family}-{run}-two-vcpus"));
+        let (Some(stop), Some(stop_on_two)) = (stop_at(&root, &base), stop_at(&root, &two)) else {
             return;
         };
-        // a run of other sources is not judged (Sprint 288): its stop's stamp stands for its printed rows
-        if !w2m_vm::built_from::fresh(&root, &base.with_extension("stop")) {
-            return;
-        }
-        let stop = stop.lines().next().unwrap_or("").to_string();
         let key = (family.to_string(), run.to_string());
-        // from Sprint 231 every run starts as its family starts (column 7, given to `w2m-vm` as --start). From Sprint 233
-        // a run is judged as the frozen judge judges it (`family_run.py` 3141-3153 at the tag): one that ends, or stops
-        // on its family's expected stop (column 10, a prefix of the frozen host's name for the stop), on its rows after
-        // its rule with its excluded rows (column 9) dropped, by `exact_rows`; any other stop is held as a stop
-        let (excluded, expected) = (c[8], c[9]);
-        let ended = stop == "ExitProcess { code: 0 }";
-        let as_expected = expected != "-" && frozen_stop(&stop).is_some_and(|frozen| frozen.starts_with(expected));
-        let state = if !ended && !as_expected {
-            format!("stop: {}", steady(&stop))
-        } else {
-            let (id, version) = contract.split_once('@').unwrap();
-            let text = fs::read_to_string(root.join(format!("contracts/{id}/{version}.json"))).unwrap();
-            let contract: Value = serde_json::from_str(&text).unwrap();
-            let printed: Vec<Row> = fs::read_to_string(base.with_extension("txt"))
-                .unwrap()
-                .lines()
-                .filter_map(|l| match serde_json::from_str::<Value>(l) {
-                    Ok(Value::Object(r)) => Some(r),
-                    _ => None,
-                })
-                .collect();
-            let name = rule.split(" excluded ").next().unwrap();
-            let mut derived = derive(family, name, printed).unwrap_or_else(|e| panic!("{family} run {run}: {e}"));
-            derived.retain(|r| {
-                !excluded
-                    .split(' ')
-                    .any(|x| x != "-" && r.get("s").and_then(Value::as_str) == Some(x))
-            });
-            let want = contract["acceptance"]["rows"].as_array().unwrap();
-            if let Some(divergence) = exact_rows(want, &derived) {
-                let how = if ended { "ended" } else { "stopped as expected" };
-                format!("{how}; {divergence} ({id}@{version})")
-            } else {
-                if held.contains_key(&key) {
-                    wrong.push(format!("{family} run {run} conforms, and {HELD} still holds it"));
-                }
-                conformed += 1;
-                families.entry(family.to_string()).or_insert(true);
-                seen.insert(key, String::new());
-                continue;
+        let state = state_of(&root, &c, &base, &stop);
+        // two vCPUs: the refusal of a child process, by name, or the one-vCPU run's rows or held entry
+        match refused.get(&key) {
+            Some(refusal) if stop_on_two == *refusal => {
+                *refused_by_family.entry(family.to_string()).or_default() += 1;
             }
+            Some(refusal) => wrong.push(format!(
+                "{family} run {run} on two vCPUs stops at {stop_on_two:?}, where {REFUSED} holds it to {refusal:?}"
+            )),
+            None => {
+                let state_on_two = state_of(&root, &c, &two, &stop_on_two);
+                if state_on_two == state {
+                    as_on_one += 1;
+                    conformed_on_two += usize::from(state.is_none());
+                } else {
+                    let show = |s: &Option<String>| s.clone().unwrap_or_else(|| "conforms".into());
+                    wrong.push(format!(
+                        "{family} run {run} on two vCPUs: {}; on one vCPU: {}",
+                        show(&state_on_two),
+                        show(&state)
+                    ));
+                }
+            }
+        }
+        let Some(state) = state else {
+            if held.contains_key(&key) {
+                wrong.push(format!("{family} run {run} conforms, and {HELD} still holds it"));
+            }
+            conformed += 1;
+            families.entry(family.to_string()).or_insert(true);
+            seen.insert(key, String::new());
+            continue;
         };
         *families.entry(family.to_string()).or_insert(false) = false;
         if held.get(&key) != Some(&state) {
@@ -1354,6 +1441,12 @@ fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
             .filter(|key| !seen.contains_key(*key))
             .map(|key| format!("{HELD} holds {key:?}, which the lookup does not name")),
     );
+    wrong.extend(
+        refused
+            .keys()
+            .filter(|key| !seen.contains_key(*key))
+            .map(|key| format!("{REFUSED} holds {key:?}, which the lookup does not name")),
+    );
     // every run's difference at once, so one gates run shows them all (Sprint 230)
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     println!(
@@ -1361,5 +1454,28 @@ fn every_family_run_conforms_or_is_held_by_what_it_waits_on() {
         seen.len(),
         families.values().filter(|v| **v).count(),
         families.len()
+    );
+    // each refused family by its refusal, the child process's naming card 4f, the instruction clock's the clock
+    let refused_count: usize = refused_by_family.values().sum();
+    let by_family: Vec<String> = refused_by_family
+        .iter()
+        .map(|(f, n)| {
+            let stop = refused
+                .iter()
+                .find(|((family, _), _)| family == f)
+                .map_or("", |(_, s)| s.as_str());
+            let why = if stop.contains("card 4f") {
+                "a child process"
+            } else {
+                "the instruction clock"
+            };
+            format!("{f} {n}, {why}")
+        })
+        .collect();
+    println!(
+        "on two vCPUs: {as_on_one} of {} held as on one vCPU, {conformed_on_two} of them conforming; {refused_count} \
+         refused by name ({})",
+        seen.len(),
+        by_family.join("; ")
     );
 }

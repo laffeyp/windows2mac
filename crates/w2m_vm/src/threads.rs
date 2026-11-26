@@ -480,6 +480,14 @@ pub fn thread_context(guest: &mut Guest, tid: u32, buffer: u64) -> Result<u64, S
     }
     let mem = crate::guest::memory_view(&guest.memory);
     let at = entry(t.index);
+    // a thread another vCPU still has loaded has no saved state yet: 0, and `k32_GetThreadContext` retries the call
+    // until that vCPU has put it down (threads.c, "GetThreadContext then waits for it the same way"). Sprint 351:
+    // SuspendThread's kick may return once that vCPU leaves guest code, before its put-down, and the run entry then
+    // held the registers the thread was created with (running_thread_context on two vCPUs: gpr_planted 0, MXCSR 0x1F80)
+    let holder = read_u64(mem, at + E_VCPU);
+    if holder != 0 && holder != read_u64(mem, guest.served.vcpu.monitor + LOCK_OWNER) {
+        return Ok(0);
+    }
     let x: Vec<u64> = (0..31).map(|i| read_u64(mem, at + E_X + 8 * i)).collect();
     // the monitor ranges the thread keeps: lazy AF and DF (0x20-0x40), MXCSR (0x50), the x87 control word (0x70)
     let monitor = |range: usize, off: u64| at + E_MONITOR + E_MONITOR_AT[range] + off;

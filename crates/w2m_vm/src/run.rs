@@ -1349,6 +1349,14 @@ fn take_a_thread(
             crate::threads::wake_expired(held.guest);
             let mut x = [0u64; 31];
             let taken = crate::threads::take(held.guest, &mut x).map(|t| t.map(|(_, vslot)| (vslot, x)));
+            // the taking vCPU's slice (`_set_budget`), as a thread's creation sets the creating vCPU's: each vCPU past
+            // the first starts with the run's whole limit, so a thread it took ran to that limit with no slice's end,
+            // and one suspended from another vCPU was never put down (Sprint 351: running_thread_context on two
+            // vCPUs read the limit 20,000,000,000 on vCPU index 1 at the kick's turn start, and the suspender waited
+            // to the run's time limit)
+            if matches!(taken, Ok(Some(_))) {
+                crate::threads::set_budget(held.guest);
+            }
             (taken, crate::threads::park_deadline(held.guest))
         };
         drop(word); // let go before the thread's load or the park, which holds neither the word nor the lock

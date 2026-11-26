@@ -420,7 +420,14 @@ mod run {
             Some(options) => family_options(&mut start, options)?,
             None => None,
         };
-        w2m_vm::run::vcpus_allowed(vcpus, lse2, &[], false, start.instruction_clock.is_some())?;
+        // a refusal of the start's vCPUs, before any VM, is the run's stop when one is asked for (Sprint 351: the family
+        // runs on the instruction clock, refused on two vCPUs, held by name to it in the family test)
+        if let Err(why) = w2m_vm::run::vcpus_allowed(vcpus, lse2, &[], false, start.instruction_clock.is_some()) {
+            if let Some(("--stop", file)) = measure {
+                fs::write(root().join(file), format!("{why}\n")).map_err(|e| format!("{file}: {e}"))?;
+            }
+            return Err(why);
+        }
         // the count the run's requests read: a process that starts another is refused above one vCPU (Sprint 325). The
         // game's start keeps 1: `--game` takes the instruction clock, which `vcpus_allowed` holds to one vCPU
         start.vcpus = vcpus;

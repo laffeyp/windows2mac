@@ -214,10 +214,19 @@ if [ $rust != none ]; then
   # holds to its contract version's rows or to store/family_runs/sweep-held-2026-10-29.tsv. From Sprint 221 every run
   # the family index judged, 273 in 68 families, from the lookup store/family_runs/known-2026-10-29.tsv: the binary,
   # its beside DLL (name:sha256), an instruction budget so a hang ends by count; from Sprint 231 the family's start
-  # options, the lookup's JSON object, as --start (`read -r` keeps the block's backslashes)
+  # options, the lookup's JSON object, as --start (`read -r` keeps the block's backslashes). From Sprint 351 (census
+  # G2; reviewer-4's twentieth review, High 1) every run again on two vCPUs, `w2m-vm --vcpus 2`, its rows, stop and
+  # stderr beside the one-vCPU run's as <family>-<run>-two-vcpus.*, which family_runs.rs holds to the one-vCPU run's
+  # rows or held entry, or by name to the host's refusal, of a child process until 4f or of the instruction clock
+  # until its card (store/family_runs/two-vcpus-refused-2026-11-26.tsv): `family_runs VCPUS SUFFIX`, the one-vCPU step first, as
+  # before, and it alone clears the directory
   family_runs() {
-  rm -rf build/family_runs
-  mkdir -p build/family_runs
+  vcpus=$1
+  suffix=$2
+  if [ "$vcpus" = 1 ]; then
+    rm -rf build/family_runs
+    mkdir -p build/family_runs
+  fi
   tab=$(printf '\t')
   grep -v '^#' store/family_runs/known-2026-10-29.tsv | while IFS=$tab read -r c run b _contract beside _imports options _rule; do
     set --
@@ -225,12 +234,14 @@ if [ $rust != none ]; then
       set -- --beside "${beside%%:*}" "store/binaries/${beside#*:}.dll"
     fi
     [ "$options" = "-" ] || set -- "$@" --start "$options"
+    [ "$vcpus" = 1 ] || set -- "$@" --vcpus "$vcpus"
     echo '{}' | ./scripts/sign_and_run.sh target/release/w2m-vm "store/binaries/$b.exe" \
-      --output "build/family_runs/$c-$run.txt" --stop "build/family_runs/$c-$run.stop" "$@" \
-      --max-steps 20000000000 > /dev/null 2> "build/family_runs/$c-$run.stderr" || true
+      --output "build/family_runs/$c-$run$suffix.txt" --stop "build/family_runs/$c-$run$suffix.stop" "$@" \
+      --max-steps 20000000000 > /dev/null 2> "build/family_runs/$c-$run$suffix.stderr" || true
   done
   }
-  timed family-runs family_runs
+  timed family-runs family_runs 1 ''
+  timed family-runs-two-vcpus family_runs 2 -two-vcpus
 fi
 if [ $rust = all ]; then
   # a process a test, so the case runner's two passes run side by side (Sprint 200: 347 s under `cargo test`, its two
