@@ -569,7 +569,7 @@ fn script(dir: &Path, name: &str) -> String {
     String::from_utf8_lossy(&out.stdout).trim().to_string()
 }
 
-/// How `folded` builds sprint 335 (Sprint 333).
+/// How `folded` builds its second sprint, 335 unless `first` says otherwise (Sprint 333).
 #[derive(Default)]
 struct Shape {
     /// a commit "tidy" between 334's close and card 335
@@ -582,21 +582,54 @@ struct Shape {
     binary: bool,
     /// and changes the walk fixture
     walked: bool,
+    /// the fixture's first sprint, 334 when none (Sprint 340: the NOT FIRED rule holds from 340)
+    first: Option<u32>,
+    /// the second sprint's work adds `RECORD`, whose baseline names no commit (Sprint 340)
+    record: bool,
+    /// and its report is made with `RECORD` moved away, as a report made before Sprint 340 missed it
+    stale: bool,
+    /// the second sprint's card's Emits names SESSION_INIT
+    emits: bool,
 }
 
 const WALK_FIXTURE: &str = "store/translation-cache/walk-fixtures-2026-10-30.json";
+
+/// A record `report` counts and does not narrate (`class-` is a grouped prefix), so no `substrate narrate` runs.
+const RECORD: &str = "store/runs/class-fixture-1795600000000000000";
+
+/// `signal_report n --write` on `root`, as a close writes its report (Sprint 340).
+fn write_report(root: &Path, n: u32) {
+    let out = Command::new(env!("CARGO_BIN_EXE_signal_report"))
+        .args([&n.to_string(), "--write", "--root"])
+        .arg(root)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "signal_report {n} --write: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
 
 /// Sprint 333: a history whose sprints 334 and 335 each close in their work commit. After the previous sprint's close,
 /// each sprint is its card commit and one commit "Sprint N: ..." holding the work, the card done, its report, its tail
 /// entry headed closed and its gates row, made after the gates passed on the working tree: the row's `root=` is
 /// `scripts/gated-tree.sh`'s and its `base=` `scripts/gates-base.sh`'s, as `scripts/gates.sh` takes them. 335's entry
-/// cites 334's CI run, on file, whose head is 334's close.
+/// cites 334's CI run, on file, whose head is 334's close. From Sprint 340 each report is `signal_report N --write`'s,
+/// made on the prepared close before its commit, over a vocabulary of two tags.
 fn folded(name: &str, shape: &Shape) -> (PathBuf, String) {
     let root = scratch_with_tail(name, &[], &[], "");
+    let a = shape.first.unwrap_or(334);
+    let b = a + 1;
     let card = |n: u32, status: &str| {
+        let emits = if shape.emits && n == b {
+            "\n## signal contract\n\n### Emits\n\n- SESSION_INIT on the sprint's record\n"
+        } else {
+            ""
+        };
         fs::write(
             root.join(format!("sprints/sprint-{n}-x.md")),
-            format!("# card\n\n```yaml\n---\nstatus: {status}\n---\n```\n"),
+            format!("# card\n\n```yaml\n---\nstatus: {status}\n---\n```\n{emits}"),
         )
         .unwrap();
     };
@@ -626,27 +659,38 @@ fn folded(name: &str, shape: &Shape) -> (PathBuf, String) {
     };
     fs::create_dir_all(root.join("crates/a")).unwrap();
     fs::create_dir_all(root.join("store/translation-cache")).unwrap();
+    fs::create_dir_all(root.join("store/runs")).unwrap();
+    fs::create_dir_all(root.join("signals")).unwrap();
     fs::write(root.join("crates/a/lib.rs"), "fn a() {}\n").unwrap();
     fs::write(root.join(WALK_FIXTURE), "{}\n").unwrap();
+    fs::write(root.join("signals/rust-current.json"), "{\"version\": \"0.13\"}\n").unwrap();
+    fs::write(
+        root.join("signals/0.13.json"),
+        "{\"tags\": [{\"name\": \"SESSION_INIT\"}, {\"name\": \"SESSION_COMPLETED\"}]}\n",
+    )
+    .unwrap();
     git(&root, &["init", "-q"]);
-    commit(&root, "Sprint 333 closed: its Signal Report; BLACKBOARD");
-    card(334, "active");
-    commit(&root, "Sprint 334 card: x");
-    fs::write(root.join("crates/a/lib.rs"), "fn a() { let _ = 334; }\n").unwrap();
-    gates(334, 900);
-    card(334, "done");
-    fs::write(root.join("signal-reports/sprint-334-report.md"), "# report\n").unwrap();
-    let entry_334 = entry(334, 900, "");
-    board(&entry_334);
-    commit(&root, "Sprint 334: the work, and its close");
-    let close_334 = git(&root, &["rev-parse", "HEAD"]);
+    commit(
+        &root,
+        &format!("Sprint {} closed: its Signal Report; BLACKBOARD", a - 1),
+    );
+    card(a, "active");
+    commit(&root, &format!("Sprint {a} card: x"));
+    fs::write(root.join("crates/a/lib.rs"), format!("fn a() {{ let _ = {a}; }}\n")).unwrap();
+    gates(a, 900);
+    card(a, "done");
+    write_report(&root, a);
+    let entry_a = entry(a, 900, "");
+    board(&entry_a);
+    commit(&root, &format!("Sprint {a}: the work, and its close"));
+    let close_a = git(&root, &["rev-parse", "HEAD"]);
     if shape.stray {
         fs::write(root.join("docs/notes-2026-11-24.md"), "# notes\n").unwrap();
         commit(&root, "tidy");
     }
-    card(335, "active");
-    commit(&root, "Sprint 335 card: y");
-    fs::write(root.join("crates/a/lib.rs"), "fn a() { let _ = 335; }\n").unwrap();
+    card(b, "active");
+    commit(&root, &format!("Sprint {b} card: y"));
+    fs::write(root.join("crates/a/lib.rs"), format!("fn a() {{ let _ = {b}; }}\n")).unwrap();
     if shape.binary {
         fs::create_dir_all(root.join("store/binaries")).unwrap();
         fs::write(root.join("store/binaries/new.exe"), "MZ\n").unwrap();
@@ -654,27 +698,123 @@ fn folded(name: &str, shape: &Shape) -> (PathBuf, String) {
     if shape.walked {
         fs::write(root.join(WALK_FIXTURE), "{\"new.exe\": {}}\n").unwrap();
     }
-    if shape.separate_close {
-        commit(&root, "Sprint 335: the work");
+    if shape.record {
+        fs::create_dir_all(root.join(RECORD)).unwrap();
+        fs::write(
+            root.join(RECORD).join("events-000001.jsonl"),
+            "{\"seq\":0,\"t\":0.0,\"kind\":\"substrate.RunStarted\",\"payload\":{\"baseline\":{\"harness\":\"w2m\"}}}\n\
+             {\"seq\":1,\"t\":0.5,\"kind\":\"SESSION_INIT\",\"payload\":{}}\n\
+             {\"seq\":2,\"t\":1.0,\"kind\":\"substrate.RunFinalised\",\"payload\":{}}\n",
+        )
+        .unwrap();
     }
-    gates(335, 901);
+    if shape.separate_close {
+        commit(&root, &format!("Sprint {b}: the work"));
+    }
+    gates(b, 901);
     fs::write(
         root.join("store/gates/ci.tsv"),
-        format!("11\t{close_334}\tsuccess\t2026-11-24T08:00:00Z\tci\n"),
+        format!("11\t{close_a}\tsuccess\t2026-11-24T08:00:00Z\tci\n"),
     )
     .unwrap();
-    card(335, "done");
-    fs::write(root.join("signal-reports/sprint-335-report.md"), "# report\n").unwrap();
+    card(b, "done");
+    if shape.stale {
+        let away = root.join("record-away");
+        fs::rename(root.join(RECORD), &away).unwrap();
+        write_report(&root, b);
+        fs::rename(&away, root.join(RECORD)).unwrap();
+    } else {
+        write_report(&root, b);
+    }
     board(&format!(
-        "{}{entry_334}",
-        entry(335, 901, "; Sprint 334's CI run 11 passed")
+        "{}{entry_a}",
+        entry(b, 901, &format!("; Sprint {a}'s CI run 11 passed"))
     ));
     if shape.separate_close {
-        commit(&root, "Sprint 335 closed: its Signal Report; BLACKBOARD");
+        commit(&root, &format!("Sprint {b} closed: its Signal Report; BLACKBOARD"));
     } else if !shape.uncommitted {
-        commit(&root, "Sprint 335: the work, and its close");
+        commit(&root, &format!("Sprint {b}: the work, and its close"));
     }
-    (root, close_334)
+    (root, close_a)
+}
+
+/// Sprint 340 (reviewer-4's eleventh review, High 1): a report made while its close is prepared on the working tree
+/// counts the record that close adds and its tag fired, reads the same once the close is committed, and passes
+/// `--check` before the commit and after it (plant 1 leaves the working tree's records out: "from 0 records").
+#[test]
+fn a_report_made_before_its_commit_counts_the_records_the_commit_adds() {
+    let shape = Shape {
+        first: Some(340),
+        record: true,
+        emits: true,
+        uncommitted: true,
+        ..Shape::default()
+    };
+    let (root, _) = folded("prepared-record", &shape);
+    let made = fs::read_to_string(root.join("signal-reports/sprint-341-report.md")).unwrap();
+    assert!(made.contains("from 1 records under store/runs/"), "{made}");
+    assert!(
+        made.contains("or which those commits or the commit that holds this report added"),
+        "{made}"
+    );
+    assert!(
+        made.contains("class-* 1 records: SESSION_INIT 1; producers failed 0; not finalised 0"),
+        "{made}"
+    );
+    assert!(made.contains("- `SESSION_INIT`: fired 1 time"), "{made}");
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(0), ""));
+    commit(&root, "Sprint 341: the work, and its close");
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(0), ""));
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Sprint 340: a committed report that reads "(no record)" over a record its commit keeps differs from its
+/// regeneration, and `--check` names it (plant 3, the comparison taken out, passes it). The card's Emits names no
+/// tag, so no NOT FIRED line stands in for the comparison.
+#[test]
+fn a_committed_report_that_misses_its_record_is_named() {
+    let shape = Shape {
+        first: Some(340),
+        record: true,
+        stale: true,
+        ..Shape::default()
+    };
+    let (root, _) = folded("stale-record", &shape);
+    let kept = fs::read_to_string(root.join("signal-reports/sprint-341-report.md")).unwrap();
+    assert!(kept.contains("(no record)"), "{kept}");
+    let (code, stderr) = check_kept(&root);
+    assert_eq!(
+        (code, stderr.trim()),
+        (
+            Some(1),
+            "sprint 341: signal-reports/sprint-341-report.md differs from its regeneration, `signal_report 341`, first \
+             at line 3"
+        )
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Sprint 340: a closed sprint from 340 whose card's Emits names a tag its report shows NOT FIRED is named (plant 2,
+/// the rule taken out, passes it).
+#[test]
+fn a_declared_tag_not_fired_is_named() {
+    let shape = Shape {
+        first: Some(340),
+        emits: true,
+        ..Shape::default()
+    };
+    let (root, _) = folded("not-fired", &shape);
+    let (code, stderr) = check_kept(&root);
+    assert_eq!(
+        (code, stderr.trim()),
+        (
+            Some(1),
+            "sprint 341: its card's Emits names SESSION_INIT, and signal-reports/sprint-341-report.md shows it NOT FIRED"
+        )
+    );
+    let _ = fs::remove_dir_all(&root);
 }
 
 /// Sprint 333 (the Decision "A sprint's close folds into its sprint's commit", 2026-11-24): two sprints each closed in

@@ -12,8 +12,13 @@
 //! count of each kind; each single record's prose is `substrate narrate`'s; a frame's integrity is
 //! `substrate replay`'s, which the gates run over every record.
 //!
+//! From Sprint 334 a sprint closes in its work commit, and its report is written before that commit exists: the report
+//! leaves that commit out of its list and counts the records it adds, from the working tree while the close is
+//! prepared (Sprint 340).
+//!
 //! `--check` fails when a sprint from 108 on whose card says `status: done` has no report: the reports stopped
-//! unnoticed after 048, around 108, and after 122 (hand-author log 2026-10-24).
+//! unnoticed after 048, around 108, and after 122 (hand-author log 2026-10-24). From Sprint 340 it also fails a closed
+//! sprint's report that differs from its regeneration (from 334) or shows a declared tag NOT FIRED (from 340).
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -161,17 +166,50 @@ fn added_records(root: &Path, commits: &[(String, String)]) -> Result<BTreeSet<S
         )?
         .lines()
         {
-            if let Some(name) = path.strip_prefix("store/runs/").and_then(|p| p.split('/').next()) {
-                out.insert(name.to_string());
-            }
+            out.extend(record_name(path));
         }
     }
     Ok(out)
 }
 
-fn sprint_records(root: &Path, commits: &[(String, String)]) -> Result<Vec<PathBuf>, String> {
-    let shas: BTreeSet<&str> = commits.iter().map(|(h, _)| h.as_str()).collect();
-    let added = added_records(root, commits)?;
+/// The record directory a path under store/runs is in, by name.
+fn record_name(path: &str) -> Option<String> {
+    path.strip_prefix("store/runs/")
+        .and_then(|p| p.split('/').next())
+        .map(str::to_string)
+}
+
+/// The record directories the working tree adds under store/runs over sprint `n`'s base, the previous sprint's close,
+/// staged or untracked, as `binaries_unwalked` takes the change: what the commit that will hold sprint `n`'s close
+/// adds (Sprint 340). With no previous close there is no base, and none.
+fn working_tree_records(root: &Path, n: u32) -> Result<BTreeSet<String>, String> {
+    let Some(base) = close_commit(root, n - 1) else {
+        return Ok(BTreeSet::new());
+    };
+    let mut paths = git(
+        root,
+        &[
+            "diff",
+            "--name-only",
+            "--diff-filter=A",
+            "--no-renames",
+            &base,
+            "--",
+            "store/runs",
+        ],
+    )?;
+    paths.push_str(&git(
+        root,
+        &["ls-files", "--others", "--exclude-standard", "--", "store/runs"],
+    )?);
+    Ok(paths.lines().filter_map(record_name).collect())
+}
+
+/// Every record directory under store/runs with the commit its baseline names, read once: `--check` makes several
+/// reports from them (38,706 records on 2026-11-25, about 2 s to read).
+struct Runs(Vec<(PathBuf, Option<String>)>);
+
+fn runs(root: &Path) -> Result<Runs, String> {
     let mut dirs: Vec<PathBuf> = fs::read_dir(root.join("store/runs"))
         .map_err(|e| format!("store/runs: {e}"))?
         .flatten()
@@ -179,16 +217,63 @@ fn sprint_records(root: &Path, commits: &[(String, String)]) -> Result<Vec<PathB
         .filter(|p| p.is_dir())
         .collect();
     dirs.sort();
-    Ok(dirs
+    Ok(Runs(
+        dirs.into_iter()
+            .map(|d| {
+                let c = baseline_commit(&d);
+                (d, c)
+            })
+            .collect(),
+    ))
+}
+
+/// What a sprint's report is made from: the commits it lists, its records, and how many of those only the commit that
+/// holds the report adds.
+struct Sources {
+    commits: Vec<(String, String)>,
+    records: Vec<PathBuf>,
+    held: usize,
+}
+
+/// Sprint `n`'s commits and records. A record is the sprint's when its baseline names one of the commits, or, naming
+/// none, when one of them added it. From `FIRST_FOLDED_SPRINT` the report is written in the commit that closes the
+/// sprint, its work commit, which cannot name itself (Sprint 340; reviewer-4's eleventh review, High 1): that commit is
+/// left out of the list, and the records it adds are the sprint's, read from the commit once it is made and, while the
+/// close is prepared on the working tree, from what the working tree adds, so the report reads the same before the
+/// commit and after it.
+fn sources(root: &Path, n: u32, runs: &Runs) -> Result<Sources, String> {
+    let all = sprint_commits(root, n)?;
+    let folded = n >= FIRST_FOLDED_SPRINT;
+    let close = if folded { close_commit(root, n) } else { None };
+    let commits: Vec<(String, String)> = all
         .into_iter()
-        .filter(|d| match baseline_commit(d) {
+        .filter(|(h, _)| close.as_deref() != Some(h.as_str()))
+        .collect();
+    let shas: BTreeSet<&str> = commits.iter().map(|(h, _)| h.as_str()).collect();
+    let added = added_records(root, &commits)?;
+    let holding = match (folded, &close) {
+        (false, _) => BTreeSet::new(),
+        (true, Some(c)) => added_records(root, &[(c.clone(), String::new())])?,
+        (true, None) => working_tree_records(root, n)?,
+    };
+    let mut held = 0;
+    let mut records = Vec::new();
+    for (d, baseline) in &runs.0 {
+        let name = d.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        let ours = match baseline {
             Some(c) => shas.contains(c.as_str()),
-            None => d
-                .file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| added.contains(n)),
-        })
-        .collect())
+            None if added.contains(name) => true,
+            None => {
+                let by_close = holding.contains(name);
+                held += usize::from(by_close);
+                by_close
+            }
+        };
+        if ours {
+            records.push(d.clone());
+        }
+    }
+    Ok(Sources { commits, records, held })
 }
 
 /// The text under a heading, up to the next `## ` or `### ` heading, trimmed.
@@ -409,10 +494,9 @@ fn quoted(text: &str) -> String {
     format!("> {}", text.replace('\n', "\n> "))
 }
 
-fn report(root: &Path, n: u32, backfill: Option<&str>) -> Result<String, String> {
+fn report(root: &Path, n: u32, backfill: Option<&str>, runs: &Runs) -> Result<String, String> {
     let card = fs::read_to_string(card_path(root, n)?).map_err(|e| e.to_string())?;
-    let commits = sprint_commits(root, n)?;
-    let records = sprint_records(root, &commits)?;
+    let Sources { commits, records, held } = sources(root, n, runs)?;
     let (lines, fired) = trace(root, &records)?;
     let emits = section(&card, "### Emits");
     let title = card
@@ -427,12 +511,19 @@ fn report(root: &Path, n: u32, backfill: Option<&str>) -> Result<String, String>
         Some(date) => format!(" on {date}, after the sprint's close (hand-author log 2026-10-24),"),
         None => String::new(),
     };
+    // the commit holding the report is named only when it adds a record, so a report whose close adds none reads as
+    // before Sprint 340
+    let adders = if held > 0 {
+        "those commits or the commit that holds this report"
+    } else {
+        "those commits"
+    };
     let mut out = vec![
         format!("# SIGNAL_REPORT — {title}"),
         String::new(),
         format!(
             "Made by `signal_report {n}`{when} from {} records under store/runs/ whose baseline names one of the sprint's {} \
-             commits, or which those commits added. The self-grade and the Rubber Duck observations are the BLACKBOARD tail \
+             commits, or which {adders} added. The self-grade and the Rubber Duck observations are the BLACKBOARD tail \
              entry's for Sprint {n:03}.",
             records.len(),
             commits.len()
@@ -522,6 +613,105 @@ fn missing_reports(root: &Path) -> Result<Vec<u32>, String> {
     missing.sort_unstable();
     missing.dedup();
     Ok(missing)
+}
+
+/// The first sprint whose committed report `--check` regenerates and compares (Sprint 340; reviewer-4's eleventh
+/// review, High 1): the first that closes in its work commit, where the fault began. Of the 232 reports from 108 to
+/// 339, regenerated on 2026-11-25 with this generator, 227 differed: 208 only by a commit made after the report (its
+/// close commit "Sprint N closed:", which it could not name), 15 (108-122) by the wording of `scripts/signal_report.py`,
+/// 150's by a record Sprint 152 removed, 205's and 222's by annotations written into the report, and 337's by the
+/// record its close added; from 334 on, 337's alone, which Sprint 340 regenerated.
+const FIRST_REGENERATED_SPRINT: u32 = 334;
+
+/// The first sprint whose report may show no tag its card's Emits names NOT FIRED (Sprint 340): of the reports from
+/// 171 to 339, eleven showed 30 such lines (171, 210, 211, 214, 217, 218, 219, 223, 336, 337, 339), their records
+/// made under a temporary root or `build/` or not at all, or the tag named in prose; 337's was the fault, regenerated;
+/// 336's stands, its card's Emits annotated why its samples record is not kept; 339's is true, its record not made
+/// (closed-partial).
+const FIRST_FIRED_SPRINT: u32 = 340;
+
+/// The sprints from `from` on whose card says `status: done` or `status: closed-partial`, by number.
+fn closed_sprints(root: &Path, from: u32) -> Result<Vec<u32>, String> {
+    let mut closed = Vec::new();
+    for entry in fs::read_dir(root.join("sprints"))
+        .map_err(|e| format!("sprints: {e}"))?
+        .flatten()
+    {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(n) = name
+            .strip_prefix("sprint-")
+            .and_then(|r| r.get(..3))
+            .and_then(|d| d.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        if n < from || !name.ends_with(".md") {
+            continue;
+        }
+        let card = fs::read_to_string(entry.path()).map_err(|e| e.to_string())?;
+        if card
+            .lines()
+            .any(|l| matches!(l.trim(), "status: done" | "status: closed-partial"))
+        {
+            closed.push(n);
+        }
+    }
+    closed.sort_unstable();
+    closed.dedup();
+    Ok(closed)
+}
+
+/// Each tag a closed sprint's report from `FIRST_FIRED_SPRINT` shows NOT FIRED, named: `emits_check` writes NOT
+/// FIRED only for a tag the card's Emits names, and `AGENTS.md`'s signal contract has every such tag fire (Sprint 340).
+fn not_fired(root: &Path) -> Result<Vec<String>, String> {
+    let mut wrong = Vec::new();
+    for n in closed_sprints(root, FIRST_FIRED_SPRINT)? {
+        let path = format!("signal-reports/sprint-{n:03}-report.md");
+        let Ok(text) = fs::read_to_string(root.join(&path)) else {
+            continue;
+        };
+        for line in text.lines() {
+            if let Some(tag) = line.strip_prefix("- `").and_then(|l| l.strip_suffix("`: NOT FIRED")) {
+                wrong.push(format!(
+                    "sprint {n:03}: its card's Emits names {tag}, and {path} shows it NOT FIRED"
+                ));
+            }
+        }
+    }
+    Ok(wrong)
+}
+
+/// Each closed sprint's report from `FIRST_REGENERATED_SPRINT` that differs from `signal_report N` made now from the
+/// tree, named with its first differing line (Sprint 340: 337's report as committed read "from 0 records" and its four
+/// declared tags NOT FIRED, made before the commit that added its record). A missing report is `missing_reports`'.
+fn stale_reports(root: &Path) -> Result<Vec<String>, String> {
+    let sprints = closed_sprints(root, FIRST_REGENERATED_SPRINT)?;
+    let mut wrong = Vec::new();
+    let mut read: Option<Runs> = None;
+    for n in sprints {
+        let path = format!("signal-reports/sprint-{n:03}-report.md");
+        let Ok(kept) = fs::read_to_string(root.join(&path)) else {
+            continue;
+        };
+        let runs = match &read {
+            Some(r) => r,
+            None => read.insert(runs(root)?),
+        };
+        let made = report(root, n, None, runs)?;
+        if made != kept {
+            let (a, b): (Vec<&str>, Vec<&str>) = (kept.split('\n').collect(), made.split('\n').collect());
+            let line = a
+                .iter()
+                .zip(&b)
+                .position(|(x, y)| x != y)
+                .unwrap_or(a.len().min(b.len()))
+                + 1;
+            wrong.push(format!(
+                "sprint {n:03}: {path} differs from its regeneration, `signal_report {n}`, first at line {line}"
+            ));
+        }
+    }
+    Ok(wrong)
 }
 
 /// The first sprint whose closed tail entry must name a passing run `scripts/gates.sh` kept (Sprint 179).
@@ -1534,14 +1724,30 @@ fn run() -> Result<bool, String> {
         if unbuilt.is_empty() {
             println!("every sprint from {FIRST_BUILT_SPRINT:03} rolled out of the tail has its paragraph in ## Built");
         }
+        let unfired = not_fired(&root)?;
+        for w in &unfired {
+            eprintln!("{w}");
+        }
+        if unfired.is_empty() {
+            println!("every closed sprint from {FIRST_FIRED_SPRINT:03} fired each tag its card's Emits names");
+        }
+        let stale = stale_reports(&root)?;
+        for w in &stale {
+            eprintln!("{w}");
+        }
+        if stale.is_empty() {
+            println!("every closed sprint's report from {FIRST_REGENERATED_SPRINT:03} is its regeneration");
+        }
         return Ok(missing.is_empty()
             && unquoted.is_empty()
             && early.is_empty()
             && split.is_empty()
-            && unbuilt.is_empty());
+            && unbuilt.is_empty()
+            && unfired.is_empty()
+            && stale.is_empty());
     }
     let n = sprint.ok_or("usage: signal_report NNN [--write] [--backfill YYYY-MM-DD] | --check")?;
-    let text = report(&root, n, backfill.as_deref())?;
+    let text = report(&root, n, backfill.as_deref(), &runs(&root)?)?;
     if write {
         let out = format!("signal-reports/sprint-{n:03}-report.md");
         fs::write(root.join(&out), text).map_err(|e| format!("{out}: {e}"))?;

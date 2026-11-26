@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 340
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -125,4 +125,61 @@ corrected.
 
 ## result
 
-GATES-LINE
+- **The generator** (`crates/signal_report/src/main.rs`, `sources`): from Sprint 334 the commit that holds the report,
+  the sprint's work commit (`close_commit`), is left out of the commits it lists, since a file cannot name the commit
+  that holds it; the records that commit adds are the sprint's, read from the commit once made and, while the close
+  is prepared, from `working_tree_records`: the directories `git diff --name-only --diff-filter=A <previous close> --
+  store/runs` and `git ls-files --others --exclude-standard -- store/runs` name, staged and untracked. Line 3 names
+  "the commit that holds this report" only when it adds a record, so a report whose close adds none reads as before.
+  Before Sprint 334 the generator is unchanged. The record directories and their baselines are read once (`Runs`,
+  38,706 records, about 2 s), so `--check` regenerates several reports at that cost.
+- **Reports that differ when regenerated:** all 232 reports from 108 to 339, regenerated on 2026-11-25 by the new
+  generator into the scratchpad and compared with `diff`: 5 the same (334, 335, 336, 338, 339), 227 different. 208
+  differ only by a commit made after the report (the "Sprint N closed:" commit that holds it, which it could not
+  name); 15 (108-122) by `scripts/signal_report.py`'s line 3; 150 by a record Sprint 152 removed
+  (`store/runs/case-runner-1792916257296645000`); 205 and 222 by annotations written into the report by hand; 337 by
+  the record its close added. Under the old generator every folded report (334-339) differed, by its work commit.
+  `--check` regenerates and compares from **334** (`FIRST_REGENERATED_SPRINT`), the first sprint that closes in its
+  work commit, where the fault began; from 334 on only 337's differed, now regenerated.
+- **Reports that show NOT FIRED, 171 to 339:** eleven, 30 lines. As a tag that fires: 171 (SESSION_INIT, on a
+  temporary root), 210 (all six, the batch run's record under `build/`), 211 (SERVICE_UNIMPLEMENTED, the same record),
+  214 (COMPARISON_COMPLETED), 217 (COMPARISON_COMPLETED, SESSION_COMPLETED), 218 (EXECUTION_COMPLETED,
+  COMPARISON_COMPLETED, SESSION_COMPLETED, in its annotation), 219 (all three), 336 (all three, the samples on a
+  temporary root), 337 (all four), 339 (MEASUREMENT_RECORDED, its record not made, closed-partial). Only in prose:
+  214's TRACE_INGESTED ("only if"), 218's SERVICE_UNIMPLEMENTED ("It writes no"), 223's three ("rebuilt from the
+  records'"). `--check` fails NOT FIRED from **340** (`FIRST_FIRED_SPRINT`): 339's line is true and its card needs no
+  correction, and 336's stands with its card annotated. It reads the committed report's "- `TAG`: NOT FIRED" lines of
+  every card `status: done` or `closed-partial`.
+- **The corrections:** `signal-reports/sprint-337-report.md` regenerated: "from 0 records" became "from 1 records ...
+  or which those commits or the commit that holds this report added", the trace
+  `w2m-vm-measurements-1795656377000000000: SESSION_INIT 1, MEASUREMENT_RECORDED 44, CAPABILITY_PROBED 3,
+  SESSION_COMPLETED 1`, and its four tags fired 3, 44, 1 and 1 times. Sprint 336's samples record is not kept: a
+  samples run into the dated record `vocabulary-samples-1795660404000000000` replayed at level 2 (128 frames), and
+  `check_records --since 2026-10-17` exited 1, "1 records; 18 violations; in records made on or after 2026-10-17: 18
+  held, 0 known" (T2 1, T3 3, T4 2, S2 8, S4 2, S8 2); its baseline also names no commit, so it would be 340's
+  record. Card 336's Emits is annotated (2026-11-25, Sprint 340) and its report regenerated, its three tags still NOT
+  FIRED and the annotation in its Expected.
+- **The fixtures** (`crates/signal_report/tests/check.rs`): `folded` takes a first sprint (334 unless given), writes
+  each report by `signal_report N --write` on the prepared close over a two-tag vocabulary, and can add the grouped
+  record `store/runs/class-fixture-1795600000000000000`. `a_report_made_before_its_commit_counts_the_records_the_commit_adds`
+  (340-341, prepared): the report reads "from 1 records", "class-* 1 records: SESSION_INIT 1" and "- `SESSION_INIT`:
+  fired 1 time"; `--check` exits 0 before the commit and after it. `a_committed_report_that_misses_its_record_is_named`
+  (committed, report made with the record moved away): "sprint 341: signal-reports/sprint-341-report.md differs from
+  its regeneration, `signal_report 341`, first at line 3". `a_declared_tag_not_fired_is_named`: "sprint 341: its
+  card's Emits names SESSION_INIT, and signal-reports/sprint-341-report.md shows it NOT FIRED". The Sprint 333
+  fixtures pass with real reports in place of "# report". `cargo nextest run -p signal_report`: 46 passed.
+  `target/release/signal_report --check` on the tree: exit 0, "every closed sprint from 340 fired each tag its
+  card's Emits names", "every closed sprint's report from 334 is its regeneration".
+- **Plant 1** (`main.rs` 257, `(true, None) => BTreeSet::new(),`): the judge failed, "panicked at
+  crates/signal_report/tests/check.rs:755:5", the report "Made by `signal_report 341` from 0 records under
+  store/runs/".
+- **Plant 2** (`main.rs` 668, `closed_sprints(root, u32::MAX)`): the judge failed, "left: (Some(0), \"\")", against
+  "right: (Some(1), \"sprint 341: its card's Emits names SESSION_INIT, ...\")".
+- **Plant 3** (`main.rs` 701, `if false && made != kept`): the judge failed, "left: (Some(0), \"\")", against "right:
+  (Some(1), \"sprint 341: signal-reports/sprint-341-report.md differs from its regeneration, ...\")".
+  Each plant was one `sed` line from a cp backup, its judge `cargo nextest run -p signal_report --test check <test>`
+  (exit 100), restored by cp, cmp clean, before the gates.
+- **The gates:** one run on the restored tree, "gates: steps 199 s of the run's 206 s, unplaced 7 s", "gates: all
+  passed"; its row:
+
+exit 0 in 206 s	default	2026-11-26T02:55:46Z	sprint 340	293c26c5ccd4a56056feb444cf18b02d31e98d68	7d76b4f1f3068f2644ae6fbc7cb2f2c3e0021ef5186ed2dd1811b00592ac624b	root=cf2ea111fce282257d32ac7eedd66bc170f8656f	rust=crates python=0 samples=0	base=1842378f76de8b789b2224298539632c0195d117

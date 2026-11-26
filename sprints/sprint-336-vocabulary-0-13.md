@@ -105,6 +105,14 @@ site, which is the next card's work.
 - The samples record (`harness/vocabulary-samples.toml`) carries every live harness kind. It also carries
   EXECUTION_STARTED with `vcpus` 2 once, MEASUREMENT_RECORDED with each of the three new `metric` values and one
   `holder` once, and CAPABILITY_PROBED with each of the three new `capability` values once.
+- *(Annotated 2026-11-25, Sprint 340: the samples record is not kept under `store/runs/`, so this sprint's Signal
+  Report, which reads that directory alone, shows the three tags above NOT FIRED. A kept samples record breaks rules
+  the records hold: run on 2026-11-25 into the dated record `vocabulary-samples-1795660404000000000`, it replayed at
+  level 2 (128 frames), and `check_records --since 2026-10-17` held 18 violations in it, exit 1 (T2 1, T3 3, T4 2, S2
+  8, S4 2, S8 2), since the samples write each harness tag at sample values, not in the order or the counts a session
+  writes them; the gates' records check over a new record would fail on it. The samples run under a temporary root in
+  the gates' samples stage (`scripts/gates.sh` 336-341), where that run held EXECUTION_STARTED 3 times, one with
+  `vcpus` 2, MEASUREMENT_RECORDED 38 times and CAPABILITY_PROBED 20 times.)*
 
 ### Invariants
 
