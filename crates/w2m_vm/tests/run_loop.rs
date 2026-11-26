@@ -1654,6 +1654,103 @@ fn the_hosts_close_of_a_shared_event_comes_at_its_last_handle_while_a_wait_holds
     );
 }
 
+/// The bound on the ratio of the largest to the smallest of three_counters' window counts (Sprint 353).
+const SHARE_RATIO: f64 = 1.5;
+
+/// Sprint 353 (reviewer-4's twenty-first review, Medium 1): `tests/data/timed_waits/three_counters`, three CPU-bound
+/// threads in one loop on two vCPUs, the second and third made while the first runs on vCPU 1, judges slicing past
+/// vCPU 0. Its window runs from the first's readying of the third, on its own vCPU, to the third's count of 40,000,000,
+/// all three ready throughout; each thread's count over it, from the guest's `.counts` section, is its share of the two
+/// vCPUs. A vCPU whose `SLICE_UNTIL` another vCPU's readying or put-down left at ~0 ran one thread alone while two
+/// shared the other, about twice their counts; a vCPU that took a thread on the run's whole budget (Sprint 351) the
+/// same. 20 runs on two vCPUs, each held to ExitProcess inside the run's limit of 60 s, "done" and every count above 0;
+/// then every run's window, the largest count at most `SHARE_RATIO` times the smallest, each run quoted first.
+#[test]
+fn three_busy_threads_on_two_vcpus_each_count_and_the_run_ends() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let data = fs::read(root.join("tests/data/timed_waits/three_counters.exe")).unwrap();
+    let loaded = load(&data, None, "probe.exe").unwrap();
+    let program = &loaded.images[0];
+    let section = program
+        .pe
+        .sections
+        .iter()
+        .find(|s| s.name == ".counts")
+        .expect("three_counters' .counts section");
+    let counts_va = program.base + u64::from(section.virtual_address);
+    // the switches the VM made and the host's (`hvc #12`), for one vCPU's run against two's (reviewer-4's twenty-third
+    // review, Low 1: on two vCPUs a vCPU's slice ends at each TIME_SLICE while the other holds a thread)
+    let switches = |guest: &Guest, out: &Outcome| {
+        (
+            guest.memory_view().read_u64(RUN_TABLE + w2m_vm::threads::RT_SWITCHES),
+            out.exits.get(&12).copied().unwrap_or(0),
+        )
+    };
+    let mut alone = guest_with(&root, &loaded, &Start::console("probe.exe"));
+    let out = run_limited(
+        &mut alone,
+        &loaded,
+        &mut HostCompiler::default(),
+        Some(Duration::from_secs(60)),
+    );
+    println!(
+        "three_counters on 1 vCPU: stop {:?}, switches in the VM and hvc #12 {:?}",
+        out.stop,
+        switches(&alone, &out)
+    );
+    assert_eq!(out.stop, Stop::ExitProcess { code: 0 }, "three_counters on 1 vCPU");
+    let mut start = Start::console("probe.exe");
+    start.vcpus = 2;
+    let mut windows = Vec::new();
+    for run in 1..=20 {
+        let mut guest = guest_with(&root, &loaded, &start);
+        let out = run_limited(
+            &mut guest,
+            &loaded,
+            &mut HostCompiler::default(),
+            Some(Duration::from_secs(60)),
+        );
+        let at = guest.offset(counts_va).expect("the .counts section mapped");
+        // the counts, then each at the first's readying of the third, then each at the third's WINDOW
+        let words: Vec<u64> = (0..9).map(|i| guest.memory_view().read_u64(at + 8 * i)).collect();
+        let (counts, at_go, at_ran) = (&words[0..3], &words[3..6], &words[6..9]);
+        let window: Vec<u64> = (0..3).map(|j| at_ran[j].wrapping_sub(at_go[j])).collect();
+        let stdout = String::from_utf8_lossy(&guest.served.stdout).into_owned();
+        println!(
+            "three_counters on 2 vCPUs, run {run}: stop {:?}, counts {counts:?}, window {window:?}, runs by vCPU {:?}, \
+             switches in the VM and hvc #12 {:?}",
+            out.stop,
+            out.runs_by_vcpu,
+            switches(&guest, &out)
+        );
+        assert_eq!(
+            out.stop,
+            Stop::ExitProcess { code: 0 },
+            "three_counters on 2 vCPUs, run {run}: counts {counts:?}, output {stdout:?}"
+        );
+        assert!(
+            counts.iter().all(|&c| c > 0),
+            "three_counters on 2 vCPUs, run {run}: a thread's count 0, counts {counts:?}"
+        );
+        assert_eq!(stdout, "done\n", "three_counters' output on 2 vCPUs, run {run}");
+        windows.push(window);
+    }
+    let ratios: Vec<f64> = windows
+        .iter()
+        .map(|w| *w.iter().max().unwrap() as f64 / (*w.iter().min().unwrap()).max(1) as f64)
+        .collect();
+    println!("three_counters' window ratios, largest to smallest: {ratios:.3?}");
+    if let Some(run) = ratios.iter().position(|&r| r > SHARE_RATIO) {
+        panic!(
+            "three_counters on 2 vCPUs, run {}: window {:?}, a thread ran {:.3} times another's, over {SHARE_RATIO}",
+            run + 1,
+            windows[run],
+            ratios[run]
+        );
+    }
+}
+
 /// Sprint 350's amendment (found by builder-350's reading of `sync_objects.c`): `probes/wait_closed_handle`. A worker
 /// waits 1000 ms on a semaphore; the main thread closes its only handle, makes a new semaphore, releases it once and
 /// waits on it with a zero timeout. The main thread's row, which Windows defines, is held on one vCPU and on two to the

@@ -67,7 +67,7 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 
 /// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
 /// is the frozen one with these changes, which their own tests judge (Sprint 272).
-const DEPARTURES: [(&str, &str); 8] = [
+const DEPARTURES: [(&str, &str); 9] = [
     (
         "tools/guest_runtime/block_compiler.c",
         "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
@@ -100,6 +100,11 @@ const DEPARTURES: [(&str, &str); 8] = [
          give the first thread its expansion array, so it can use an index past 63 another thread allocated; Sprint \
          348: the run table's count read with acquire (LDAPR), pairing with the host's release store of it after a new entry's \
          words, since the slots' lock is not the runtime word the host's writer holds",
+    ),
+    (
+        "tools/guest_runtime/threads.c",
+        "Sprint 353: slice_until answers 0 while another vCPU holds a thread, since a readying or put-down in the VM \
+         writes only its own vCPU's SLICE_UNTIL, so a vCPU's slice ends at each TIME_SLICE and its switch looks again",
     ),
     (
         "tools/vm_compiler/vm_compiler.c",

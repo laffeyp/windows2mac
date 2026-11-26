@@ -9,9 +9,9 @@
 //! hand-over `hvc #12` makes (`_schedule`, `_switch`, `_save_thread`, `_load_thread`, 3463-3580).
 
 use guest_runtime::layout::{
-    CURRENT, CURRENT_ENTRY, E_MONITOR, E_MONITOR_AT, E_STATE, E_X, LOCK_OWNER, MONITOR_DATA, MONITOR_VA, PAGE,
-    PAUSE_COUNT, PEB_OFF, PROCESS_VA, RT_ENTRIES, RUN_ENTRY, RUN_TABLE, RUN_THREADS, SLICE_COUNT, SLICE_PAUSES,
-    STATE_SIZE, TIME_SLICE, VECTOR_SLOT, VECTOR_SLOTS,
+    CURRENT, CURRENT_ENTRY, E_MONITOR, E_MONITOR_AT, E_STATE, E_X, LOCK_OWNER, MAX_VCPUS, MONITOR_DATA, MONITOR_VA,
+    PAGE, PAUSE_COUNT, PEB_OFF, PROCESS_VA, RT_ENTRIES, RUN_ENTRY, RUN_TABLE, RUN_THREADS, SLICE_COUNT, SLICE_PAUSES,
+    SLICE_UNTIL, STATE_SIZE, TIME_SLICE, VCPU_AREA, VCPU_STRIDE, VECTOR_SLOT, VECTOR_SLOTS,
 };
 use pe_loader::TLS_SLOTS;
 use virtual_memory::{GuestPages, MEM_COMMIT, MEM_RESERVE, PAGE_GUARD, PAGE_READWRITE, STACK_GUARD_PAGES};
@@ -28,6 +28,8 @@ pub const RT_BLOCKED: u64 = 0x20;
 /// the vCPUs waiting in the host with no thread to run (`threads.c` 51-52, `struct w2m_run_table`'s `waiting`; Sprint
 /// 319), which the guest's `readied()` reads to ask `THREAD_WAKE`
 pub const RT_WAITING: u64 = 0x28;
+/// the switches the VM made itself, `w2m_switch`'s count (`threads.c`, `struct w2m_run_table`'s `switches`)
+pub const RT_SWITCHES: u64 = 0x38;
 pub const E_TID: u64 = 0x00;
 pub const E_STATUS: u64 = 0x08;
 pub const E_SUSPEND: u64 = 0x10;
@@ -185,11 +187,54 @@ pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
     mem.store_u64(RUN_TABLE + RT_COUNT, n + 1, std::sync::atomic::Ordering::Release);
     guest.served.threads.insert(thread.tid, Thread { index: n, ..thread });
     // a new thread is ready and no vCPU holds it: a parked vCPU may take it (Sprint 327: the status is written here,
-    // not through `set_status`, and a parked vCPU slept through a thread's creation)
+    // not through `set_status`, and a parked vCPU slept through a thread's creation), and another vCPU's slice may end
+    // for it (Sprint 353)
     if n > 0 {
-        guest.sched.notify();
+        readied(guest);
     }
     Ok(n)
+}
+
+/// The monitor data page of the vCPU whose owner is `owner`, its index + 1 (`run::owner_of`): vCPU 0's the layout's,
+/// each other's in its slot of `VCPU_AREA`, as `Guest::private_chain` lays them out; None for an owner no vCPU has.
+pub fn monitor_of(owner: u64) -> Option<u64> {
+    match owner {
+        1 => Some(crate::VcpuPages::FIRST.monitor),
+        o if (2..=MAX_VCPUS).contains(&o) => Some(VCPU_AREA + (o - 1) * VCPU_STRIDE),
+        _ => None,
+    }
+}
+
+/// A thread made ready, or put down still ready, by the host (Sprint 353; reviewer-4's twenty-first review, Medium 1):
+/// a parked vCPU may take it, and when more threads are ready, unsuspended and held by no vCPU than vCPUs wait,
+/// `slice_until`'s rule, each other vCPU that holds a thread ends its slice at its next stop, its `SLICE_UNTIL` 0. A
+/// vCPU's `SLICE_UNTIL` is written at its own turn's start and by its own switch in the VM, so a thread another vCPU's
+/// service readied left it as it was: `three_counters` on two vCPUs ran its first thread on vCPU 1 from count 0 to
+/// 32,342,801 with `SLICE_UNTIL` ~0 while the second and third, made on vCPU 0, were ready and no vCPU waited. The
+/// served vCPU's own word is its turn's start's, which follows every service, so on one vCPU nothing is written here.
+/// The C runtime's `slice_until` (threads.c), and `slice_until` here, end a vCPU's slice whenever another vCPU holds a
+/// thread, ready threads or not: a readying in the VM writes no other vCPU's word, so a vCPU cannot know one came and
+/// looks at each TIME_SLICE. The host sees each readying it makes, so here only a readying no waiting vCPU will take
+/// ends another's slice; the two rules differ for that reason alone.
+fn readied(guest: &Guest) {
+    guest.sched.notify();
+    let mem = crate::guest::memory_view(&guest.memory);
+    let own = read_u64(mem, guest.served.vcpu.monitor + LOCK_OWNER);
+    let mut free = 0u64;
+    let mut holders = Vec::new();
+    for t in guest.served.threads.values() {
+        let at = entry(t.index);
+        match read_u64(mem, at + E_VCPU) {
+            0 => free += u64::from(read_u64(mem, at + E_STATUS) == READY && read_u64(mem, at + E_SUSPEND) == 0),
+            holder if holder != own => holders.push(holder),
+            _ => {}
+        }
+    }
+    if free > read_u64(mem, RUN_TABLE + RT_WAITING) {
+        for md in holders.into_iter().filter_map(monitor_of) {
+            write_u64(mem, md + SLICE_UNTIL, 0);
+        }
+    }
 }
 
 /// `current_tid` (3316-3321): the id of the thread vCPU 0 runs, its current entry's (`w2m_switch` changes it in the
@@ -433,6 +478,10 @@ pub fn suspend(guest: &mut Guest, tid: u32, resume: bool) -> Result<u64, String>
         (true, true, _) | (true, false, 0) => 0,
         (true, false, n) => {
             write_u64(mem, at + E_SUSPEND, n - 1);
+            // resumed to 0, a ready thread may run again: as any thread the host readies (Sprint 353)
+            if n == 1 && read_u64(mem, at + E_STATUS) == READY {
+                readied(guest);
+            }
             n
         }
     })
@@ -567,9 +616,9 @@ pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
     }
     write_u64(mem, at + E_STATUS, status);
     // a thread readied in the host: a parked vCPU may take it (the run-loop design's "A vCPU with no thread", the host's
-    // one writer of a thread's status; Sprint 319)
+    // one writer of a thread's status; Sprint 319), and another vCPU's slice may end for it (Sprint 353)
     if status == READY && was != READY {
-        guest.sched.notify();
+        readied(guest);
     }
 }
 
@@ -1044,9 +1093,10 @@ fn save(guest: &Guest, x: &[u64; 31], cur: &Thread) -> (u64, u64) {
     put(mem, from + E_STATE, &data);
     write_u64(mem, from + E_VCPU, 0);
     // a thread put down still ready, on a yield or a slice's end, is free for any vCPU: a parked one may take it
-    // (Sprint 327; the C runtime's in-VM switch does not ask so, BLACKBOARD Deferred, Sprint 327)
+    // (Sprint 327; the C runtime's in-VM switch does not ask so, BLACKBOARD Deferred, Sprint 327), and another vCPU's
+    // slice may end for it (Sprint 353)
     if read_u64(mem, from + E_STATUS) == READY {
-        guest.sched.notify();
+        readied(guest);
     }
     (executed, pauses)
 }
@@ -1342,8 +1392,9 @@ pub fn set_budget(guest: &mut Guest) {
 }
 
 /// `_slice_until` (2756-2780) for one process, no lockstep, forced stop or pending wake: 0 when the current thread is
-/// suspended or more threads this vCPU may take are ready than vCPUs wait (Sprint 321); the count at which the earliest
-/// deadline of a blocked thread falls, on the instruction clock (0 on another clock); else ~0.
+/// suspended, more threads this vCPU may take are ready than vCPUs wait (Sprint 321), or another vCPU holds a thread
+/// (Sprint 353); the count at which the earliest deadline of a blocked thread falls, on the instruction clock (0 on
+/// another clock); else ~0.
 pub fn slice_until(guest: &Guest) -> u64 {
     // another process ready or waiting with a deadline needs the host at each slice's end (`_other_process_due`,
     // 2750-2754; Sprint 197)
@@ -1378,6 +1429,11 @@ pub fn slice_until(guest: &Guest) -> u64 {
         .filter(|t| word(t, E_STATUS) == READY && free_for(mem, t, own))
         .count() as u64;
     if ready > read_u64(mem, RUN_TABLE + RT_WAITING) {
+        return 0;
+    }
+    // while another vCPU holds a thread, the slice ends at each TIME_SLICE, as the C runtime's `slice_until` (Sprint
+    // 353): that vCPU readies and puts down threads in the VM, writing only its own `SLICE_UNTIL`
+    if guest.served.threads.values().any(|t| !free_for(mem, t, own)) {
         return 0;
     }
     let deadline = others
@@ -1650,8 +1706,9 @@ pub(crate) mod tests {
     }
 
     /// A slice ends for a ready thread no vCPU will take (Sprint 321; the Python host's `_slice_until`, its Sprint 121):
-    /// on owner 1, of three threads the first current, the third blocked with no deadline, the second ready: held by
-    /// owner 2, the slice runs on; free with a vCPU waiting, it runs on; free with none waiting, it ends.
+    /// on owner 1, of three threads the first current, the third blocked with no deadline, the second ready: free with
+    /// a vCPU waiting, it runs on; free with none waiting, it ends. Held by owner 2, it ends too, as the slice of a vCPU
+    /// does at each TIME_SLICE while another vCPU holds a thread (Sprint 353; until then it ran on).
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     #[test]
     fn a_slice_ends_only_for_a_ready_thread_no_vcpu_will_take() {
@@ -1667,11 +1724,7 @@ pub(crate) mod tests {
         write_u64(mem, entry(ts[2].index) + E_DEADLINE, u64::MAX);
         write_u64(mem, g.served.vcpu.monitor + LOCK_OWNER, 1);
         write_u64(mem, entry(ts[1].index) + E_VCPU, 2);
-        assert_eq!(
-            slice_until(&g),
-            u64::MAX,
-            "the slice ended for a thread another vCPU holds"
-        );
+        assert_eq!(slice_until(&g), 0, "the slice ran on while another vCPU holds a thread");
         write_u64(mem, entry(ts[1].index) + E_VCPU, 0);
         write_u64(mem, RUN_TABLE + RT_WAITING, 1);
         assert_eq!(
@@ -1685,6 +1738,75 @@ pub(crate) mod tests {
             0,
             "the slice ran on past a ready thread no vCPU will take"
         );
+    }
+
+    /// A thread the host readies on one vCPU ends another vCPU's slice (Sprint 353): vCPU 0, owner 1, serves; vCPU 1,
+    /// owner 2, holds the second thread with `SLICE_UNTIL` ~0. A thread made on vCPU 0, ready and held by none with no
+    /// vCPU waiting, writes vCPU 1's word 0 and leaves vCPU 0's own, which its turn's start writes; a readying a waiting
+    /// vCPU will take writes nothing; a resume to 0 and a thread put down ready, as a readying. `monitor_of` names each
+    /// vCPU's page as `Guest::private_chain` lays it out.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_thread_the_host_readies_ends_the_slice_of_another_vcpu_that_holds_one() {
+        use super::{BLOCKED, E_VCPU, RT_WAITING, entry, monitor_of, read_u64, save, set_status, suspend, write_u64};
+        use guest_runtime::layout::{LOCK_OWNER, MAX_VCPUS, RUN_TABLE, SLICE_UNTIL};
+
+        let (mut g, _) = guest_with_a_thread();
+        let start = g.served.threads.values().next().unwrap().start;
+        super::create_thread(&mut g, start, 0, 0, 0, &mut || Ok(())).unwrap();
+        let ts: Vec<super::Thread> = g.served.threads.values().cloned().collect();
+        let first = g.served.vcpu;
+        assert_eq!(monitor_of(1), Some(first.monitor), "vCPU 0's page");
+        for k in 1..MAX_VCPUS {
+            assert_eq!(
+                monitor_of(k + 1),
+                Some(g.private_chain(k).unwrap().1.monitor),
+                "vCPU {k}'s page"
+            );
+        }
+        assert_eq!((monitor_of(0), monitor_of(MAX_VCPUS + 1)), (None, None));
+        let second = g.private_chain(1).unwrap().1;
+        let mem = g.memory_view();
+        write_u64(mem, first.monitor + LOCK_OWNER, 1);
+        write_u64(mem, second.monitor + LOCK_OWNER, 2);
+        write_u64(mem, entry(ts[1].index) + E_VCPU, 2);
+        set_status(&mut g, ts[2].index, BLOCKED);
+        let until = |g: &crate::guest::Guest, md: u64| read_u64(g.memory_view(), md + SLICE_UNTIL);
+        let unended = |g: &crate::guest::Guest| {
+            for md in [first.monitor, second.monitor] {
+                write_u64(g.memory_view(), md + SLICE_UNTIL, u64::MAX);
+            }
+        };
+
+        unended(&g);
+        let made = super::create_thread(&mut g, start, 0, 0, 0, &mut || Ok(())).unwrap();
+        assert_eq!(
+            (until(&g, second.monitor), until(&g, first.monitor)),
+            (0, u64::MAX),
+            "a thread made on vCPU 0: vCPU 1's slice and vCPU 0's"
+        );
+
+        // two ready and free (the made thread and the third), two vCPUs waiting: the waiting take them
+        unended(&g);
+        write_u64(g.memory_view(), RUN_TABLE + RT_WAITING, 2);
+        set_status(&mut g, ts[2].index, super::READY);
+        assert_eq!(until(&g, second.monitor), u64::MAX, "a readying two waiting vCPUs take");
+
+        write_u64(g.memory_view(), RUN_TABLE + RT_WAITING, 0);
+        let index = g.served.threads[&made].index;
+        assert_eq!(suspend(&mut g, made as u32, false), Ok(0));
+        unended(&g);
+        assert_eq!(suspend(&mut g, made as u32, true), Ok(1));
+        assert_eq!(until(&g, second.monitor), 0, "a resume to 0");
+
+        // the made thread loaded on vCPU 0 and put down still ready, the third held elsewhere
+        unended(&g);
+        write_u64(g.memory_view(), entry(ts[2].index) + E_VCPU, 3);
+        write_u64(g.memory_view(), entry(index) + E_VCPU, 1);
+        let made_thread = g.served.threads[&made].clone();
+        save(&g, &[0u64; 31], &made_thread);
+        assert_eq!(until(&g, second.monitor), 0, "a thread put down ready");
+        assert_eq!(until(&g, first.monitor), u64::MAX, "the served vCPU's own word");
     }
 
     /// A parked vCPU's wait ends three ways (Sprint 320; the Python host's Sprint 120): at its deadline; at a change,

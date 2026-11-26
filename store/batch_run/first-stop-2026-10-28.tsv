@@ -51,6 +51,7 @@ guest	shared_close	ExitProcess { code: 0 }	ExitProcess	closed\ndone\n
 guest	sleeper	ExitProcess { code: 0 }	ExitProcess	woke\ndone\n
 guest	spinchild	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	statsize	ExitProcess { code: 0 }	ExitProcess	done\n
+guest	three_counters	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	twoproc	ExitProcess { code: 0 }	ExitProcess	child ended\n
 guest	twoready	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	twoproc-ic	ExitProcess { code: 0 }	ExitProcess	child ended\n

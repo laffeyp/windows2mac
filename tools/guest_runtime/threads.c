@@ -173,19 +173,34 @@ static void wake_expired(void) {
 
 /* vm_backend.py _slice_until, for a run the VM may switch in: 0 when another unsuspended thread is ready; the count
  * at which the earliest deadline of another blocked thread falls on the instruction clock (0 on another clock); ~0
- * when no other thread waits with one. */
+ * when no other thread waits with one. And 0 while another vCPU holds a thread (Sprint 353): that vCPU readies and
+ * puts down threads in the VM, which writes only its own SLICE_UNTIL, so this vCPU's slice ends at each TIME_SLICE
+ * and its switch looks again; before, three_counters' second thread ran alone on vCPU 0 for the whole run, its
+ * SLICE_UNTIL ~0, while vCPU 1 put the first down ready at each of its own slices' ends. On one vCPU no thread is
+ * held elsewhere. The host's `readied` (threads.rs) ends another vCPU's slice only when more free threads are ready
+ * than vCPUs wait, since the host sees each readying it makes; this rule ends it whenever another vCPU holds a thread,
+ * ready or not, since a readying in the VM writes no other vCPU's word and this vCPU cannot tell it came. Two busy
+ * threads on two vCPUs so switch in the VM at each TIME_SLICE with nothing else ready: two_counters, a scratch guest
+ * of two threads counting to 300,000,000, took 155,665,372 to 165,960,372 ticks of 100 ns in 5 runs against
+ * 149,638,326 to 153,964,835 before. */
 static u64 slice_until(u64 cur) {
     u64 nearest = ~0ull;
-    int timed = 0;
+    int timed = 0, elsewhere = 0;
     for (u64 i = 0; i < RUN->count; i++) {
         const struct w2m_run_entry *e = run_entry(i);
-        if (i == cur || e->suspend || held_elsewhere(e)) continue;
+        if (i == cur) continue;
+        if (held_elsewhere(e)) {
+            elsewhere = 1;
+            continue;
+        }
+        if (e->suspend) continue;
         if (e->status == READY) return 0;
         if (e->status == BLOCKED && e->deadline != ~0ull) {
             timed = 1;
             if (e->deadline < nearest) nearest = e->deadline;
         }
     }
+    if (elsewhere) return 0;
     if (!timed) return ~0ull;
     if (*monitor_word(W2M_CLOCK_MODE_OFF) != 2) return 0;
     u64 rate = *monitor_word(W2M_CLOCK_RATE_OFF), warp = *(volatile u64 *)W2M_CLOCK_WARP_VA;
