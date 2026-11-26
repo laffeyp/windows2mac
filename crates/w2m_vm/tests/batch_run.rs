@@ -36,8 +36,9 @@ const REPEATS: [&str; 3] = [
     "store/frontier-calls/frontier-643a6283510c-1793247683722772000.tsv",
     "store/frontier-calls/frontier-643a6283510c-1793247803946454000.tsv",
 ];
-/// Guests whose output is a clock's reading, 16 hex digits and a newline
-const CLOCK_GUESTS: [&str; 2] = ["qpc", "qpc2"];
+/// Guests whose output is a clock's reading, 16 hex digits and a newline (`two_counters`' the ticks its two counters
+/// took, Sprint 354)
+const CLOCK_GUESTS: [&str; 3] = ["qpc", "qpc2", "two_counters"];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -104,7 +104,10 @@ const DEPARTURES: [(&str, &str); 9] = [
     (
         "tools/guest_runtime/threads.c",
         "Sprint 353: slice_until answers 0 while another vCPU holds a thread, since a readying or put-down in the VM \
-         writes only its own vCPU's SLICE_UNTIL, so a vCPU's slice ends at each TIME_SLICE and its switch looks again",
+         writes only its own vCPU's SLICE_UNTIL, so a vCPU's slice ends at each TIME_SLICE and its switch looks again; \
+         Sprint 354: the woken mark, the run entry's first reserved word, which w2m_ready_thread and w2m_signal set on \
+         a thread another vCPU runs and not BLOCKED, and w2m_block finds and clears, leaving the thread READY, so a \
+         readying between a wait's check and its park is not lost once card 5 parts them; the switch's load clears it",
     ),
     (
         "tools/vm_compiler/vm_compiler.c",

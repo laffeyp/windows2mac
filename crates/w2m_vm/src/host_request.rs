@@ -155,6 +155,8 @@ pub fn wake_blocked(guest: &mut Guest) {
     for i in blocked {
         crate::threads::set_status(guest, i, crate::threads::READY);
     }
+    // a wait on a shared event or another process, checked on another vCPU and not yet parked (Sprint 354)
+    crate::threads::mark_woken(guest);
 }
 
 /// A child's KERNEL 33 request, served by the supervisor in its turn (Sprint 197): the result, with the second word

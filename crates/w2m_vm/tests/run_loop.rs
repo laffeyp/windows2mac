@@ -1751,6 +1751,72 @@ fn three_busy_threads_on_two_vcpus_each_count_and_the_run_ends() {
     }
 }
 
+/// The lost-wakeup guest's instruction limit (Sprint 354): about eleven times its runs' count, 1,800,073 on one vCPU and
+/// on two (its instructions are the program's alone, no thread spinning), so a run that loses a readying, once card 5
+/// opens the window, stops as a deadlock or at the limit, never at ExitProcess.
+const LOST_WAKEUP_LIMIT: u64 = 20_000_000;
+
+/// Sprint 354 (card 3 of `docs/design-handles-and-sync-objects-2026-11-26.md`, its judge "The lost wakeup"):
+/// `tests/data/timed_waits/lost_wakeup`, two threads taking turns over two auto-reset events 100,000 rounds, every wait
+/// INFINITE, so a readying lost between a wait's check and its park leaves both waiting with no deadline and the run
+/// stops as a deadlock. No run reaches that window before card 5 takes waits off the runtime word, so the guest is
+/// held here for card 5 and its plant (the woken mark ignored in `w2m_block`): one run on one vCPU and 20 on two, each
+/// held to ExitProcess and "done" inside `LOST_WAKEUP_LIMIT` instructions and 60 s, each run's count printed.
+#[test]
+fn the_lost_wakeup_guest_ends_inside_its_limit_on_two_vcpus() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let data = fs::read(root.join("tests/data/timed_waits/lost_wakeup.exe")).unwrap();
+    let loaded = load(&data, None, "probe.exe").unwrap();
+    let mut counts = Vec::new();
+    for (run, vcpus) in std::iter::once((0, 1)).chain((1..=20).map(|run| (run, 2))) {
+        let mut start = Start::console("probe.exe");
+        start.vcpus = vcpus;
+        let mut guest = guest_with(&root, &loaded, &start);
+        let vm = Vm::new(40).unwrap();
+        vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
+            .unwrap();
+        let out = run_compiling(
+            &mut guest,
+            &loaded,
+            &vm,
+            Some(Duration::from_secs(60)),
+            LOST_WAKEUP_LIMIT,
+            &mut HostCompiler::default(),
+        )
+        .unwrap();
+        let stdout = String::from_utf8_lossy(&guest.served.stdout).into_owned();
+        println!(
+            "lost_wakeup on {vcpus} vCPU(s), run {run}: stop {:?}, {} instructions, runs by vCPU {:?}, output {stdout:?}",
+            out.stop, out.executed, out.runs_by_vcpu
+        );
+        assert_eq!(
+            (&out.stop, stdout.as_str()),
+            (&Stop::ExitProcess { code: 0 }, "done\n"),
+            "lost_wakeup on {vcpus} vCPU(s), run {run}, its stop and output; {} instructions",
+            out.executed
+        );
+        assert!(
+            out.executed < LOST_WAKEUP_LIMIT,
+            "lost_wakeup on {vcpus} vCPU(s), run {run}: {} instructions, not inside {LOST_WAKEUP_LIMIT}",
+            out.executed
+        );
+        if vcpus == 2 {
+            assert!(
+                out.runs_by_vcpu.len() == 2 && out.runs_by_vcpu[1] > 0,
+                "lost_wakeup on two vCPUs, run {run}: runs by vCPU {:?}, the second never ran a thread",
+                out.runs_by_vcpu
+            );
+            counts.push(out.executed);
+        }
+    }
+    println!(
+        "lost_wakeup's 20 runs on two vCPUs: {} to {} instructions, limit {LOST_WAKEUP_LIMIT}",
+        counts.iter().min().unwrap(),
+        counts.iter().max().unwrap()
+    );
+}
+
 /// Sprint 350's amendment (found by builder-350's reading of `sync_objects.c`): `probes/wait_closed_handle`. A worker
 /// waits 1000 ms on a semaphore; the main thread closes its only handle, makes a new semaphore, releases it once and
 /// waits on it with a zero timeout. The main thread's row, which Windows defines, is held on one vCPU and on two to the
@@ -2130,6 +2196,160 @@ fn the_call_ring_stays_exact_and_within_itself_on_two_vcpus() {
         2 * CALLS_NEAR,
         capacity - 1,
         capacity - 1 + 2 * CALLS_NEAR
+    );
+}
+
+/// Sprint 354 (card 3 of `docs/design-handles-and-sync-objects-2026-11-26.md`, "The wait across two locks"): a readying
+/// that finds a thread running its wait on another vCPU, not yet BLOCKED, is kept by the woken mark, and that thread's
+/// `w2m_block` leaves it READY with the mark clear, so the switch retries its call. Card 5 opens the window, a wait's
+/// check of its object under the sync objects' lock and its park under the runtime word, which no run reaches before
+/// it (the design, 356-357); so this drives the paths directly, in the form of Sprint 341's ring judge: each row
+/// readies thread T on the path it names while T is held by vCPU owner 2 and READY, then runs the image's own
+/// `w2m_block` as T on that vCPU, and reads T's status and mark. Two threads, R (index 0, the readier, on vCPU owner 1)
+/// and T (index 1); the paths, the class `threads.c` and the host keep: the C runtime's `w2m_ready_thread` (a release's
+/// grant) and `w2m_signal` (a manual-reset event's set, among others), the host's `wake_blocked` (a kernel answer's
+/// wake) and `schedule`'s SCHEDULE_END (a thread's end); and a row with no readying, T then BLOCKED.
+#[test]
+fn a_readying_before_the_block_leaves_the_thread_ready() {
+    use a64_encoder as a64;
+    use guest_runtime::layout::{CURRENT, CURRENT_ENTRY, RT_ENTRIES, RUN_ENTRY, TEB_OFF};
+    use hypervisor::{Exit, Reg};
+    use pe_loader::Memory;
+    use w2m_vm::threads::{BLOCKED, E_STATUS, E_VCPU, E_WOKEN, READY, RT_BLOCKED, RT_WAITING, SCHEDULE_END, Thread};
+    const DRIVER: u64 = MONITOR_VA + 0x2400; // the monitor's free area past the flush stub (`FLUSH_STUB_END`)
+    const STACK: u64 = 0x4000_0000;
+    const T_TEB: u64 = 0x5000_0000;
+    const DONE: u16 = 0x77;
+    const KEY: u64 = 0x2468; // T's wait's key, an object's address in a run
+    const SCRATCH_OFF: u64 = 0x1900; // runtime.h W2M_THREAD_SCRATCH_OFF
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let mut mem = Memory::default();
+    mem.map(STACK, 0x10000, "stack");
+    mem.map(T_TEB, 0x4000, "T's TEB");
+    let loaded = Loaded::bare(mem, STACK, STACK + 0x10000);
+    let mut guest = guest_with(&root, &loaded, &Start::console("woken.exe"));
+    let (r_tid, t_tid) = (4u64, 8u64);
+    for (tid, teb) in [(r_tid, PROCESS_VA + TEB_OFF), (t_tid, T_TEB)] {
+        w2m_vm::threads::add_thread(
+            &mut guest,
+            Thread {
+                tid,
+                index: 0,
+                teb,
+                stack: (0, 0, 0),
+                exit_code: w2m_vm::threads::STILL_ACTIVE,
+                parent: 0,
+                start: 0,
+                created_suspended: false,
+            },
+        )
+        .unwrap();
+    }
+    // the driver: sp from x15, the function in x22 called with x0 and x1, then the driver's own hvc
+    let driver = [a64::addi(31, 15, 0), a64::blr(22), a64::hvc(DONE.into())];
+    let bytes: Vec<u8> = driver.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let at = guest.offset(DRIVER).unwrap() as usize;
+    guest.memory.as_mut_slice()[at..at + bytes.len()].copy_from_slice(&bytes);
+    let (ready_thread, signal, block) = (
+        guest.symbols["w2m_ready_thread"],
+        guest.symbols["w2m_signal"],
+        guest.symbols["w2m_block"],
+    );
+    let monitor = guest.served.vcpu.monitor;
+    let entry = |index: u64| RUN_TABLE + RT_ENTRIES + RUN_ENTRY * index;
+    let gs_base = guest.offset(PROCESS_VA + STATE_OFF + 0xb0).unwrap();
+    let t_scratch = guest.offset(T_TEB + SCRATCH_OFF).unwrap();
+    let vm = Vm::new(40).unwrap();
+    vm.map(&guest.memory, IPA_BASE, memory::READ | memory::WRITE | memory::EXEC)
+        .unwrap();
+    let vcpu = Vcpu::new(&vm).unwrap();
+    w2m_vm::monitor::set_system_registers(&vcpu, guest.ttbr).unwrap();
+    // one call of the image's `function` on this vCPU, as vCPU owner `owner` running thread `index` (its TEB `teb`)
+    let call = |guest: &Guest, owner: u64, index: u64, teb: u64, function: u64, args: [u64; 2]| {
+        let view = guest.memory_view();
+        view.write_u64(monitor + LOCK_OWNER, owner);
+        view.write_u64(monitor + CURRENT, index);
+        view.write_u64(monitor + CURRENT_ENTRY, MONITOR_VA + entry(index));
+        view.write_u64(gs_base, teb);
+        for (r, v) in [
+            (0, args[0]),
+            (1, args[1]),
+            (15, STACK + 0x10000),
+            (22, function),
+            (28, MONITOR_VA + MONITOR_DATA),
+        ] {
+            vcpu.set_reg(Reg::X(r), v).unwrap();
+        }
+        vcpu.set_reg(Reg::Cpsr, w2m_vm::CPSR_EL1H).unwrap();
+        vcpu.set_reg(Reg::Pc, DRIVER).unwrap();
+        loop {
+            match vcpu.run().unwrap() {
+                Exit::VtimerActivated => vcpu.set_vtimer_mask(true).unwrap(),
+                e if e.hvc_immediate() == Some(DONE) => return,
+                e => panic!("{e:?} at {:#x} in a call of {function:#x}", vcpu.reg(Reg::Pc).unwrap()),
+            }
+        }
+    };
+    let mut rows = Vec::new();
+    for path in ["none", "w2m_ready_thread", "w2m_signal", "wake_blocked", "SCHEDULE_END"] {
+        // R current and running on vCPU owner 1; T READY and running its wait on vCPU owner 2, its check made, its block
+        // not yet; no thread blocked, no vCPU waiting
+        let view = guest.memory_view();
+        for (index, owner) in [(0, 1), (1, 2)] {
+            view.write_u64(entry(index) + E_STATUS, READY);
+            view.write_u64(entry(index) + E_VCPU, owner);
+            view.write_u64(entry(index) + E_WOKEN, 0);
+        }
+        view.write_u64(RUN_TABLE + RT_BLOCKED, 0);
+        view.write_u64(RUN_TABLE + RT_WAITING, 0);
+        view.write_u64(t_scratch, 0);
+        view.write_u64(t_scratch + 0x30, 0);
+        view.write_u64(monitor + LOCK_OWNER, 1);
+        view.write_u64(monitor + CURRENT, 0);
+        view.write_u64(monitor + CURRENT_ENTRY, MONITOR_VA + entry(0));
+        match path {
+            "w2m_ready_thread" => call(&guest, 1, 0, PROCESS_VA + TEB_OFF, ready_thread, [t_tid, 0]),
+            "w2m_signal" => call(&guest, 1, 0, PROCESS_VA + TEB_OFF, signal, [KEY, 0]),
+            "wake_blocked" => w2m_vm::host_request::wake_blocked(&mut guest),
+            "SCHEDULE_END" => {
+                let view = guest.memory_view();
+                assert!(w2m_vm::monitor_code::host_take_runtime_word(view, 1));
+                let mut x = [0u64; 31];
+                w2m_vm::threads::schedule(&mut guest, &mut x, SCHEDULE_END).unwrap();
+                w2m_vm::monitor_code::host_release_runtime_word(guest.memory_view());
+            }
+            _ => {}
+        }
+        let marked = guest.memory_view().read_u64(entry(1) + E_WOKEN);
+        // T's wait parks: `w2m_block` as T on vCPU owner 2, no deadline, its key
+        call(&guest, 2, 1, T_TEB, block, [u64::MAX, KEY]);
+        let view = guest.memory_view();
+        let (status, woken) = (view.read_u64(entry(1) + E_STATUS), view.read_u64(entry(1) + E_WOKEN));
+        let named = |s: u64| match s {
+            READY => "READY".to_string(),
+            BLOCKED => "BLOCKED".to_string(),
+            s => format!("status {s}"),
+        };
+        rows.push((path, marked, named(status), woken));
+        eprintln!(
+            "the woken mark, {path}: T's mark {marked} after the readying; after its w2m_block T {} with the mark {woken}",
+            named(status)
+        );
+    }
+    let wrong: Vec<String> = rows
+        .iter()
+        .filter(|(path, _, status, woken)| {
+            let expected = if *path == "none" { "BLOCKED" } else { "READY" };
+            status != expected || *woken != 0
+        })
+        .map(|(path, marked, status, woken)| {
+            format!("{path}: mark {marked} after the readying, T {status}, mark {woken}")
+        })
+        .collect();
+    assert!(
+        wrong.is_empty(),
+        "a readying before T's block, T then READY with its mark clear (none: BLOCKED), against {wrong:?}"
     );
 }
 

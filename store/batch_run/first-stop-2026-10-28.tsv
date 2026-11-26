@@ -40,6 +40,7 @@ calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	crosswake	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	handshake	ExitProcess { code: 0 }	ExitProcess	done\n
+guest	lost_wakeup	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	model_steps	ExitProcess { code: 0 }	ExitProcess	48743d4d4fd79694\nc00000917f800000\n
 guest	mutual_context	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	mutual	ExitProcess { code: 0 }	ExitProcess	done\n
@@ -52,6 +53,7 @@ guest	sleeper	ExitProcess { code: 0 }	ExitProcess	woke\ndone\n
 guest	spinchild	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	statsize	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	three_counters	ExitProcess { code: 0 }	ExitProcess	done\n
+guest	two_counters	ExitProcess { code: 0 }	ExitProcess	000000000046650d\n
 guest	twoproc	ExitProcess { code: 0 }	ExitProcess	child ended\n
 guest	twoready	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	twoproc-ic	ExitProcess { code: 0 }	ExitProcess	child ended\n

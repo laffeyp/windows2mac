@@ -39,6 +39,10 @@ pub const E_VSLOT: u64 = 0x28;
 pub const E_INSTRUCTIONS: u64 = 0x30;
 pub const E_PAUSES: u64 = 0x38;
 pub const E_VCPU: u64 = 0x138;
+/// The woken mark (Sprint 354, card 3 of `docs/design-handles-and-sync-objects-2026-11-26.md`): the first word of the
+/// entry's `reserved1` (`threads.c`' `struct w2m_run_entry`, past the monitor words), nonzero when a readying found the
+/// thread running on another vCPU and not yet BLOCKED, so that its `w2m_block` leaves it READY.
+pub const E_WOKEN: u64 = E_MONITOR + 0x130;
 /// `STATUS_CODES` (scheduler.py 50).
 pub const READY: u64 = 0;
 pub const BLOCKED: u64 = 1;
@@ -169,6 +173,7 @@ pub fn add_thread(guest: &mut Guest, thread: Thread) -> Result<u64, String> {
     let at = entry(n);
     write_u64(mem, at + E_TID, thread.tid);
     write_u64(mem, at + E_STATUS, READY);
+    write_u64(mem, at + E_WOKEN, 0); // a new thread is in no wait, whatever the entry's memory held (Sprint 354)
     write_u64(mem, at + E_TEB, thread.teb);
     write_u64(mem, at + E_VCPU, 0);
     write_u64(mem, at + E_VSLOT, VECTOR_SLOTS + VECTOR_SLOT * n);
@@ -622,6 +627,24 @@ pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
     }
 }
 
+/// The woken mark (Sprint 354, card 3 of `docs/design-handles-and-sync-objects-2026-11-26.md`; `threads.c`
+/// `mark_woken`) on each thread another vCPU runs, not BLOCKED, for a readying of every blocked thread, a thread's end
+/// (`schedule`'s SCHEDULE_END) or a kernel answer's wake (`host_request::wake_blocked`): a thread there between its wait's
+/// check, made under the runtime word for a thread's, a process's or a shared event's handle, and its park finds no
+/// readying left once it parks, and waits on with no deadline. Its `w2m_block` finds the mark and leaves it READY. The
+/// served vCPU's own thread is the one served; a thread no vCPU holds is in no such window, and its `load` clears it.
+pub fn mark_woken(guest: &Guest) {
+    let mem = crate::guest::memory_view(&guest.memory);
+    let own = read_u64(mem, guest.served.vcpu.monitor + LOCK_OWNER);
+    for t in guest.served.threads.values() {
+        let at = entry(t.index);
+        let holder = read_u64(mem, at + E_VCPU);
+        if read_u64(mem, at + E_STATUS) != BLOCKED && holder != 0 && holder != own {
+            write_u64(mem, at + E_WOKEN, 1);
+        }
+    }
+}
+
 /// Why a run stops when no thread can run again: on one vCPU at a switch, on several when every vCPU parks with no
 /// deadline and a second passes with no change (Sprint 327 names it for both).
 pub const DEADLOCK: &str = "every thread waits with no timeout and nothing can wake one (a deadlock)";
@@ -941,6 +964,7 @@ pub fn schedule(guest: &mut Guest, x: &mut [u64; 31], bits: u32) -> Result<Switc
         for index in blocked {
             set_status(guest, index, READY);
         }
+        mark_woken(guest); // a wait on its handle, checked on another vCPU and not yet parked (Sprint 354)
     } else if bits & SCHEDULE_RETRY != 0 && word(guest, &cur, E_STATUS) == BLOCKED {
         let deadline = u64::from_le_bytes(read_guest(guest, cur.teb + SCRATCH_OFF, 8)?.try_into().unwrap());
         write_u64(
@@ -1125,6 +1149,9 @@ fn load(guest: &Guest, x: &mut [u64; 31], next: &Thread, own: u64, executed: u64
     write_u64(mem, guest.served.vcpu.monitor + SLICE_COUNT, executed);
     write_u64(mem, guest.served.vcpu.monitor + SLICE_PAUSES, pauses);
     write_u64(mem, to + E_VCPU, own);
+    // loaded, the thread is in no wait's window: a mark a readying left while it ran elsewhere, or while it was put down,
+    // is spent, and its call, if retried, checks again (`threads.c` `mark_woken`, as `w2m_switch` clears it; Sprint 354)
+    write_u64(mem, to + E_WOKEN, 0);
     for (i, r) in x.iter_mut().enumerate() {
         *r = read_u64(mem, to + E_X + 8 * i as u64);
     }
@@ -1564,6 +1591,39 @@ pub(crate) mod tests {
              store of 3, at {published}; the entry's last stores: {}",
             log.len(),
             last.join(", ")
+        );
+    }
+
+    /// The woken mark (Sprint 354) starts clear where the host makes or loads a thread: a new thread's entry, whatever
+    /// its memory held (an entry the run table is not known to have held before; the host never frees one), and a
+    /// thread loaded on a vCPU, which is in no wait's window, a mark a readying left while it ran elsewhere or lay ready
+    /// being spent. Each is set first, as a stale mark would leave it, and read after `create_thread` and `take`.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_new_or_loaded_threads_woken_mark_starts_clear() {
+        use super::{E_VCPU, E_WOKEN, entry, read_u64, take, write_u64};
+        use guest_runtime::layout::LOCK_OWNER;
+
+        let (mut g, _) = guest_with_a_thread();
+        let start = g.served.threads.values().next().unwrap().start;
+        let next = g.served.threads.len() as u64;
+        write_u64(g.memory_view(), entry(next) + E_WOKEN, 1);
+        let tid = super::create_thread(&mut g, start, 0, 0, 0, &mut || Ok(())).unwrap();
+        assert_eq!(g.served.threads[&tid].index, next, "the new thread's entry");
+        let made = read_u64(g.memory_view(), entry(next) + E_WOKEN);
+        // the first thread held by vCPU owner 2, so the served vCPU, owner 1, takes the second, its mark set
+        let ts: Vec<super::Thread> = g.served.threads.values().cloned().collect();
+        let mem = g.memory_view();
+        write_u64(mem, g.served.vcpu.monitor + LOCK_OWNER, 1);
+        write_u64(mem, entry(ts[0].index) + E_VCPU, 2);
+        write_u64(mem, entry(ts[1].index) + E_WOKEN, 1);
+        let taken = take(&mut g, &mut [0u64; 31]).unwrap().map(|(tid, _)| tid);
+        let loaded = read_u64(g.memory_view(), entry(ts[1].index) + E_WOKEN);
+        assert_eq!(
+            (made, taken, loaded),
+            (0, Some(ts[1].tid), 0),
+            "the mark of a new thread's entry set before it was made, the thread taken, and the taken thread's mark set \
+             before its load"
         );
     }
 
