@@ -2014,11 +2014,13 @@ fn vcpu_loop(
                     limit: mem.read_u64(md + 8),
                 });
             }
-            // the batch run's end, asked at each answered request, a point on the instruction clock (Sprint 219)
+            // the batch run's end, asked at each answered request, a point on the instruction clock on one vCPU (Sprint
+            // 219); on several, at each request any vCPU answers, under the run's lock, the run's instructions every
+            // vCPU's (Sprint 367: this vCPU's own count, read here, wrapped below the log's on another vCPU)
             if matches!(served, Ok(crate::host_request::Served::Answered))
                 && let Some(mut end) = guest.batch_stop.take()
             {
-                let asked = end.check(guest, guest.memory_view().read_u64(md));
+                let asked = end.check(guest);
                 guest.batch_stop = Some(end);
                 match asked {
                     Ok(None) => {}

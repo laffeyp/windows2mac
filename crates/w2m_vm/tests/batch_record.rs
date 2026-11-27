@@ -40,6 +40,8 @@ struct Facts {
     executed: Option<u64>,
     in_flight: Vec<String>,
     traced: u64,
+    /// the run's vCPUs, the stop file's `vcpus` row, which a run on more than one writes, else 1 (Sprint 367)
+    vcpus: u64,
 }
 
 /// The end a stop names, as `run_frontier.py` 400-407 maps it.
@@ -178,7 +180,7 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
             p.as_object()
                 .unwrap()
                 .iter()
-                .filter(|(k, v)| k.as_str() != "execution_id" && !v.is_null())
+                .filter(|(k, v)| k.as_str() != "execution_id" && k.as_str() != "vcpus" && !v.is_null())
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect()
         };
@@ -218,6 +220,28 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
                     m["variant"], m[k], convention[k]
                 ));
             }
+        }
+    }
+    // the run's vCPUs (Sprint 367): on EXECUTION_STARTED and each measurement, the count a run on more than one was
+    // given, absent on one (0.13, P25), the reference's own form; not compared with the reference above, which ran on one
+    let vcpus = if facts.vcpus > 1 {
+        Value::from(facts.vcpus)
+    } else {
+        Value::Null
+    };
+    for (k, p) in ours
+        .iter()
+        .filter(|(k, _)| k == "EXECUTION_STARTED" || k == "MEASUREMENT_RECORDED")
+    {
+        if p["vcpus"] != vcpus {
+            let what = match p["measurement_id"].as_str() {
+                Some(id) => format!("{k} {id}"),
+                None => k.clone(),
+            };
+            found.push(format!(
+                "{what}: vcpus {} where the run had {} vCPUs",
+                p["vcpus"], facts.vcpus
+            ));
         }
     }
     // the counts, to the frozen host's run to the same stop
@@ -381,6 +405,7 @@ fn facts(root: &Path, stop_file: &str, fixture: &str, held: &str) -> Facts {
         executed,
         in_flight,
         traced: row("calls traced").parse().unwrap_or(0),
+        vcpus: row("vcpus").parse().unwrap_or(1),
     }
 }
 
@@ -907,6 +932,7 @@ fn a_moved_field_is_named() {
         executed: Some(3_541_969),
         in_flight: vec!["KERNEL32.dll!MapViewOfFile".into()],
         traced: 925,
+        vcpus: 1,
     };
     // the reference's comparison, judging this record's run
     let mut comparison = reference
@@ -989,11 +1015,75 @@ fn a_moved_field_is_named() {
         executed: Some(3_541_969),
         in_flight: Vec::new(),
         traced: 925,
+        vcpus: 1,
     };
     let found = problems(&good, &reference, &between_calls);
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(
         found[0].starts_with("a SERVICE_UNIMPLEMENTED where no Windows call is in flight"),
         "{found:?}"
+    );
+}
+
+/// A record of the batch run on two vCPUs (Sprint 367) carries the count on EXECUTION_STARTED and each measurement, and
+/// is otherwise held as a one-vCPU record is: with its stop file's `vcpus` 2 it agrees; one that says nothing, as a
+/// one-vCPU record does, is named at each event; and a one-vCPU run's record that says 2 is named.
+#[test]
+fn a_two_vcpu_record_carries_its_count() {
+    let reference = w2m_events(&root().join(REFERENCE));
+    let of = |kind: &str| reference.iter().find(|(k, _)| k == kind).unwrap().1.clone();
+    let record = |vcpus: Value| {
+        let mut started = of("EXECUTION_STARTED");
+        started["vcpus"] = vcpus.clone();
+        let mut m = of("MEASUREMENT_RECORDED");
+        m["metric"] = "vm_exits".into();
+        m["unit"] = "exits".into();
+        m["variant"] = "hvc 8".into();
+        m["value"] = 779.0.into();
+        m["measurement_id"] = "frontier-643a6283510c-1-vm_exits-hvc_8".into();
+        m["vcpus"] = vcpus;
+        let mut comparison = of("COMPARISON_COMPLETED");
+        comparison["target_execution_id"] = "frontier-643a6283510c-1".into();
+        vec![
+            ("SESSION_INIT".to_string(), Value::Null),
+            ("EXECUTION_STARTED".to_string(), started),
+            ("MEASUREMENT_RECORDED".to_string(), m),
+            (
+                "EXECUTION_COMPLETED".to_string(),
+                serde_json::json!({ "execution_id": "frontier-643a6283510c-1", "exit_status": "killed",
+                    "guest_line_count": 0, "guest_trace": false, "trace_sha256": EMPTY,
+                    "unobserved": "no guest-plane trace: the Rust host writes the traced images' calls, 925 rows" }),
+            ),
+            ("COMPARISON_COMPLETED".to_string(), comparison),
+            ("SESSION_COMPLETED".to_string(), Value::Null),
+        ]
+    };
+    let facts = |vcpus: u64| Facts {
+        stop: "ReferenceEnd: the log holds the reference's 168 lines and the main thread its calls".into(),
+        exits: BTreeMap::from([("hvc 8".to_string(), 779.0)]),
+        exits_from: "the held stop file",
+        executed: None,
+        in_flight: Vec::new(),
+        traced: 925,
+        vcpus,
+    };
+    assert_eq!(problems(&record(2.into()), &reference, &facts(2)), Vec::<String>::new());
+    assert_eq!(
+        problems(&record(Value::Null), &reference, &facts(1)),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        problems(&record(Value::Null), &reference, &facts(2)),
+        [
+            "EXECUTION_STARTED: vcpus null where the run had 2 vCPUs",
+            "MEASUREMENT_RECORDED frontier-643a6283510c-1-vm_exits-hvc_8: vcpus null where the run had 2 vCPUs"
+        ]
+    );
+    assert_eq!(
+        problems(&record(2.into()), &reference, &facts(1)),
+        [
+            "EXECUTION_STARTED: vcpus 2 where the run had 1 vCPUs",
+            "MEASUREMENT_RECORDED frontier-643a6283510c-1-vm_exits-hvc_8: vcpus 2 where the run had 1 vCPUs"
+        ]
     );
 }

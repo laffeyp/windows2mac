@@ -190,6 +190,10 @@ pub struct Execution<'a> {
     /// the 1, 5 and 15 minute load averages at the run's end, as `run_frontier.py` 173 writes them (Sprint 240); the
     /// state at its start is the baseline's `load_at_start`, which `scripts/batch-run-record.sh` writes
     pub load_at_end: Option<[f64; 3]>,
+    /// the run's vCPUs above one (Sprint 367: the batch run on `--vcpus` vCPUs, on the wall clock), written on
+    /// EXECUTION_STARTED and each MEASUREMENT_RECORDED; None on one vCPU, the field absent as on every record before
+    /// (0.13, P25: absent means one)
+    pub vcpus: Option<std::num::NonZeroU64>,
 }
 
 /// How a run ended, as `run_frontier.py` 400-407 names it.
@@ -301,9 +305,11 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
         timeout_seconds: seconds(e.timeout_seconds),
         kill_grace_seconds: seconds(e.kill_grace_seconds),
         unobserved: None,
-        // absent, meaning one vCPU (0.13, P25): the batch run takes the instruction clock, which `vcpus_allowed` holds
-        // to one vCPU
-        vcpus: None,
+        // the run's vCPUs above one; absent, meaning one (0.13, P25), on one vCPU, where the batch run takes the
+        // instruction clock (Sprint 367)
+        vcpus: e
+            .vcpus
+            .map(|n| HarnessU64::new(n.get()).expect("a vCPU count below 2^53")),
     }));
     // run_measurements' ids and variants (run_frontier.py 159-177), for the rows the Rust host measures
     let application = application_profile(e.program_stem, e.subject_sha256);
@@ -378,14 +384,12 @@ pub fn execution_lines(e: &Execution) -> Vec<String> {
     }
     for (metric, variant, value, unit) in rows {
         let slug = variant.to_lowercase().replace(' ', "_");
-        lines.push(measurement_line(
-            &format!("{}-{}-{slug}", e.id, metric.as_str()),
-            metric,
-            value,
-            unit,
-            &application,
-            Some(&variant),
-        ));
+        let id = format!("{}-{}-{slug}", e.id, metric.as_str());
+        // on several vCPUs each row carries the count (Sprint 367), on one none, as before
+        lines.push(match e.vcpus {
+            Some(n) => measurement_line_on(n, &id, metric, value, unit, &application, Some(&variant)),
+            None => measurement_line(&id, metric, value, unit, &application, Some(&variant)),
+        });
     }
     if let RunEnd::Unimplemented {
         service,
@@ -470,8 +474,9 @@ pub fn measurement_line(
     application: &str,
     variant: Option<&str>,
 ) -> String {
-    // absent, meaning one vCPU and no holder (0.13, P25 and P27): the batch run and `run_measurements`' one-vCPU
-    // measurements, this function's callers, run on one vCPU and split no hold by holder
+    // absent, meaning one vCPU and no holder (0.13, P25 and P27): the batch run on one vCPU and `run_measurements`'
+    // one-vCPU measurements, this function's callers, run on one vCPU and split no hold by holder; the batch run on
+    // several takes `measurement_line_on` (Sprint 367)
     measurement(measurement_id, metric, value, unit, application, variant, None, None)
 }
 
@@ -758,6 +763,7 @@ mod tests {
                 stop: "a stop",
                 elapsed: Duration::from_millis(1536),
                 load_at_end: Some([1.5, 2.25, 3.0]),
+                vcpus: None,
             }))
         };
         let status = |events: &[(String, Value)]| {
@@ -846,6 +852,49 @@ mod tests {
         assert_eq!(killed[12].1["guest_address"], 0x11_8002_72bfu64);
     }
 
+    /// The run's vCPUs on the record (Sprint 367): the batch run on two vCPUs writes `vcpus` 2 on EXECUTION_STARTED and
+    /// on each MEASUREMENT_RECORDED; on one, none, the record as before (0.13, P25: absent means one).
+    #[test]
+    fn a_run_on_two_vcpus_says_so_on_its_record() {
+        let on = |vcpus: Option<std::num::NonZeroU64>| {
+            events(&execution_lines(&Execution {
+                id: "frontier-643a6283510c-1",
+                subject_sha256: "643a6283510c88e3483212c9d0358de925ac415b83fa0302dced6381f412f974",
+                program_stem: "Hail to the Rainbow",
+                timeout_seconds: 10_800,
+                kill_grace_seconds: 60,
+                executed: 3_541_969,
+                run_seconds: 0.25,
+                host_seconds: 0.75,
+                host_by_kind: vec![("hvc 8".into(), 0.75)],
+                compile_counts: vec![("compiled", 40)],
+                compiles_by_image: vec![],
+                installs: None,
+                compile_ms: None,
+                most_in_a_frame_of_instructions: None,
+                exits: vec![(8, 779)],
+                end: RunEnd::ReferenceEnd,
+                calls: (IMAGE, 925),
+                stop: "a stop",
+                elapsed: Duration::from_millis(1536),
+                load_at_end: Some([1.5, 2.25, 3.0]),
+                vcpus,
+            }))
+        };
+        let counts = |events: &[(String, Value)]| {
+            events
+                .iter()
+                .filter(|(k, _)| k == "EXECUTION_STARTED" || k == "MEASUREMENT_RECORDED")
+                .map(|(_, p)| p["vcpus"].clone())
+                .collect::<Vec<_>>()
+        };
+        let two = counts(&on(std::num::NonZeroU64::new(2)));
+        assert!(two.len() > 1, "EXECUTION_STARTED and its measurements");
+        assert!(two.iter().all(|v| *v == 2), "{two:?}");
+        let one = counts(&on(None));
+        assert!(one.iter().all(Value::is_null), "{one:?}");
+    }
+
     /// The in-VM compile time (Sprint 247): a timed run writes `compile_critical_path_ms` "vm" in ms, with the longest
     /// compile and the most in a frame (Sprint 248), an untimed run none; the gates' run is untimed, so this test is
     /// what holds the writer. The frame's variant names the monitor code's frames a second.
@@ -874,6 +923,7 @@ mod tests {
                 stop: "a stop",
                 elapsed: Duration::from_millis(1536),
                 load_at_end: None,
+                vcpus: None,
             }))
             .into_iter()
             .filter(|(k, p)| k == "MEASUREMENT_RECORDED" && p["metric"] == "compile_critical_path_ms")

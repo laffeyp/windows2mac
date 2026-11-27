@@ -1497,10 +1497,43 @@ fn named_design_change(commit: &str, path: &str) -> bool {
 /// From Sprint 247 a review's dispositions between sprints go in the next sprint's card commit (WORKING_AGREEMENT).
 /// Sprint 347's card amendment, 003a0c1a9, stood here from Sprint 347 until Sprint 349's rule, `is_card_amendment`,
 /// covered it (it changes `probes/tls_expansion_first/` alone): a commit a rule admits is not a lapse.
-const BETWEEN_SPRINTS: [(&str, &str); 1] = [(
-    "c2fe0bbc8",
-    "reviewer-3's review at 246, its dispositions, committed after 246's close and before card 247 (Sprint 247)",
-)];
+/// From Sprint 367 a card amendment that changes paths outside its card and `probes/` passes when named here too, as any
+/// other commit does (reviewer-4's thirty-eighth review's follow-up, Low 1: the amendment branch had never read this
+/// list).
+const BETWEEN_SPRINTS: [(&str, &str); 2] = [
+    (
+        "c2fe0bbc8",
+        "reviewer-3's review at 246, its dispositions, committed after 246's close and before card 247 (Sprint 247)",
+    ),
+    (
+        "b358c5588",
+        "reviewer-4's thirty-eighth review, High 1: Sprint 366's design corrected after its close, carried in Sprint \
+         367's card amendment",
+    ),
+];
+
+/// Whether `hash` is a commit `BETWEEN_SPRINTS` names.
+fn named_between_sprints(hash: &str) -> bool {
+    BETWEEN_SPRINTS.iter().any(|(h, _)| hash.starts_with(h))
+}
+
+/// The faults of sprint `n`'s card amendment `hash`, `subject`, whose paths outside card N and `probes/` are `outside`:
+/// none when `BETWEEN_SPRINTS` names it (Sprint 367), else one for each such path (Sprint 349).
+fn amendment_faults(n: u32, hash: &str, subject: &str, outside: &[String]) -> Vec<String> {
+    if named_between_sprints(hash) {
+        return Vec::new();
+    }
+    outside
+        .iter()
+        .map(|path| {
+            format!(
+                "sprint {n:03}: commit {} \"{subject}\" amends its card and changes {path}, outside card {n} and \
+                 probes/",
+                &hash[..9]
+            )
+        })
+        .collect()
+}
 
 /// Whether `subject` is sprint `n`'s card amendment, "Sprint N card amendment: ...": a commit inside sprint N that
 /// changes card N or a probe the Windows runner must build partway through the sprint, the runner building only pushed
@@ -1559,7 +1592,7 @@ fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
         if is_card(subject, n + 1) {
             break;
         }
-        let named = BETWEEN_SPRINTS.iter().any(|(h, _)| hash.starts_with(h));
+        let named = named_between_sprints(hash);
         // from Sprint 334 the close folds into the work commit (Sprint 333): a close of its own is named
         if n >= FIRST_FOLDED_SPRINT && is_close(subject, n) {
             wrong.push(format!(
@@ -1569,15 +1602,10 @@ fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
             ));
             continue;
         }
-        // from Sprint 349 a card amendment is a kind of commit inside its sprint, held to card N and probes/
+        // from Sprint 349 a card amendment is a kind of commit inside its sprint, held to card N and probes/ unless
+        // named (Sprint 367)
         if is_card_amendment(subject, n) {
-            for path in amendment_outside(root, n, hash)? {
-                wrong.push(format!(
-                    "sprint {n:03}: commit {} \"{subject}\" amends its card and changes {path}, outside card {n} and \
-                     probes/",
-                    &hash[..9]
-                ));
-            }
+            wrong.extend(amendment_faults(n, hash, subject, &amendment_outside(root, n, hash)?));
             continue;
         }
         if !(subject.starts_with(&work) || is_close(subject, n) || named) {
@@ -1880,6 +1908,29 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A card amendment `BETWEEN_SPRINTS` names passes whatever it changes, and an unnamed one that changes a source
+    /// file is named by that path (Sprint 367; reviewer-4's thirty-eighth review's follow-up, Low 1): b358c5588 changed
+    /// BLACKBOARD.md, a design and store/gates/ beside card 367.
+    #[test]
+    fn a_named_card_amendment_passes_and_an_unnamed_one_is_named() {
+        let named = "b358c5588f91e2681c88ebd0ec9d0fcbca08c1fd";
+        let subject = "Sprint 367 card amendment: every C2 card built";
+        let outside = [
+            "BLACKBOARD.md".to_string(),
+            "docs/design-host-requests-off-the-runtime-word-2026-11-26.md".to_string(),
+        ];
+        assert_eq!(amendment_faults(367, named, subject, &outside), Vec::<String>::new());
+        let other = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(
+            amendment_faults(367, other, subject, &["crates/a/src/lib.rs".to_string()]),
+            [
+                "sprint 367: commit 012345678 \"Sprint 367 card amendment: every C2 card built\" amends its card and \
+                 changes crates/a/src/lib.rs, outside card 367 and probes/"
+            ]
+        );
+        assert_eq!(amendment_faults(367, other, subject, &[]), Vec::<String>::new());
+    }
 
     #[test]
     fn thousands_are_separated_as_python_formats_them() {

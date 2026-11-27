@@ -334,19 +334,21 @@ mod run {
             Some(_) => return Err("--vcpus <count>".into()),
             None => 1,
         };
-        let diagnostics: Vec<&str> = [
-            (ledger.is_some(), "--exit-ledger"),
-            (judge.is_some(), "--judge-blocks"),
-            (log_lines.is_some(), "--log-lines"),
-        ]
-        .into_iter()
-        .filter_map(|(on, name)| on.then_some(name))
-        .collect();
-        // the batch run (`--game`) and `--instruction-clock` take the instruction clock; a family's start may take it too,
-        // checked again once its options are read
+        // the diagnostics that read every exit in order; not the batch run's end (`--log-lines`, refused here from Sprint
+        // 308 to 366), which reads at an answered request under the run's lock, whichever vCPU answers it (Sprint 367)
+        let diagnostics: Vec<&str> = [(ledger.is_some(), "--exit-ledger"), (judge.is_some(), "--judge-blocks")]
+            .into_iter()
+            .filter_map(|(on, name)| on.then_some(name))
+            .collect();
+        // `--instruction-clock` takes the instruction clock, and the batch run (`--game`) on one vCPU (`game_clock`); a
+        // family's start may take it too, checked again once its options are read
         let lse2 = hypervisor::feature("FEAT_LSE2");
-        let clock = instruction_clock || args.iter().any(|a| a == "--game");
-        w2m_vm::run::vcpus_allowed(vcpus, lse2, &diagnostics, clock)?;
+        let game_clock = if args.iter().any(|a| a == "--game") {
+            game_clock(vcpus, lse2, &diagnostics)?
+        } else {
+            w2m_vm::run::vcpus_allowed(vcpus, lse2, &diagnostics, instruction_clock)?;
+            None
+        };
         // a guest run's instruction budget (Sprint 221): the family sweep ends a hang by count
         let max_steps = match args.iter().position(|a| a == "--max-steps") {
             Some(i) if args.len() >= i + 2 => {
@@ -370,8 +372,8 @@ mod run {
         let usage = "usage: w2m-vm <guest.exe> --output <file> [--serve-times <json> | --runtime-word <json> | \
                      --vcpu-figures <json> | --stop <tsv>] [--vcpus <count>] [--beside <name> <file>] [--exit-ledger \
                      <tsv>] [--instruction-clock] | w2m-vm --game <directory> <program.exe> --output <file> --stop \
-                     <tsv> [--log-lines <count> --main-thread-calls <tsv>] [--time-compile] [--instructions-at-compile] \
-                     | w2m-vm --wfe-probe | w2m-vm --capabilities";
+                     <tsv> [--vcpus <count>] [--log-lines <count> --main-thread-calls <tsv>] [--time-compile] \
+                     [--instructions-at-compile] | w2m-vm --wfe-probe | w2m-vm --capabilities";
         if let [flag, page_fd, memory_fd, slot] = args.as_slice()
             && flag == "--child"
         {
@@ -389,6 +391,8 @@ mod run {
                 output,
                 stop_file,
                 GameOptions {
+                    vcpus,
+                    clock: game_clock,
                     ledger: ledger.as_deref(),
                     end,
                     time_compile,
@@ -438,8 +442,8 @@ mod run {
             }
             return Err(why);
         }
-        // the count the run's requests read, and its children's (Sprint 365: `child_start` carries it). The game's start
-        // keeps 1: `--game` takes the instruction clock, which `vcpus_allowed` holds to one vCPU
+        // the count the run's requests read, and its children's (Sprint 365: `child_start` carries it); the game's start
+        // takes it in `game` (Sprint 367)
         start.vcpus = vcpus;
         let root = root();
         start.program_path = Some(root.join(guest_path));
@@ -717,10 +721,22 @@ mod run {
     const CLOCK_RATE: u64 = 1_400_000_000;
     const REFERENCE_START: u64 = 134_362_624_920_000_000;
 
+    /// The clock the batch run's start takes on `vcpus` vCPUs (Sprint 367; the Decision "Step 6's order after G2,
+    /// weighed again at Sprint 366"): `run_frontier.py`'s instruction clock on one, as from Sprint 186; the wall clock
+    /// (None) above one, as a family's start falls back to it (Sprint 360), the instruction clock staying on one vCPU
+    /// (the Decision "The instruction clock on several vCPUs"), and the batch run on several vCPUs on the wall clock
+    /// (census G3). The run's vCPUs refused as any run's are, each reason by name (`vcpus_allowed`), before any VM.
+    fn game_clock(vcpus: u32, lse2: Option<i32>, diagnostics: &[&str]) -> Result<Option<(u64, u64)>, String> {
+        let clock = (vcpus <= 1).then_some((CLOCK_RATE, REFERENCE_START));
+        w2m_vm::run::vcpus_allowed(vcpus, lse2, diagnostics, clock.is_some())?;
+        Ok(clock)
+    }
+
     /// The batch run on the Rust host (Sprint 186; reviewer-2's High 1 of its review of 182-184): `program` in
     /// `directory`, its DLLs supplied from the directory, started as `scripts/run_frontier.py` 266-273 starts it (a GUI
     /// program, foreground held, `USER_ENVIRONMENT`, `BATCH_ARGUMENTS`, the instruction clock), run on one vCPU to its
-    /// stop; the guest's output to `output` and the stop to `stop_file`, each relative to the repository root.
+    /// stop, or from Sprint 367 on `--vcpus` vCPUs on the wall clock (`game_clock`); the guest's output to `output` and
+    /// the stop to `stop_file`, each relative to the repository root.
     /// `w2m-vm --child <turn page fd> <memory fd> <slot>` (Sprint 197): a child process a supervisor `w2m-vm` started
     /// for a PROCESS_CREATE (`spawner`, kernel.py 437-468), its start one JSON line on standard input. Its program is
     /// the command line's first token, quoted or not, found in C:\w2m\app on the host or, for a run with no program
@@ -1031,6 +1047,9 @@ mod run {
     /// How a game run is watched beside its record: the exit ledger (Sprint 206), the batch run's end (Sprint 219),
     /// the in-VM compiler timed (Sprint 247), the whole-block judge (Sprint 252).
     struct GameOptions<'a> {
+        /// the run's vCPUs and its start's clock, `game_clock`'s (Sprint 367)
+        vcpus: u32,
+        clock: Option<(u64, u64)>,
         ledger: Option<&'a str>,
         end: Option<(usize, String)>,
         time_compile: bool,
@@ -1048,6 +1067,8 @@ mod run {
         options: GameOptions<'_>,
     ) -> Result<(), String> {
         let GameOptions {
+            vcpus,
+            clock,
             ledger,
             end,
             time_compile,
@@ -1066,7 +1087,12 @@ mod run {
         start.foreground_held = true;
         start.environment = USER_ENVIRONMENT.iter().map(|s| s.to_string()).collect();
         start.command_line = Some(format!("\"C:\\w2m\\app\\{program}\" {BATCH_ARGUMENTS}"));
-        start.instruction_clock = Some((CLOCK_RATE, REFERENCE_START));
+        // the instruction clock on one vCPU, the wall clock above, named on stderr as a family's fallback is (Sprint 367)
+        start.instruction_clock = clock;
+        start.vcpus = vcpus;
+        if clock.is_none() {
+            eprintln!("w2m-vm: the batch run's instruction clock runs on one vCPU; on {vcpus} vCPUs, the wall clock");
+        }
         // the call trace as `run_frontier.py` 271-272 asks it (Sprint 191): UnityPlayer.dll's and mono's calls, from
         // UnityMain
         start.call_trace = vec!["UnityPlayer.dll".into(), "mono-2.0-bdwgc.dll".into()];
@@ -1131,6 +1157,11 @@ mod run {
             stop_name(&out.stop),
             started.elapsed().as_secs_f64()
         );
+        // the run's vCPUs above one (Sprint 367), which `batch_record.rs` holds the record's to; on one, no row, the
+        // file as before
+        if vcpus > 1 {
+            tsv += &format!("vcpus\t{vcpus}\n");
+        }
         if let Stop::HostRequest { op, .. } = out.stop {
             // the request's arguments on the transport page (vm_backend 3808-3812); HOST_MODULE's name is UTF-16 at a0,
             // a1 characters (3892-3893)
@@ -1323,11 +1354,39 @@ mod run {
             stop: &stop,
             elapsed: started.elapsed(),
             load_at_end: w2m_vm::host_state::load_average(),
+            // the count on the record above one vCPU, absent on one as before (Sprint 367)
+            vcpus: std::num::NonZeroU64::new(u64::from(vcpus)).filter(|n| n.get() > 1),
         });
         let mut stdout = io::stdout().lock();
         for line in record {
             writeln!(stdout, "{line}").map_err(|e| e.to_string())?;
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{CLOCK_RATE, REFERENCE_START, game_clock};
+
+        /// The batch run's start by its vCPUs (Sprint 367): the instruction clock on one, a diagnostic allowed there; on
+        /// two the wall clock, allowed with FEAT_LSE2 and no diagnostic, where the instruction clock was refused by name
+        /// from Sprint 315; a diagnostic or a host without FEAT_LSE2 still refused by name.
+        #[test]
+        fn the_batch_run_on_two_vcpus_takes_the_wall_clock() {
+            assert_eq!(
+                game_clock(1, None, &["--exit-ledger"]),
+                Ok(Some((CLOCK_RATE, REFERENCE_START))),
+                "one vCPU: the instruction clock"
+            );
+            assert_eq!(game_clock(2, Some(1), &[]), Ok(None), "two vCPUs: the wall clock");
+            assert_eq!(
+                game_clock(2, Some(1), &["--exit-ledger"]),
+                Err("2 vCPUs refused: --exit-ledger reads every exit in order".to_string())
+            );
+            assert_eq!(
+                game_clock(2, None, &[]),
+                Err("2 vCPUs refused: FEAT_LSE2 not reported (None)".to_string())
+            );
+        }
     }
 }
