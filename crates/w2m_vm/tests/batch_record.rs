@@ -26,6 +26,9 @@ const REFERENCE: &str = "store/runs/frontier-643a6283510c-1792623423346201000";
 const FIXTURE: &str = "build/exit_ledger/python.tsv";
 /// The run's held stop, whose exit counts hold the record's past the fixture
 const HELD: &str = "store/batch_run/first-stop-2026-10-28.tsv";
+/// The game calls contract's version `call_compare` judges under (Sprint 368: 0.2.0, an entry scoped to a thread;
+/// `contracts/windows.game.calls/0.2.0.json`)
+const CONTRACT_VERSION: &str = "0.2.0";
 /// The empty trace's sha256 (P22)
 const EMPTY: &str = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
@@ -333,13 +336,20 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
         of(ours, "COMPARISON_COMPLETED").first(),
         of(reference, "COMPARISON_COMPLETED").first(),
     ) {
-        for k in ["contract_id", "contract_version", "relation", "reference_ref"] {
+        for k in ["contract_id", "relation", "reference_ref"] {
             if c[k] != r[k] {
                 found.push(format!(
                     "COMPARISON_COMPLETED {k} {} where the reference has {}",
                     c[k], r[k]
                 ));
             }
+        }
+        // the contract's version the comparator reads, 0.2.0 from Sprint 368, where the reference's record names 0.1.0
+        if c["contract_version"] != CONTRACT_VERSION {
+            found.push(format!(
+                "COMPARISON_COMPLETED contract_version {} where the comparator reads {CONTRACT_VERSION}",
+                c["contract_version"]
+            ));
         }
         if c["verdict"] != "conforms" {
             found.push(format!(
@@ -352,9 +362,9 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
 }
 
 /// The facts from the gates' files: the stop line and the calls traced from the run's stop file, the calls in flight
-/// beside it, and the exits and instructions: the ledger fixture's when its last row is the request the run stopped at
-/// (its op, the fifth column, hex), else the held stop file's exits.
-fn facts(root: &Path, stop_file: &str, fixture: &str, held: &str) -> Facts {
+/// beside it (`in_flight`, under the root), and the exits and instructions: the ledger fixture's when its last row is
+/// the request the run stopped at (its op, the fifth column, hex), else the held stop file's exits.
+fn facts(root: &Path, stop_file: &str, fixture: &str, held: &str, in_flight: &str) -> Facts {
     let row = |name: &str| {
         stop_file
             .lines()
@@ -390,7 +400,7 @@ fn facts(root: &Path, stop_file: &str, fixture: &str, held: &str) -> Facts {
             .collect();
         (exits, "the held stop file", None)
     };
-    let in_flight = fs::read_to_string(root.join("build/batch_run/first-stop.in-flight.tsv"))
+    let in_flight = fs::read_to_string(root.join(in_flight))
         .unwrap_or_default()
         .lines()
         .map(|l| {
@@ -409,21 +419,31 @@ fn facts(root: &Path, stop_file: &str, fixture: &str, held: &str) -> Facts {
     }
 }
 
-#[test]
-fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count() {
-    let root = root();
-    // the newest build/batch_run/record-<ns>
-    let record = fs::read_dir(root.join("build/batch_run"))
+/// The newest record `build/batch_run/<prefix><ns>`, its name the prefix and digits alone: the one-vCPU run's
+/// `record-<ns>` is not taken for the two-vCPU run's `record-2-vcpus-<ns>`, which a name's order puts after it (Sprint
+/// 368).
+fn newest_record(root: &Path, prefix: &str) -> Option<PathBuf> {
+    fs::read_dir(root.join("build/batch_run"))
         .into_iter()
         .flatten()
         .flatten()
         .map(|e| e.path())
         .filter(|p| {
             p.is_dir()
-                && p.file_name()
-                    .is_some_and(|n| n.to_string_lossy().starts_with("record-"))
+                && p.file_name().is_some_and(|n| {
+                    n.to_string_lossy()
+                        .strip_prefix(prefix)
+                        .is_some_and(|ns| !ns.is_empty() && ns.bytes().all(|b| b.is_ascii_digit()))
+                })
         })
-        .max();
+        .max()
+}
+
+#[test]
+fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count() {
+    let root = root();
+    // the newest build/batch_run/record-<ns>
+    let record = newest_record(&root, "record-");
     let Some(record) = record else {
         let what = "no build/batch_run/record-<ns> (scripts/gates.sh writes it)";
         if std::env::var("W2M_REQUIRE_CASE_RUNS").as_deref() == Ok("1") {
@@ -446,12 +466,69 @@ fn the_batch_runs_record_is_the_frozen_hosts_in_form_and_its_own_stop_in_count()
     let ours = w2m_events(&record);
     let reference = w2m_events(&root.join(REFERENCE));
     let held = fs::read_to_string(root.join(HELD)).unwrap();
-    let mut found = problems(&ours, &reference, &facts(&root, &stop_file, &fixture, &held));
+    let facts = facts(
+        &root,
+        &stop_file,
+        &fixture,
+        &held,
+        "build/batch_run/first-stop.in-flight.tsv",
+    );
+    let mut found = problems(&ours, &reference, &facts);
     found.extend(rate_problems(&measurements(&ours)));
     found.extend(condition_problems(&record));
     found.extend(compile_problems(&measurements(&ours), &measurements(&reference), true));
     found.extend(compile_time_problems(&measurements(&ours), timed(&record), true));
     assert!(found.is_empty(), "the batch run's record:\n{}", found.join("\n"));
+}
+
+/// The batch run's record on two vCPUs (Sprint 368; census G3), which `scripts/gates.sh` writes through
+/// `scripts/batch-run-record.sh --vcpus 2` to build/batch_run/record-2-vcpus-<ns>, its stop file
+/// build/batch_run/first-stop-2-vcpus.tsv: held as the one-vCPU run's record is, in form to the frozen host's, its end
+/// to its stop and its calls in flight, `vcpus` 2, and its comparison's verdict conforms; its exits counted to its own
+/// stop file's, since on the wall clock the threads' exits are not the one-vCPU run's, which the fixture and the held
+/// file count, and the run writes no exit ledger (`w2m-vm` refuses one above one vCPU).
+#[test]
+fn the_two_vcpu_batch_runs_record_is_held_as_the_one_vcpu_runs_is() {
+    let root = root();
+    let Some(record) = newest_record(&root, "record-2-vcpus-") else {
+        let what = "no build/batch_run/record-2-vcpus-<ns> (scripts/gates.sh writes it)";
+        if std::env::var("W2M_REQUIRE_CASE_RUNS").as_deref() == Ok("1") {
+            panic!("{what}, and W2M_REQUIRE_CASE_RUNS=1 requires it");
+        }
+        eprintln!("{what}: the two-vCPU batch run's record is not held here");
+        return;
+    };
+    let stop = root.join("build/batch_run/first-stop-2-vcpus.tsv");
+    // a record of other sources is not judged (Sprint 288): the stop file's stamp stands for its run's record
+    if !w2m_vm::built_from::fresh(&root, &stop) {
+        return;
+    }
+    let stop_file = fs::read_to_string(&stop)
+        .unwrap_or_else(|e| panic!("build/batch_run/first-stop-2-vcpus.tsv is written beside the record: {e}"));
+    let ours = w2m_events(&record);
+    let reference = w2m_events(&root.join(REFERENCE));
+    let facts = Facts {
+        exits_from: "the run's own stop file",
+        ..facts(
+            &root,
+            &stop_file,
+            "",
+            &stop_file,
+            "build/batch_run/first-stop-2-vcpus.in-flight.tsv",
+        )
+    };
+    assert_eq!(facts.vcpus, 2, "the two-vCPU run's stop file:\n{stop_file}");
+    let mut found = problems(&ours, &reference, &facts);
+    found.extend(rate_problems(&measurements(&ours)));
+    found.extend(condition_problems(&record));
+    found.extend(compile_problems(&measurements(&ours), &measurements(&reference), true));
+    found.extend(compile_time_problems(&measurements(&ours), timed(&record), true));
+    assert!(
+        found.is_empty(),
+        "the two-vCPU batch run's record {}:\n{}",
+        record.display(),
+        found.join("\n")
+    );
 }
 
 /// The machine's state at the run's start, in the baseline `scripts/batch-run-record.sh` writes (Sprint 240; reviewer-3's
@@ -942,6 +1019,7 @@ fn a_moved_field_is_named() {
         .1
         .clone();
     comparison["target_execution_id"] = "frontier-643a6283510c-1".into();
+    comparison["contract_version"] = CONTRACT_VERSION.into();
     let record = |exits: f64, started: Value, service: &str, status: &str| {
         vec![
             ("SESSION_INIT".to_string(), Value::Null),
@@ -1044,6 +1122,7 @@ fn a_two_vcpu_record_carries_its_count() {
         m["vcpus"] = vcpus;
         let mut comparison = of("COMPARISON_COMPLETED");
         comparison["target_execution_id"] = "frontier-643a6283510c-1".into();
+        comparison["contract_version"] = CONTRACT_VERSION.into();
         vec![
             ("SESSION_INIT".to_string(), Value::Null),
             ("EXECUTION_STARTED".to_string(), started),

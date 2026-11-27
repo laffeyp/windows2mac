@@ -734,12 +734,14 @@ impl OneToOne<'_> {
 
 /// The value divergences of the pairs, in their order: each field by the relation its kind allows, an assigned value
 /// by its space's map, an integer that carries an address as a pointer; a (function, field) the contract leaves
-/// `undetermined` not judged.
+/// `undetermined` not judged, one scoped to a thread name (from contract 0.2.0) only where the Windows call's thread and
+/// the w2m call's thread both carry that name (`names`, each side's SetThreadDescription names).
 fn value_divergences(
     pairs: &[(usize, &Call, &Call)],
     threads: &Threads,
     sigs: &BTreeMap<String, Signature>,
-    undecided: &BTreeSet<(String, String)>,
+    undecided: &Undecided,
+    names: (&BTreeMap<u64, String>, &BTreeMap<u64, String>),
 ) -> Vec<Divergence> {
     let mut ids = OneToOne {
         threads,
@@ -761,9 +763,15 @@ fn value_divergences(
         };
         for v in fields {
             let name = v.field.to_string();
-            if undecided.contains(&(fn_.clone(), name.clone()))
-                || undecided.contains(&(format!("{}!{fn_}", a.image), name))
-            {
+            let scoped = format!("{}!{fn_}", a.image);
+            let undetermined = undecided.iter().any(|(key, field, thread)| {
+                (*key == *fn_ || *key == scoped)
+                    && *field == name
+                    && thread
+                        .as_ref()
+                        .is_none_or(|t| names.0.get(&a.tid) == Some(t) && names.1.get(&b.tid) == Some(t))
+            });
+            if undetermined {
                 continue;
             }
             let mut space = assigned(fn_, v.field);
@@ -807,7 +815,7 @@ fn judged(
     sigs: &BTreeMap<String, Signature>,
     excluded: &BTreeSet<u64>,
     strings: (&[Str], &[Str]),
-    undecided: &BTreeSet<(String, String)>,
+    undecided: &Undecided,
 ) -> (Vec<Divergence>, Vec<Compared>) {
     let windows: Vec<Call> = placed(
         &windows
@@ -825,7 +833,13 @@ fn judged(
     };
     let (w, m) = (by_pair(&windows), by_pair(&w2m));
     let (pairs, mut found) = paired(&w, &m, &threads, sigs);
-    found.extend(value_divergences(&pairs, &threads, sigs, undecided));
+    found.extend(value_divergences(
+        &pairs,
+        &threads,
+        sigs,
+        undecided,
+        (&names.0, &names.1),
+    ));
     found.sort_by(|a, b| a.place().cmp(&b.place()));
     let compared = pairs
         .iter()
@@ -881,6 +895,18 @@ impl SetDivergence {
         !self.agree.is_empty()
     }
 
+    /// The w2m thread the divergence is on, None for a Windows thread with no w2m partner (Sprint 368: the two-vCPU
+    /// runs' divergences sorted with their thread)
+    pub fn w2m_thread(&self) -> Option<u64> {
+        self.divergence.w2m_thread
+    }
+
+    /// Whether the divergence is a value's (an argument, the return or the last error), not a call's presence or
+    /// count (Sprint 368; the user's Decision of 2026-10-13)
+    pub fn is_value(&self) -> bool {
+        !self.divergence.field.presence()
+    }
+
     pub fn text(&self) -> String {
         let silent = self.of - self.disagree.len() - self.agree.len();
         let mut t = format!(
@@ -914,7 +940,7 @@ fn compare_set(
     w2m: &[Call],
     sigs: &BTreeMap<String, Signature>,
     strings: &[Str],
-    undecided: &BTreeSet<(String, String)>,
+    undecided: &Undecided,
 ) -> (Vec<SetDivergence>, Vec<SetDivergence>, BTreeMap<String, usize>) {
     let mut found: BTreeMap<String, Vec<(Key, Divergence)>> = BTreeMap::new();
     let mut compared: BTreeMap<String, BTreeSet<Compared>> = BTreeMap::new();
@@ -1109,7 +1135,7 @@ fn verdict(
     calls: &[Call],
     sigs: &BTreeMap<String, Signature>,
     strings: &[Str],
-    undecided: &BTreeSet<(String, String)>,
+    undecided: &Undecided,
     stopped: bool,
 ) -> Verdict {
     let (found, varies, compared) = compare_set(references, calls, sigs, strings, undecided);
@@ -1160,14 +1186,15 @@ pub fn main_thread_calls(root: &Path) -> Result<Vec<(String, String, u64)>, Stri
 /// The frozen host's run of 2026-10-21, whose record names the reference set (`reference_runs`)
 const REFERENCE_RECORD: &str = "store/runs/frontier-643a6283510c-1792623423346201000/events-000001.open.jsonl";
 /// The contract the calls are judged under
-const CONTRACT: &str = "contracts/windows.game.calls/0.1.0.json";
+/// (0.2.0 from Sprint 368: an entry scoped to a thread; 0.1.0 kept as it was)
+pub const CONTRACT: &str = "contracts/windows.game.calls/0.2.0.json";
 
 /// The Windows side of the comparison: the reference set's runs under store/game-runs, specs/signatures.json and the
 /// contract, read from the repository once.
 pub struct Windows {
     references: Vec<Reference>,
     sigs: BTreeMap<String, Signature>,
-    undecided: BTreeSet<(String, String)>,
+    undecided: Undecided,
     pub contract_id: String,
     pub contract_version: String,
 }
@@ -1242,15 +1269,27 @@ fn reference_runs(record_first_segment: &str) -> Result<Vec<String>, String> {
         .collect()
 }
 
-/// The contract's `excluded_threads` for a run, and its `undetermined` (function, field) values.
-fn contract_rules(contract: &Value, run: &str) -> (BTreeSet<u64>, BTreeSet<(String, String)>) {
+/// The contract's `undetermined` values: (function or `Image!Function`, field, the thread name it is scoped to, if any).
+type Undecided = BTreeSet<(String, String, Option<String>)>;
+
+/// One `undetermined` key: `Function field`, `Image!Function field`, or from contract 0.2.0 (Sprint 368)
+/// `Image!Function@Thread field`, the field the key's last word and the thread the name after `@`, which may hold spaces
+/// ("Job.Worker 0").
+fn undetermined_key(key: &str) -> Option<(String, String, Option<String>)> {
+    let (function, field) = key.rsplit_once(' ')?;
+    Some(match function.split_once('@') {
+        Some((function, thread)) => (function.to_string(), field.to_string(), Some(thread.to_string())),
+        None => (function.to_string(), field.to_string(), None),
+    })
+}
+
+/// The contract's `excluded_threads` for a run, and its `undetermined` values.
+fn contract_rules(contract: &Value, run: &str) -> (BTreeSet<u64>, Undecided) {
     let excluded = contract["excluded_threads"][run]
         .as_object()
         .map_or(BTreeSet::new(), |o| o.keys().filter_map(|k| k.parse().ok()).collect());
     let undetermined = contract["undetermined"].as_object().map_or(BTreeSet::new(), |o| {
-        o.keys()
-            .filter_map(|k| k.split_once(' ').map(|(f, field)| (f.to_string(), field.to_string())))
-            .collect()
+        o.keys().filter_map(|k| undetermined_key(k)).collect()
     });
     (excluded, undetermined)
 }
@@ -1472,6 +1511,26 @@ mod tests {
         ];
         let kept: Vec<u64> = placed(&calls).iter().map(|c| c.seq).collect();
         assert_eq!(kept, [3, 5]);
+    }
+
+    /// An undetermined key is read as (function, field, thread): unscoped, by image, or scoped to a thread whose name
+    /// holds a space (Sprint 368).
+    #[test]
+    fn an_undetermined_key_names_its_function_field_and_thread() {
+        let s = |x: &str| x.to_string();
+        assert_eq!(
+            undetermined_key("TryEnterCriticalSection ret"),
+            Some((s("TryEnterCriticalSection"), s("ret"), None))
+        );
+        assert_eq!(
+            undetermined_key("UnityPlayer.dll!HeapReAlloc@BatchDeleteObjects a3"),
+            Some((s("UnityPlayer.dll!HeapReAlloc"), s("a3"), Some(s("BatchDeleteObjects"))))
+        );
+        assert_eq!(
+            undetermined_key("UnityPlayer.dll!Sleep@Job.Worker 0 a0"),
+            Some((s("UnityPlayer.dll!Sleep"), s("a0"), Some(s("Job.Worker 0"))))
+        );
+        assert_eq!(undetermined_key("nospace"), None);
     }
 
     /// A return that differs is named by its row; a function only w2m calls is "called"; a Windows call past w2m's is

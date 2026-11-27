@@ -111,6 +111,22 @@ W2M_VOID u64 k32_LeaveCriticalSection(u64 cs) {
     return w2m_logged(W2M_API_LeaveCriticalSection, cs, 0);
 }
 
+/* SleepConditionVariableCS's two halves (Sprint 368; slim_locks.c): the section left by this thread, which owns it
+ * entered exactly once ("This critical section must be entered exactly once by the caller at the time
+ * SleepConditionVariableCS is called", Microsoft Learn), 0 when it does not, and entered again, 1 once this thread
+ * owns it. */
+int w2m_critical_section_leave_once(u64 cs) {
+    struct critical_section *c = (struct critical_section *)cs;
+    if (c->recursion_count != 1 || c->owning_thread != thread_id()) return 0;
+    c->recursion_count = 0;
+    c->owning_thread = 0;
+    c->lock_count = -1;
+    w2m_signal(cs);
+    return 1;
+}
+
+int w2m_critical_section_enter(u64 cs) { return acquire((struct critical_section *)cs); }
+
 W2M_VOID u64 k32_DeleteCriticalSection(u64 cs) {
     u8 *b = (u8 *)cs;
     for (int i = 0; i < 40; i++) b[i] = 0;

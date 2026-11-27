@@ -254,12 +254,18 @@ fn readied_for(guest: &Guest, own: u64) {
 /// `current_tid` (3316-3321): the id of the thread vCPU 0 runs, its current entry's (`w2m_switch` changes it in the
 /// VM).
 pub fn current_tid(guest: &Guest) -> u64 {
+    current_tid_on(guest, guest.served.vcpu)
+}
+
+/// The id of the thread the vCPU whose own pages are `pages` runs, its monitor page's current entry's (Sprint 368: the
+/// stopping vCPU's after a run on several vCPUs, where the vCPU served last may be another).
+pub fn current_tid_on(guest: &Guest, pages: crate::VcpuPages) -> u64 {
     let mem = crate::guest::memory_view(&guest.memory);
     if read_u64(mem, RUN_TABLE + RT_COUNT) == 0 {
         // `_first_tid` (vm_backend 2497): the start's thread id, a child's from the Machine (Sprint 206: it was 4)
         return guest.start.tid;
     }
-    let at = read_u64(mem, guest.served.vcpu.monitor + CURRENT_ENTRY) - MONITOR_VA;
+    let at = read_u64(mem, pages.monitor + CURRENT_ENTRY) - MONITOR_VA;
     read_u64(mem, at + E_TID)
 }
 
@@ -2287,5 +2293,75 @@ pub(crate) mod tests {
         assert_eq!(stack_grow(&mut g, tid, dealloc + PAGE, true, &mut || Ok(())), Ok(0));
         assert_eq!(stack_limit(&g), eight);
         assert_eq!(query(&mut g, eight - 4 * PAGE).0, MEM_RESERVE, "no page committed");
+    }
+
+    /// An Unserved stop on two vCPUs names the stopping vCPU's thread and call (Sprint 368; Sprint 367's open item):
+    /// vCPU 1 stopped the run, running the second thread inside a call through an import slot (`call [rip+disp32]`
+    /// before the return address its RSP holds), while vCPU 0, running the first thread with no call on its stack, was
+    /// the vCPU served last. The stop's thread is the second and its call the slot's service, which `RunEnd::of` names
+    /// unimplemented when that thread has it in flight; read from the vCPU served last, the form before, they are the
+    /// first thread's and no service.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn an_unserved_stop_on_two_vcpus_names_the_stopping_vcpus_thread_and_call() {
+        use super::{entry, write_u64};
+        use crate::record::RunEnd;
+        use crate::run::{Outcome, Stop};
+        use guest_runtime::layout::{CURRENT_ENTRY, MONITOR_VA};
+        let (mut g, second) = guest_with_a_thread();
+        g.start.vcpus = 2;
+        let one = g.private_chain(1).unwrap().1;
+        assert_eq!(g.served.vcpu, crate::VcpuPages::FIRST, "vCPU 0, the vCPU served last");
+        let thread = |tid_is_second: bool| {
+            g.served
+                .threads
+                .values()
+                .find(|t| (t.tid == second) == tid_is_second)
+                .unwrap()
+                .clone()
+        };
+        let (first, other) = (thread(false), thread(true));
+        let (thunk, name) = g.served.thunks.iter().next().map(|(t, n)| (*t, n.clone())).unwrap();
+        let mem = g.memory_view();
+        write_u64(
+            mem,
+            crate::VcpuPages::FIRST.monitor + CURRENT_ENTRY,
+            MONITOR_VA + entry(first.index),
+        );
+        write_u64(mem, one.monitor + CURRENT_ENTRY, MONITOR_VA + entry(other.index));
+        // vCPU 1's thread: `call [rip+0x100]` in the program's image, the slot holding the thunk, the return address on
+        // its stack below StackBase and RSP at it; vCPU 0's RSP at a word of 0, no call
+        let code = g.served.images[0].base + 0x1000;
+        let (ret, slot) = (code + 6, code + 6 + 0x100);
+        let at = |va: u64| g.offset(va).unwrap();
+        mem.write(at(code), &[0xff, 0x15, 0x00, 0x01, 0x00, 0x00]);
+        mem.write_u64(at(slot), thunk);
+        let rsp = other.stack.2 - 0x40;
+        mem.write_u64(at(rsp), ret);
+        mem.write_u64(one.state + 8 * 4, rsp);
+        let rsp0 = first.stack.2 - 0x40;
+        mem.write_u64(at(rsp0), 0);
+        mem.write_u64(crate::VcpuPages::FIRST.state + 8 * 4, rsp0);
+        let mut out = Outcome::empty();
+        out.stop = Stop::HostRequest {
+            op: 99,
+            pc: 0,
+            why: "host request 99: not served by the Rust host yet".into(),
+        };
+        out.stopped_on = Some(one);
+        let (tid, called) = g.stopping_thread(&out);
+        assert_eq!(
+            (tid, called.clone()),
+            (other.tid, Some((ret, Some(name.clone())))),
+            "the stopping vCPU's thread and call, not those of vCPU 0, the vCPU served last (thread {})",
+            first.tid
+        );
+        assert_eq!(
+            RunEnd::of(&out.stop.kind(), called, std::slice::from_ref(&name)),
+            RunEnd::Unimplemented {
+                service: name,
+                return_address: ret,
+            }
+        );
     }
 }

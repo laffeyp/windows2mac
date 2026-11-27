@@ -163,6 +163,57 @@ u64 k32_SleepConditionVariableSRW(u64 cv, u64 lock, u64 ms, u64 flags) {
     return w2m_logged(W2M_API_SleepConditionVariableSRW, (u32)ms, woken);
 }
 
+/* SleepConditionVariableCS(ConditionVariable, CriticalSection, dwMilliseconds) (Sprint 368: the game resolves it by
+ * GetProcAddress and a thread on two vCPUs called it, stopping the run as an import w2m lacked): the SRW form's
+ * phases with a critical section, as Microsoft Learn's SleepConditionVariableCS page gives it: the section, "entered
+ * exactly once by the caller", released, a wait for a wake or the timeout, and the section entered again before the
+ * return, TRUE when woken, FALSE with ERROR_TIMEOUT when "the time-out interval has elapsed". A section not entered
+ * once by the caller is not in the rows and stops the run. Its variables, generations and wakes are the SRW form's. */
+u64 k32_SleepConditionVariableCS(u64 cv, u64 cs, u64 ms) {
+    struct w2m_thread_scratch *sc = w2m_thread_scratch();
+    if (sc->phase == 0) {
+        if (!w2m_critical_section_leave_once(cs)) w2m_unimplemented(W2M_API_SleepConditionVariableCS, cs);
+        int v = variable_of(cv, 1);
+        variables[v].waiters++;
+        sc->wait_cv = cv;
+        sc->wait_generation = variables[v].generation;
+        sc->wait_deadline = 0;
+        sc->phase = 1;
+        if ((u32)ms == 0) {
+            variables[v].waiters--;
+            sc->phase = 3;
+        }
+    }
+    if (sc->phase == 1) {
+        int v = variable_of(cv, 0);
+        if (variables[v].generation != sc->wait_generation) {
+            variables[v].waiters--;
+            sc->wait_deadline = 0;
+            sc->phase = 2;
+        } else if (!sc->wait_deadline) {
+            w2m_block((u32)ms == INFINITE ? ~0ull : w2m_counter_now() + (u64)(u32)ms * 10000, cv);
+            return 0;
+        } else if (sc->wait_deadline != ~0ull && w2m_counter_now() >= sc->wait_deadline) {
+            variables[v].waiters--;
+            sc->wait_deadline = 0;
+            sc->phase = 3;
+        } else {
+            w2m_block(sc->wait_deadline, cv);
+            return 0;
+        }
+    }
+    if (!w2m_critical_section_enter(cs)) {               /* phases 2 and 3: the section again */
+        w2m_block(~0ull, cs);
+        return 0;
+    }
+    sc->wait_deadline = 0;
+    int woken = sc->phase == 2;
+    sc->phase = 0;
+    sc->wait_cv = 0;
+    if (!woken) set_error(ERROR_TIMEOUT);
+    return w2m_logged(W2M_API_SleepConditionVariableCS, (u32)ms, woken);
+}
+
 static u64 wake(u64 api, u64 cv) {
     int v = variable_of(cv, 0);
     if (v >= 0 && variables[v].waiters) {

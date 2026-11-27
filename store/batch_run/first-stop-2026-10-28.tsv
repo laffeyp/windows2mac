@@ -1,4 +1,4 @@
-# the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n; "-" in both for a guest the frozen host never ran, two_process_deadlock from Sprint 364 and two_process_pipe_pingpong from Sprint 365); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs
+# the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n; "-" in both for a guest the frozen host never ran, two_process_deadlock from Sprint 364, two_process_pipe_pingpong from Sprint 365 and condition_cs from Sprint 368, which exits 0 only when SleepConditionVariableCS's checks hold); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs
 stop	ReferenceEnd: the log holds the reference's 168 lines and the main thread its calls
 images	Hail to the Rainbow.exe UnityPlayer.dll
 hvc 1	1147
@@ -38,6 +38,7 @@ calls traced	10505
 calls in flight	0
 calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n
+guest	condition_cs	ExitProcess { code: 0 }	-	-
 guest	crosswake	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	handle_values	ExitProcess { code: 0 }	ExitProcess	done\n
 guest	handshake	ExitProcess { code: 0 }	ExitProcess	done\n

@@ -1352,12 +1352,19 @@ impl Guest {
     /// through a register or a jump into a thunk gives no name (reviewer-3's Low 3 of its review of Sprint 211), and
     /// `record::RunEnd::of` trusts a name only when the stopping thread has that call in flight.
     pub fn called_service(&self) -> Option<(u64, Option<String>)> {
+        self.called_service_on(self.served.vcpu)
+    }
+
+    /// `called_service` on the vCPU whose own pages are `pages`: its state block's RSP, each address read as that vCPU
+    /// reaches it (Sprint 368).
+    pub fn called_service_on(&self, pages: crate::VcpuPages) -> Option<(u64, Option<String>)> {
         let mem = self.memory_view();
         let word = |at: u64| mem.read_u64(at);
-        let rsp = word(self.served.vcpu.state + 8 * 4);
-        let ret = word(self.offset(rsp)?);
+        let offset = |va: u64| self.layout.offset(va, pages);
+        let rsp = word(pages.state + 8 * 4);
+        let ret = word(offset(rsp)?);
         let name = (|| {
-            let at = self.offset(ret.checked_sub(6)?)?;
+            let at = offset(ret.checked_sub(6)?)?;
             if at + 6 > mem.len() as u64 {
                 return None;
             }
@@ -1368,10 +1375,22 @@ impl Guest {
             }
             let disp = i32::from_le_bytes(call[2..6].try_into().unwrap());
             let slot = ret.wrapping_add_signed(i64::from(disp));
-            let thunk = word(self.offset(slot)?);
+            let thunk = word(offset(slot)?);
             self.served.thunks.get(&thunk).cloned()
         })();
         Some((ret, name))
+    }
+
+    /// The thread and the call the run's stop names (Sprint 368; Sprint 367's open item): the current thread and
+    /// `called_service_on` of the vCPU whose stop is the run's (`Outcome::stopped_on`). After a run on several vCPUs the
+    /// vCPU served last (`served.vcpu`) may be another, running another thread; a stop no vCPU made (the time limit)
+    /// names that last-served vCPU, as every stop did before. On one vCPU both are vCPU 0.
+    pub fn stopping_thread(&self, out: &crate::run::Outcome) -> (u64, Option<(u64, Option<String>)>) {
+        let pages = out.stopped_on.unwrap_or(self.served.vcpu);
+        (
+            crate::threads::current_tid_on(self, pages),
+            self.called_service_on(pages),
+        )
     }
 
     /// `_import_thunk` (3087-3092) with `make_thunk` (2920-2924): the thunk `name` ("KERNEL32.dll!Name") has, or a new

@@ -161,6 +161,150 @@ fn the_rust_hosts_stream_conforms_to_windows_as_far_as_it_runs() {
     );
 }
 
+/// The game's batch run on two vCPUs (Sprint 368; census G3), which `scripts/gates.sh` runs beside the one-vCPU run
+/// through `scripts/batch-run-record.sh --vcpus 2`, its files `build/batch_run/first-stop-2-vcpus.*`: its stream judged
+/// against Windows under the user's Decision of 2026-10-13. A value divergence (an argument, a return or a last error
+/// of the same call on the paired thread) is a defect and fails here; a presence or count divergence on a thread whose
+/// earlier calls conform is the game's scheduling, printed with its thread and call and not failed; the calls of a
+/// Windows thread no w2m thread pairs with lie past the stopped run's cut, as on one vCPU. Not held to the frozen host's
+/// same rows, as the one-vCPU stream is: two vCPUs interleave the threads' calls in another order than one vCPU does.
+#[test]
+fn the_rust_hosts_stream_on_two_vcpus_has_no_value_divergence() {
+    let root = root();
+    let stop_file = root.join("build/batch_run/first-stop-2-vcpus.tsv");
+    // a stream of other sources is not judged (Sprint 288)
+    if !w2m_vm::built_from::fresh(&root, &stop_file) {
+        return;
+    }
+    let Ok(stop) = fs::read_to_string(&stop_file) else {
+        let what = "no build/batch_run/first-stop-2-vcpus.tsv (scripts/gates.sh writes it)";
+        if std::env::var("W2M_REQUIRE_CASE_RUNS").as_deref() == Ok("1") {
+            panic!("{what}, and W2M_REQUIRE_CASE_RUNS=1 requires it");
+        }
+        eprintln!("{what}: the two-vCPU run is not compared here");
+        return;
+    };
+    assert!(
+        stop.lines().any(|l| l == "vcpus\t2"),
+        "build/batch_run/first-stop-2-vcpus.tsv names no run on two vCPUs:\n{stop}"
+    );
+    let trace = fs::read_to_string(root.join("build/batch_run/first-stop-2-vcpus.calls.tsv")).unwrap();
+    let strings = fs::read_to_string(root.join("build/batch_run/first-stop-2-vcpus.calls.strings.tsv")).unwrap();
+    let windows = Windows::load(&root).unwrap();
+    let v = windows
+        .judge(&Stream {
+            calls: &trace,
+            strings: &strings,
+            stopped: !stop.starts_with("stop\tExitProcess"),
+            dropped: 0,
+        })
+        .unwrap();
+    let thread = |t: Option<u64>| t.map_or("no w2m thread".to_string(), |t| format!("w2m thread {t}"));
+    println!(
+        "the Rust host's {} calls on two vCPUs: {}, {} defects, {} past the cut, {} scheduling, {} values Windows varies",
+        calls(&trace).len(),
+        v.verdict().as_str(),
+        v.defects().len(),
+        v.past_cut().len(),
+        v.scheduling().len(),
+        v.varies().len()
+    );
+    for (class, list) in [("past the cut", v.past_cut()), ("scheduling", v.scheduling())] {
+        for d in list {
+            assert!(!d.is_value(), "a value divergence sorted as {class}: {}", d.text());
+            println!("{class}: {}: {}", thread(d.w2m_thread()), d.text());
+        }
+    }
+    assert!(
+        v.defects().is_empty(),
+        "the Rust host's stream on two vCPUs against Windows:\n{:#?}",
+        v.defects()
+            .iter()
+            .map(|d| format!(
+                "{} divergence, {}: {}",
+                if d.is_value() { "value" } else { "presence" },
+                thread(d.w2m_thread()),
+                d.text()
+            ))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// The frozen host's stream with one UnityPlayer.dll HeapReAlloc's size (a3) changed to `to`, at the first row whose
+/// size is `size`.
+fn with_size(trace: &str, size: &str, to: &str) -> String {
+    let mut done = false;
+    trace
+        .lines()
+        .map(|l| {
+            let mut c: Vec<&str> = l.split('\t').collect();
+            if !done && c.len() > 8 && c[2] == "UnityPlayer.dll" && c[4] == "HeapReAlloc" && c[8] == size {
+                c[8] = to;
+                done = true;
+            }
+            format!("{}\n", c.join("\t"))
+        })
+        .collect()
+}
+
+/// The contract's entry scoped to a thread (0.2.0, Sprint 368): "UnityPlayer.dll!HeapReAlloc@BatchDeleteObjects a3"
+/// leaves the size uncompared on the threads named BatchDeleteObjects alone. In the frozen host's stream a main-thread
+/// HeapReAlloc size changed (0x100 to 0x101, its first call) still diverges as a value; the BatchDeleteObjects
+/// thread's first size changed (0x817 to 0x818, on its w2m thread 88, named so) does not.
+#[test]
+fn a_size_left_out_on_batchdeleteobjects_is_still_judged_on_the_main_thread() {
+    let root = root();
+    let windows = Windows::load(&root).unwrap();
+    let trace = fs::read_to_string(root.join(format!("{STREAM}.tsv"))).unwrap();
+    let strings = fs::read_to_string(root.join(format!("{STREAM}.strings.tsv"))).unwrap();
+    let judge = |calls: &str| {
+        windows
+            .judge(&Stream {
+                calls,
+                strings: &strings,
+                stopped: false,
+                dropped: 0,
+            })
+            .unwrap()
+    };
+    let main = judge(&with_size(&trace, "100", "101"));
+    let named: Vec<String> = main.defects().iter().map(|d| d.text()).collect();
+    assert!(
+        named
+            .iter()
+            .any(|d| d.starts_with("UnityPlayer.dll!HeapReAlloc call 0 a3: Windows 0x100, w2m 0x101")),
+        "a main-thread HeapReAlloc size changed is a value divergence: {named:#?}"
+    );
+    let batch = judge(&with_size(&trace, "817", "818"));
+    assert_eq!(
+        (batch.verdict().as_str(), batch.defects().len()),
+        ("conforms", 0),
+        "a BatchDeleteObjects HeapReAlloc size is undetermined: {:#?}",
+        batch.defects().iter().map(|d| d.text()).collect::<Vec<_>>()
+    );
+}
+
+/// Contract 0.1.0 stays as its last in-place edit, 91f6e329f, left it (Sprint 368: the scoped entry is 0.2.0's, a
+/// minor bump, the old file kept, by the Decision of 2026-10-07).
+#[test]
+fn the_game_calls_contract_0_1_0_is_unchanged() {
+    let root = root();
+    let path = "contracts/windows.game.calls/0.1.0.json";
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["show", &format!("91f6e329f:{path}")])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "git show 91f6e329f:{path}");
+    assert_eq!(
+        fs::read(root.join(path)).unwrap(),
+        out.stdout,
+        "{path} differs from its last edit, 91f6e329f"
+    );
+    assert_eq!(call_compare::CONTRACT, "contracts/windows.game.calls/0.2.0.json");
+}
+
 /// The main-thread calls `w2m-vm --game` stops by are the ones `call_compare` derives from the ending run (Sprint 219):
 /// the stored file cannot drift from the reference it is read from.
 #[test]

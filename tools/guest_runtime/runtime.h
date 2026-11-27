@@ -238,6 +238,8 @@ u32 w2m_file_read_all(const unsigned short *name, u8 *buf, u64 max, u64 *size); 
 void w2m_cpuid_query(u32 leaf, u32 sub, u32 r[4]);                     /* runtime.c: the guest CPUID profile */
 int w2m_file_is_open(u64 handle);                                       /* file.c */
 u64 w2m_heap_take(u64 size);                                            /* heap.c: a process-heap block, unlogged */
+int w2m_critical_section_leave_once(u64 cs);    /* critical_section.c: left by its owner entered once, else 0 */
+int w2m_critical_section_enter(u64 cs);         /* critical_section.c: 1 once this thread owns it */
 void w2m_heap_release(u64 api, u64 p);                                  /* heap.c: give it back */
 int w2m_object_close(u64 handle);                                       /* sync_objects.c: CloseHandle on an object */
 u64 w2m_counter_now(void);                                              /* process.c: the 10 MHz counter */

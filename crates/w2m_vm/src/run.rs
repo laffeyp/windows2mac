@@ -397,11 +397,16 @@ pub struct Outcome {
     /// each vCPU's count of runs, `hv_vcpu_run` calls, in the vCPU's order (Sprint 327): a vCPU past the first runs only
     /// once it has taken a thread, so its count above 0 says it ran guest code
     pub runs_by_vcpu: Vec<u64>,
+    /// the own pages of the vCPU whose stop is the run's (Sprint 368), whose current thread and stack name the stop's
+    /// thread and call (`Guest::stopping_thread`); None when no vCPU stopped the run (the time limit, another process's
+    /// stop through the link thread, a run that ended before its vCPUs ran)
+    pub stopped_on: Option<crate::VcpuPages>,
 }
 
 impl Outcome {
-    /// An outcome with nothing in it yet, the stop to be set at the run's end.
-    fn empty() -> Outcome {
+    /// An outcome with nothing in it yet, the stop to be set at the run's end; the crate's tests make one of a stop
+    /// (Sprint 368).
+    pub(crate) fn empty() -> Outcome {
         Outcome {
             stop: Stop::Exit(String::new()),
             bridged: BTreeMap::new(),
@@ -426,6 +431,7 @@ impl Outcome {
             flushes: 0,
             locked_steps: 0,
             runs_by_vcpu: Vec::new(),
+            stopped_on: None,
         }
     }
 
@@ -1298,7 +1304,7 @@ fn run(
             let (stopping, sched) = (&stopping, &sched);
             scope.spawn(move || {
                 if end.recv_timeout(limit) == Err(std::sync::mpsc::RecvTimeoutError::Timeout) {
-                    stopping.stop(Stop::TimeLimit, sched);
+                    stopping.stop(Stop::TimeLimit, None, sched);
                 }
             });
         }
@@ -1318,9 +1324,9 @@ fn run(
     for mine in ran {
         out.add_vcpu(mine?);
     }
-    out.stop = stopping
+    (out.stop, out.stopped_on) = stopping
         .first()
-        .unwrap_or_else(|| Stop::Exit("the run's vCPUs ended with no stop".into()));
+        .unwrap_or_else(|| (Stop::Exit("the run's vCPUs ended with no stop".into()), None));
     // the records into the outcome, the borrows given back (Sprint 311)
     let records = lock.into_inner().records;
     out.bridged = records.bridged;
@@ -1423,7 +1429,8 @@ struct Place<'r> {
 #[derive(Default)]
 struct RunStop {
     stopped: std::sync::atomic::AtomicBool,
-    first: std::sync::Mutex<Option<Stop>>,
+    /// the run's stop and the own pages of the vCPU that made it, None for a stop no vCPU made (Sprint 368)
+    first: std::sync::Mutex<Option<(Stop, Option<crate::VcpuPages>)>>,
     /// each vCPU's handle by its owner (`owner_of`), for the stop and the kick (Sprint 330)
     handles: std::sync::Mutex<Vec<(u32, hypervisor::VcpuHandle)>>,
     /// whether each vCPU, by its index, is running guest code, set around `hv_vcpu_run` (Sprint 330; reviewer-3's
@@ -1491,9 +1498,13 @@ impl RunStop {
         true
     }
 
-    /// `stop` the run's, unless another vCPU's came first; then every vCPU stopped.
-    fn stop(&self, stop: Stop, sched: &crate::threads::Sched) {
-        self.first.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert(stop);
+    /// `stop` the run's, unless another vCPU's came first; then every vCPU stopped. `on` is the own pages of the vCPU
+    /// that stopped, kept with the stop (Sprint 368), None for a stop no vCPU made.
+    fn stop(&self, stop: Stop, on: Option<crate::VcpuPages>, sched: &crate::threads::Sched) {
+        self.first
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert((stop, on));
         self.halt(sched);
     }
 
@@ -1507,7 +1518,7 @@ impl RunStop {
         sched.notify();
     }
 
-    fn first(&self) -> Option<Stop> {
+    fn first(&self) -> Option<(Stop, Option<crate::VcpuPages>)> {
         self.first.lock().unwrap_or_else(|e| e.into_inner()).take()
     }
 }
@@ -1567,7 +1578,7 @@ fn apply_wakes(
             return;
         }
         if let Some(why) = kernel.first.stop() {
-            stopping.stop(Stop::Handover { pc: 0, why }, sched);
+            stopping.stop(Stop::Handover { pc: 0, why }, None, sched);
             return;
         }
         if seen != applied {
@@ -1623,7 +1634,7 @@ fn run_on_vcpu(
     let mut mine = Outcome::empty();
     let stop = vcpu_loop(lock, &vcpu, place, max_steps, facts, &mut mine)?;
     if let Some(stop) = stop {
-        place.stopping.stop(stop, place.sched);
+        place.stopping.stop(stop, Some(place.pages), place.sched);
     }
     Ok(mine)
 }

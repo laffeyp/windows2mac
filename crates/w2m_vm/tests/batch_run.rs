@@ -39,6 +39,10 @@ const REPEATS: [&str; 3] = [
 /// Guests whose output is a clock's reading, 16 hex digits and a newline (`two_counters`' the ticks its two counters
 /// took, Sprint 354)
 const CLOCK_GUESTS: [&str; 3] = ["qpc", "qpc2", "two_counters"];
+/// The game's stop file on one vCPU, and on two (Sprint 368: `scripts/batch-run-record.sh --vcpus 2` names its files
+/// so), under build/batch_run/
+const STOP: &str = "first-stop.tsv";
+const STOP_TWO_VCPUS: &str = "first-stop-2-vcpus.tsv";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -52,13 +56,15 @@ fn root() -> PathBuf {
 /// file, a guest's output among them, its own.
 fn stamped_for(root: &Path, name: &str) -> Vec<PathBuf> {
     let dir = root.join("build/batch_run");
-    let stop = "first-stop.tsv";
-    if name == stop
-        || w2m_vm::run_outputs::STOP_COMPANIONS
-            .iter()
-            .any(|s| name == w2m_vm::run_outputs::companion(stop, s))
-    {
-        return vec![dir.join(stop)];
+    // the one-vCPU run's stop and the two-vCPU run's (Sprint 368), each for its own companions
+    for stop in [STOP, STOP_TWO_VCPUS] {
+        if name == stop
+            || w2m_vm::run_outputs::STOP_COMPANIONS
+                .iter()
+                .any(|s| name == w2m_vm::run_outputs::companion(stop, s))
+        {
+            return vec![dir.join(stop)];
+        }
     }
     if name == "guests.tsv" {
         let mut stops: Vec<PathBuf> = fs::read_dir(&dir)
@@ -300,6 +306,42 @@ fn the_batch_runs_log_is_the_references_line_for_line() {
     let Some(ours) = written(&root, "first-stop.unity.log") else {
         return;
     };
+    assert_log_is_the_references(&root, &ours);
+}
+
+/// The game's batch run on two vCPUs (Sprint 368; census G3), on the wall clock, which `scripts/gates.sh` runs beside
+/// the one-vCPU run: it stops at the reference's row, the held stop line (the log at the reference's 168 lines and the
+/// main thread its calls), with the held images, never at a time or step limit, its stop file naming its two vCPUs, and
+/// its unity.log the reference's line for line. Its exits, compiles and calls are not the one-vCPU run's and are not
+/// held here: its record holds its own exits (`batch_record.rs`), and `call_compare` judges its calls against Windows.
+#[test]
+fn the_two_vcpu_batch_run_stops_at_the_references_row_with_its_log() {
+    let root = root();
+    let (Some(game), Some(log)) = (
+        written(&root, STOP_TWO_VCPUS),
+        written(&root, &w2m_vm::run_outputs::companion(STOP_TWO_VCPUS, ".unity.log")),
+    ) else {
+        return;
+    };
+    let row = |text: &str, name: &str| {
+        text.lines()
+            .find_map(|l| l.strip_prefix(&format!("{name}\t")))
+            .map(str::to_string)
+    };
+    let (held_lines, _) = held(&root);
+    let held_text = held_lines.join("\n");
+    println!("{game}");
+    assert_eq!(row(&game, "vcpus").as_deref(), Some("2"), "the stop file's vCPUs");
+    assert_eq!(
+        (row(&game, "stop"), row(&game, "images")),
+        (row(&held_text, "stop"), row(&held_text, "images")),
+        "the two-vCPU batch run's stop or images moved from {HELD}'s"
+    );
+    assert_log_is_the_references(&root, &log);
+}
+
+/// A batch run's unity.log, `ours`, equals the reference's line for line, numbers the varying cells.
+fn assert_log_is_the_references(root: &Path, ours: &str) {
     let reference = fs::read_to_string(root.join("store/game-runs/38216081440/unity.log")).unwrap();
     let (ours, reference): (Vec<String>, Vec<String>) = (
         ours.lines().map(without_numbers).collect(),

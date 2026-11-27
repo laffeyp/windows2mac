@@ -1,0 +1,92 @@
+{
+ "contract_id": "windows.game.calls",
+ "version": "0.2.0",
+ "status": "proposed",
+ "summary": "The calls UnityPlayer.dll and mono-2.0-bdwgc.dll make through their imports and the names they resolve with GetProcAddress, as the game makes them on Windows in batch mode: for each (image, function) its first 32 calls in order, each argument, the return value and, where the function sets one and the return says it failed, the last error, judged by the relation the value's type in win32metadata allows.",
+ "applicability": "windows-2025 (game run 38216081440, batch mode: -batchmode -nographics -logFile); the calls w2m makes before its frontier stops",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "Hail to the Rainbow.exe started as Steam starts it, with the batch run's arguments"
+  },
+  "execution": {
+   "main": "the game, from its entry to the frontier's stop"
+  },
+  "observation": {
+   "phase": "each traced call's entry (sequence, thread, arguments) and return (value, last error)"
+  }
+ },
+ "acceptance": {
+  "relation": "state_relation",
+  "rules": {
+   "value": "equal in the type's bytes",
+   "pointer": "null on both or neither; equal below 0x10000 as an argument",
+   "handle": "null on both or neither; equal with the top bit set",
+   "float": "not compared",
+   "void": "not compared",
+   "error": "equal where sets_last_error and the Windows return failed",
+   "called": "a pair w2m calls is called on Windows",
+   "assigned": "a value the system assigns (thread and process ids, TLS and FLS slots, window-class atoms) maps one to one across the stream, a thread id through the thread map; a clock reading is not compared (call_compare.ASSIGNED)",
+   "threads": "threads the game names (SetThreadDescription, the capture's strings and w2m's) pair by name, in order of appearance where a name repeats; the rest pair, each Windows thread in the order it first appears, with the unpaired w2m thread whose calls agree with its own most (the first to appear on a tie). Each (label, function)'s calls are then compared per pair of threads, as far as both go",
+   "labels": "a call through a traced image's import slot carries the image's name; one through the pointer GetProcAddress answers carries 'GetProcAddress', as tools/jit_capture labels its hooks",
+   "undetermined": "a value two Windows runs of the game disagree on is not compared (`undetermined`, each with the runs that disagree); a key `Image!Function@Thread field` scopes the entry to the paired threads of that name on both sides (from 0.2.0)",
+   "placed": "a VirtualAlloc reservation at an address the caller chose, and the hintless retry a failed one leads to, are left out on both sides: whether the address is free depends on the address space's layout (call_compare.placed)"
+  },
+  "comparator": "scripts/call_compare.py",
+  "signatures": "specs/signatures.json"
+ },
+ "evidence": [
+  {
+   "evidence_id": "game-trace",
+   "category": "observed",
+   "source_ref": "run 38216081440 (execution game-run-38216081440): store/game-runs/38216081440/jit_capture.bin.trace.tsv sha256:d87830c1644bd9d2ab766298b1609fb953d83624350eced87c63f819fc0df739 (tools/jit_capture/call_trace.h), with SetThreadDescription's names in jit_capture.bin.strings.tsv; the game started from C:\\w2m\\app with TMP and TEMP at C:\\Users\\w2m\\AppData\\Local\\Temp through a launcher carrying the game exe's resources. Before it: runs 38206263976 (no thread names), 38203364352 (no icon), 38176899195 (D:\\w2m\\game).",
+   "applicability": "windows-2025, the build in store/game-runs/38216081440/profile.txt"
+  },
+  {
+   "evidence_id": "signatures",
+   "category": "documented",
+   "source_ref": "Microsoft.Windows.SDK.Win32Metadata 71.0.30-preview, Windows.Win32.winmd sha256:8cce5eb353c9395784fba3204675ee73d5ba808573d0f7730e86148e51e9e616",
+   "applicability": "the 220 Windows functions the capture names that the metadata describes"
+  }
+ ],
+ "open_questions": [
+  "Calls are compared per (image, function) in order; where threads interleave calls to one function differently on the two systems, a divergence may be an order and not a value.",
+  "String arguments are compared as pointers; the Windows capture's strings (jit_capture.bin.strings.tsv) are not yet compared with w2m's.",
+  "The crash handler's calls (jit_capture.bin.handler.trace.tsv) are not compared."
+ ],
+ "sections": {
+  "probe": "tools/jit_capture (the game's run on a Windows runner)",
+  "implementation": "tools/guest_runtime (every service the game reaches)",
+  "rows": "scripts/call_compare.py",
+  "excluded": "functions call_trace.h leaves untraced (UNTRACED)"
+ },
+ "excluded_threads": {
+  "38176899195": {
+   "6636": "tools/jit_capture's monitor thread (jit_capture.c: CreateThread(monitor) after the hooks, before UnityMain): its 22 traced calls (seq 1-39) are mono-2.0-bdwgc.dll's and UnityPlayer.dll's DLL_THREAD_ATTACH work for a thread the game does not start"
+  },
+  "38203364352": {
+   "5368": "tools/jit_capture's monitor thread (jit_capture.c: CreateThread(monitor) after the hooks, before UnityMain): its 22 traced calls (from seq 1) are mono-2.0-bdwgc.dll's and UnityPlayer.dll's DLL_THREAD_ATTACH work for a thread the game does not start"
+  },
+  "38206263976": {
+   "4752": "tools/jit_capture's monitor thread (jit_capture.c: CreateThread(monitor) after the hooks, before UnityMain): its 22 traced calls (from seq 1) are mono-2.0-bdwgc.dll's and UnityPlayer.dll's DLL_THREAD_ATTACH work for a thread the game does not start"
+  },
+  "38216081440": {
+   "1640": "tools/jit_capture's monitor thread (jit_capture.c: CreateThread(monitor) after the hooks, before UnityMain): its 22 traced calls (from seq 1) are mono-2.0-bdwgc.dll's and UnityPlayer.dll's DLL_THREAD_ATTACH work for a thread the game does not start"
+  }
+ },
+ "undetermined": {
+  "TryEnterCriticalSection ret": "whether another thread holds the lock at that instant, which the scheduler decides: the main thread's first FALSE is its call 39 in run 38176899195, 50 in 38203364352, 49 in 38206263976 and 58 in 38216081440 (Sprint 065)",
+  "RtlAddGrowableFunctionTable a2": "the entry count mono's JIT registers a code block's table with: 0 in run 38216081440 and 0x34 in 38206263976 at seq 3377 (Sprint 065)",
+  "RtlAddGrowableFunctionTable a3": "the maximum entry count follows the block's size, 0x201 for 64 KB and 0x401 for 128 KB; which of the main thread's blocks is the 128 KB one depends on the order the threads JIT their methods: the fourth in run 38216081440 (seq 2754), the third in 38176899195 (seq 2757) (Sprint 065)",
+  "InterlockedPushEntrySList ret": "the list's previous head, null or not as other threads have popped it: 7 calls differ between runs 38216081440 and 38206263976 (seq 3212-3232), 5 against 38203364352 (Sprint 065)",
+  "GetTempFileNameW ret": "the unique number GetTempFileNameW makes from the system time when uUnique is 0 (Microsoft Learn, GetTempFileNameW): 0x6738 and 0x698a in run 38216081440, 0x86b6 and 0x8909 in 38206263976, 0x5850 and 0x5aa2 in 38203364352 (Sprint 065)",
+  "RegSetValueExA a5": "the size of the second value UnityPlayer writes after RegCreateKeyW (seq 2739 in run 38216081440): 0x14 in runs 38216081440, 38206263976 and 38176899195, 0x13 in 38203364352 (Sprint 065)",
+  "InterlockedPopEntrySList ret": "an entry or null as the other threads have popped the job list first, which the scheduler decides; InterlockedPushEntrySList ret's twin: list 0x...170c0 is popped by the main thread and three workers in both, the main thread 10 of 29 pops in laptop run lap-20261014T032442034Z-c8814547-01 and 29 of 77 in frontier 1791942295792627000 (Sprint 068)",
+  "FlsGetValue error": "a new thread's first FlsGetValue (mono's, index 7, before any FlsSetValue on the thread) leaves 87 on Windows Server (run 38216081440: 87 on every thread) and 0 on Windows 11 build 26200 (laptop runs lap-20261014T032442034Z-c8814547-01 to -10: 0 on every thread, the capture's own at seq 2 included); the value returned is the same, and the laptop's thread_storage probe answers 87 for the main thread as Server does (lap-20261013T231059422Z-136bec80-168 to -175) (Sprint 068)",
+  "mono-2.0-bdwgc.dll!VirtualAlloc a1": "the size mono's thread 108 asks for, which follows how much the game's threads did first and so the scheduler: on 856c0e50 the frontier conforms at --clock-rate 1386000000 (thread 108 asks 0x56000 at seq 6527, as every reference run does) and diverges at 1400000000 (0x5b000, 0x83000) and 1414000000 (0x73000, 0x499000); the reference runs agree (0x56000, 0x73000) on four processors, where w2m runs every thread on one vCPU (recentering step 7). Only mono-2.0-bdwgc.dll's VirtualAlloc sizes are left out (Sprint 068)",
+  "UnityPlayer.dll!HeapReAlloc@BatchDeleteObjects a3": "the size the thread named BatchDeleteObjects asks at its third and fourth reallocation, which follows whether its second block's reallocation to 0x817 comes before or after its first block's growth to 0x2017, the order the scheduler gives the objects it deletes (the user's Decision of 2026-10-13: HeapReAlloc 3268 is scheduling): 0x817 0x1017 0x2017 0x817 in run 38216081440 (seq 3265-3268), 0x817 0x1017 0x817 0x2017 in laptop runs lap-20261014T012302244Z-cb542225-04 (seq 3298-3301) and lap-20261014T023701004Z-3f1cf08d-04 (seq 3285-3288), on the thread of that name in each, each call's a2 the block; w2m's batch run on two vCPUs gave both orders (Sprint 368: 0x2017 then 0x817 in a trial run, 0x817 then 0x2017 in record-2-vcpus-1795758688000000000). The other threads' HeapReAlloc sizes, the main thread's 0x100 to 0x800 among them, are compared (Sprint 368)"
+ },
+ "history": "0.1.0 was edited in place by nine commits before its evidence and status rules were kept by version (the Decision of 2026-10-07: a change of evidence or status alone is a minor bump, the old file kept): a2b27d07f, 95b5b7546, e9f3a6e2b and b4836801a (Sprints 060-061), ad2401e28 (064), de550269d and 6c1caf06f (065), bb144e4d6 and 91f6e329f (068); 0.1.0.json stands as 91f6e329f left it. 0.2.0 (Sprint 368) adds one undetermined entry, scoped to a thread by name: a key Image!Function@Thread field leaves the field uncompared on the threads of that name alone, on Windows and on w2m"
+}

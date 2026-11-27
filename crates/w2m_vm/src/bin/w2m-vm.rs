@@ -1243,8 +1243,10 @@ mod run {
         let id = format!("frontier-{}-{nanos}", &subject[..12]);
         // the stopping thread's calls in flight at the stop, "DLL!Function" (`write_tsv`'s columns 2, 4 and 5): another
         // thread's call of the same function does not vouch for the word on this thread's stack (reviewer-3's Medium 1
-        // of its review of Sprint 211)
-        let stopped = w2m_vm::threads::current_tid(&guest).to_string();
+        // of its review of Sprint 211); the thread and the call the stopping vCPU's, not the vCPU served last, which on
+        // several vCPUs may run another thread (Sprint 368)
+        let (stopping_tid, stopping_call) = guest.stopping_thread(&out);
+        let stopped = stopping_tid.to_string();
         let flying: Vec<String> = in_flight
             .lines()
             .filter_map(|l| {
@@ -1259,7 +1261,7 @@ mod run {
                 service,
                 return_address,
             },
-            None => w2m_vm::record::RunEnd::of(&out.stop.kind(), guest.called_service(), &flying),
+            None => w2m_vm::record::RunEnd::of(&out.stop.kind(), stopping_call, &flying),
         };
         let stem = Path::new(program)
             .file_stem()

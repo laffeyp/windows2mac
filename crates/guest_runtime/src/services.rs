@@ -266,9 +266,45 @@ pub fn services(texts: &BTreeMap<String, String>) -> Result<Vec<Service>, String
 /// The ring's entries that are not services (`guest_runtime.py` `INTERNAL_APIS`).
 const INTERNAL_APIS: [&str; 2] = ["Cpuid", "Exception"];
 
-/// The runtime's API names in id order: id n is the n-th, from 1 (`guest_runtime.api_ids`), the services' import names
-/// and the ring's internal entries, sorted; two services of one name are an error, their ids colliding.
-pub fn api_names(services: &[Service]) -> Result<Vec<String>, String> {
+/// The runtime's W2M_API_ ids, fixed (Sprint 368): `api_ids.txt`, "id name" a line, `#` lines comments. Ids 1-299 are
+/// the names in name order as `guest_runtime.api_ids` gave them, the frozen tag's and HEAD's at Sprint 368's card; a
+/// new service takes the next id after the largest, added to the table with it. Numbered in name order, the new
+/// SleepConditionVariableCS renumbered the 69 names after it, and the ring's records and per-API counts, which the
+/// exit ledger hashes, moved from the first call of any of them.
+pub const API_IDS: &str = include_str!("api_ids.txt");
+
+/// A table's (id, name) rows: ids from 1, each once and none skipped, below the ring's `W2M_RING_APIS` (512).
+fn api_table(table: &str) -> Result<Vec<String>, String> {
+    let mut names = Vec::new();
+    for line in table.lines().filter(|l| !l.starts_with('#') && !l.is_empty()) {
+        let (id, name) = line
+            .split_once(' ')
+            .ok_or_else(|| format!("api_ids.txt: {line:?} is not \"id name\""))?;
+        let id: usize = id.parse().map_err(|_| format!("api_ids.txt: {line:?}: no id"))?;
+        if id != names.len() + 1 {
+            return Err(format!(
+                "api_ids.txt: {name} has id {id}, where {} is next",
+                names.len() + 1
+            ));
+        }
+        if names.iter().any(|n| n == name) {
+            return Err(format!("api_ids.txt: {name} has two ids"));
+        }
+        names.push(name.to_string());
+    }
+    if names.len() >= 512 {
+        return Err(format!(
+            "api_ids.txt: {} ids, where W2M_RING_APIS counts 511",
+            names.len()
+        ));
+    }
+    Ok(names)
+}
+
+/// The runtime's API names in id order: id n is the n-th, from 1, as `table` numbers them; every service's import
+/// name and the ring's internal entries must have a row, a missing one an error naming the id it takes next; two
+/// services of one name are an error, their ids colliding.
+fn api_names_in(services: &[Service], table: &str) -> Result<Vec<String>, String> {
     let mut names: Vec<String> = services.iter().map(|s| s.name.clone()).collect();
     names.extend(INTERNAL_APIS.iter().map(|n| n.to_string()));
     let count = names.len();
@@ -277,10 +313,23 @@ pub fn api_names(services: &[Service]) -> Result<Vec<String>, String> {
     if names.len() != count {
         return Err("two services share an import name: their W2M_API_ ids would collide".to_string());
     }
-    Ok(names)
+    let ids = api_table(table)?;
+    if let Some(missing) = names.iter().find(|n| !ids.contains(n)) {
+        return Err(format!(
+            "{missing} has no W2M_API_ id: add \"{} {missing}\" to crates/guest_runtime/src/api_ids.txt",
+            ids.len() + 1
+        ));
+    }
+    Ok(ids)
 }
 
-/// `api_ids.h`: `#define W2M_API_<name> <n>`, 1 up in name order (`guest_runtime.api_header`).
+/// The runtime's API names in id order, `API_IDS`'s numbering.
+pub fn api_names(services: &[Service]) -> Result<Vec<String>, String> {
+    api_names_in(services, API_IDS)
+}
+
+/// `api_ids.h`: `#define W2M_API_<name> <n>`, each name's id in `API_IDS` (`guest_runtime.api_header` numbered them in
+/// name order, which ids 1-299 are).
 pub fn api_header(texts: &BTreeMap<String, String>) -> Result<String, String> {
     Ok(api_names(&services(texts)?)?
         .iter()
@@ -638,15 +687,86 @@ mod tests {
         assert_eq!(services(&t).unwrap_err(), "b.c: k32_Beep is defined twice");
     }
 
+    /// The ids are the table's, the services' and the ring's internal entries each in it (Sprint 368): a service the
+    /// table lacks is named with the id it takes next; a table that skips an id or names one twice is refused.
     #[test]
-    fn api_ids_count_from_one_in_name_order_with_the_internal_entries() {
+    fn api_ids_are_the_tables_and_a_service_it_lacks_is_named() {
         let t = texts(&[("a.c", "u64 k32_Sleep(u64 ms) {\nu64 user32_Beep(void) {\n")]);
-        assert_eq!(
-            api_header(&t).unwrap(),
-            "#define W2M_API_Beep 1\n#define W2M_API_Cpuid 2\n#define W2M_API_Exception 3\n#define W2M_API_Sleep 4\n"
-        );
+        let s = services(&t).unwrap();
         // HOST_UNIMPLEMENTED's id n names the n-th of `api_names` (Sprint 219): the list `api_ids.h` is written from
-        let names = api_names(&services(&t).unwrap()).unwrap();
-        assert_eq!(names, ["Beep", "Cpuid", "Exception", "Sleep"]);
+        let table = "# a comment\n1 Sleep\n2 Cpuid\n3 Exception\n4 Beep\n";
+        assert_eq!(
+            api_names_in(&s, table).unwrap(),
+            ["Sleep", "Cpuid", "Exception", "Beep"]
+        );
+        assert_eq!(
+            api_names_in(&s, "1 Sleep\n2 Cpuid\n3 Exception\n").unwrap_err(),
+            "Beep has no W2M_API_ id: add \"4 Beep\" to crates/guest_runtime/src/api_ids.txt"
+        );
+        assert_eq!(
+            api_names_in(&s, "1 Sleep\n3 Cpuid\n").unwrap_err(),
+            "api_ids.txt: Cpuid has id 3, where 2 is next"
+        );
+        assert_eq!(
+            api_names_in(&s, "1 Sleep\n2 Sleep\n").unwrap_err(),
+            "api_ids.txt: Sleep has two ids"
+        );
+        // an id given twice is not the next one
+        assert_eq!(
+            api_names_in(&s, "1 Sleep\n2 Cpuid\n2 Exception\n").unwrap_err(),
+            "api_ids.txt: Exception has id 2, where 3 is next"
+        );
+    }
+
+    /// Sprint 368: no service's id moves. The table's ids 1-299 are HEAD's at the sprint's card, the names then in name
+    /// order (the frozen tag's numbering too), so its first 299 rows are in name order; the frozen numbers below are
+    /// written here apart from the table; and `api_header` over the runtime's own C gives every one of those 299 its id,
+    /// with SleepConditionVariableCS, the first service after them, 300. Numbered in name order again, every name
+    /// sorting after SleepConditionVariableCS moves by one, and the first is named.
+    #[test]
+    fn the_api_ids_at_head_are_unchanged_and_a_new_service_takes_the_next() {
+        let head = api_table(API_IDS).unwrap();
+        // rows 1-299 whole, the names one a line: the sha256 of HEAD's list and the frozen tag's, so no row is renamed
+        // or reused in place and a new name takes an id above 299
+        let text: String = head.iter().take(299).map(|n| format!("{n}\n")).collect();
+        assert_eq!(
+            crate::sha256::hex(text.as_bytes()),
+            "ab180912c4dd52e895e00044b2fbeedf8446a21d5d64fa4d21e15c818d0dd512",
+            "api_ids.txt's rows 1-299 are not HEAD's"
+        );
+        let first: Vec<&String> = head.iter().take(299).collect();
+        let mut sorted = first.clone();
+        sorted.sort();
+        assert_eq!(
+            first, sorted,
+            "api_ids.txt's ids 1-299 are HEAD's, the names in name order"
+        );
+        for (id, name) in [
+            (1, "AcquireSRWLockExclusive"),
+            (15, "Cpuid"),
+            (43, "Exception"),
+            (230, "Sleep"),
+            (231, "SleepConditionVariableSRW"),
+            (293, "WideCharToMultiByte"),
+            (299, "timeGetTime"),
+            (300, "SleepConditionVariableCS"),
+        ] {
+            assert_eq!(head[id - 1], name, "the frozen id {id}");
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let header = api_header(&crate::texts(&root).unwrap()).unwrap();
+        let ids: BTreeMap<&str, usize> = header
+            .lines()
+            .filter_map(|l| l.strip_prefix("#define W2M_API_")?.split_once(' '))
+            .map(|(n, id)| (n, id.parse().unwrap()))
+            .collect();
+        for (i, name) in head.iter().enumerate() {
+            assert_eq!(
+                ids.get(name.as_str()),
+                Some(&(i + 1)),
+                "{name}'s W2M_API_ id moved from {}, its id at HEAD (api_ids.txt)",
+                i + 1
+            );
+        }
     }
 }

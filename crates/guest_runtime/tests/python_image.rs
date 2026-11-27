@@ -67,10 +67,15 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 
 /// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
 /// is the frozen one with these changes, which their own tests judge (Sprint 272).
-const DEPARTURES: [(&str, &str); 12] = [
+const DEPARTURES: [(&str, &str); 14] = [
     (
         "tools/guest_runtime/block_compiler.c",
         "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
+    ),
+    (
+        "tools/guest_runtime/critical_section.c",
+        "Sprint 368: w2m_critical_section_leave_once and w2m_critical_section_enter, SleepConditionVariableCS's two \
+         halves (slim_locks.c): the section left by its owner entered once, and entered again",
     ),
     (
         "tools/guest_runtime/file.c",
@@ -112,7 +117,13 @@ const DEPARTURES: [(&str, &str); 12] = [
          the two named releases by hand, W2M_LET_GO_EARLY before a call of w2m_unimplemented or w2m_logged in the \
          guard's scope and W2M_LET_GO_BEFORE_STOP in a function its caller's guard holds the lock for; the runtime \
          word's guard (hold_runtime_word, runtime_word_guard_end), which lets it go only when its take took it, and \
-         w2m_take_runtime_word and w2m_let_runtime_word_go declared here",
+         w2m_take_runtime_word and w2m_let_runtime_word_go declared here; Sprint 368: \
+         w2m_critical_section_leave_once and w2m_critical_section_enter declared",
+    ),
+    (
+        "tools/guest_runtime/slim_locks.c",
+        "Sprint 368: SleepConditionVariableCS, which the game's batch run on two vCPUs called and the runtime lacked \
+         (the run stopped \"import KERNELBASE.dll!SleepConditionVariableCS\"), on the SRW form's phases and variables",
     ),
     (
         "tools/guest_runtime/sync_objects.c",

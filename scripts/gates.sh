@@ -187,6 +187,24 @@ if [ $rust != none ]; then
   uv run substrate replay "$record" --level 2 > /dev/null
   }
   timed batch-run-replay batch_run_replay
+  # the game on two vCPUs beside it (Sprint 368; census G3), on the wall clock, through `scripts/batch-run-record.sh
+  # --vcpus 2`: its stop and calls build/batch_run/first-stop-2-vcpus.*, which crates/w2m_vm/tests/batch_run.rs and
+  # crates/call_compare/tests/call_compare.rs hold (the stop at the reference's row, call_compare's verdict with no value
+  # divergence), and its record build/batch_run/record-2-vcpus-<ns>, which crates/w2m_vm/tests/batch_record.rs holds and
+  # check_records and substrate's replay read, as the one-vCPU run's
+  batch_run_two_vcpus() {
+  record_two_vcpus=build/batch_run/record-2-vcpus-$(date +%s)000000000
+  scripts/batch-run-record.sh "$record_two_vcpus" --vcpus 2 > /dev/null
+  }
+  timed batch-run-two-vcpus batch_run_two_vcpus
+  batch_run_two_vcpus_records_check() {
+  target/release/check_records --since 2026-10-17 --show 3 "$record_two_vcpus" > /dev/null || { echo "gates: the two-vCPU batch run's record breaks a rule"; target/release/check_records --since 2026-10-17 --show 3 "$record_two_vcpus"; exit 1; }
+  }
+  timed batch-run-two-vcpus-records-check batch_run_two_vcpus_records_check
+  batch_run_two_vcpus_replay() {
+  uv run substrate replay "$record_two_vcpus" --level 2 > /dev/null
+  }
+  timed batch-run-two-vcpus-replay batch_run_two_vcpus_replay
   guests() {
   for p in tests/data/timed_waits/*.exe; do
     n=$(basename "$p" .exe)
