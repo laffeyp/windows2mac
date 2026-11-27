@@ -1,0 +1,12 @@
+[package]
+name = "windows_machine"
+description = "The Mac's half of the Windows laptop path: a probe or a stored binary sent to the laptop, its results brought back and stored, as scripts/windows_machine.py and scripts/store_probe_runs.py did (Sprint 371)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# SHA-256 without a crate (Decision 2026-10-24), as cpu_cases takes it
+guest_runtime = { path = "../guest_runtime" }
+serde_json.workspace = true

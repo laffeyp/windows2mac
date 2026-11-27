@@ -1,0 +1,12 @@
+21:24:00.164 job apcs_and_waitable_timers-20261127T212330336Z: probe apcs_and_waitable_timers, repeat 3, commit 1f1958df9337e76ff4c46648bb03a2fe0eb2731b
+21:24:00.258 inputs verified; workspace lock after 0 s
+21:24:09.442 error mode 0x8003 (was 0x8001)
+21:24:10.519 profile taken
+clang version 20.1.8
+Target: x86_64-pc-windows-msvc
+Thread model: posix
+InstalledDir: C:\Program Files\LLVM\bin
+21:24:13.866 apcs_and_waitable_timers-20261127T212330336Z execution 1 exit 0 in 1.6596929 s, affinity unpinned
+21:24:15.249 apcs_and_waitable_timers-20261127T212330336Z execution 2 exit 0 in 1.3813255 s, affinity unpinned
+21:24:17.736 apcs_and_waitable_timers-20261127T212330336Z execution 3 exit 0 in 2.4861226 s, affinity unpinned
+21:24:18.349 done

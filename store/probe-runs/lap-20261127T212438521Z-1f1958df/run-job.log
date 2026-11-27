@@ -1,0 +1,7 @@
+21:25:03.263 job wait_handoff-20261127T212438521Z: binary wait_handoff, repeat 2, commit 1f1958df9337e76ff4c46648bb03a2fe0eb2731b
+21:25:03.300 inputs verified; workspace lock after 0 s
+21:25:10.414 error mode 0x8003 (was 0x8001)
+21:25:11.494 profile taken
+21:25:15.936 wait_handoff-20261127T212438521Z execution 1 exit 0 in 4.3908445 s, affinity unpinned
+21:25:20.454 wait_handoff-20261127T212438521Z execution 2 exit 0 in 4.5083797 s, affinity unpinned
+21:25:20.472 done

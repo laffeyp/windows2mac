@@ -1,0 +1,7 @@
+{"s":"semaphore.one_waiter","release":1,"previous":0,"releaser_wait":258,"waiter_done":1,"waiter_ret":0}
+{"s":"semaphore.three_waiters_two_released","previous":0,"releaser_wait":258,"done":2,"first_done":1,"second_done":1,"third_done":0}
+{"s":"semaphore.order","first_done":1,"second_done":0}
+{"s":"event_auto.one_waiter","set":1,"releaser_wait":258,"waiter_done":1,"waiter_ret":0}
+{"s":"mutex.one_waiter","owned":0,"release":1,"releaser_wait":258,"waiter_done":1,"waiter_ret":0}
+{"s":"event_auto.multiple_waiter","set":1,"releaser_wait":258,"waiter_done":1,"waiter_ret":1}
+{"s":"wait_all.semaphore_and_event","release":1,"previous":0,"done_after_semaphore":0,"set":1,"releaser_wait_semaphore":258,"releaser_wait_event":258,"waiter_done":1,"waiter_ret":0}

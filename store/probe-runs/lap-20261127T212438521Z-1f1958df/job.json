@@ -1,0 +1,12 @@
+{
+ "kind": "binary",
+ "probe": "wait_handoff",
+ "execution_id": "wait_handoff-20261127T212438521Z",
+ "repeat": 2,
+ "commit": "1f1958df9337e76ff4c46648bb03a2fe0eb2731b",
+ "session": "desktop",
+ "inputs": {
+  "tree.tar": "b850b095eef7a9c27f2dbe8fa4d78837c3615865b3b3cf9b168ea666e2a4c814",
+  "probe.exe": "c45bd6f706ee778fe35f45c6d81a006c5e517822a65d9c1efb3eb9f2aaacb7f6"
+ }
+}

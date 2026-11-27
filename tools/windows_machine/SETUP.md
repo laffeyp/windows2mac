@@ -178,3 +178,21 @@ explorer.exe ran as `windowsmachine\w2m` in session 1.
 - Tool versions, recorded in every profile.json from now on: clang 20.1.8, link.exe 14.51.36231 (Visual Studio
   2026 Build Tools; 2022's 14.44.35207 also present), PowerShell 7.6.7, git 2.55.0.windows.5, uv 0.13.0,
   zstd 1.5.7, Python 3.12.15.
+
+## 10. The host by name, 2026-11-27
+
+The laptop came back from a closed lid at 192.168.4.82 (DHCP; it was 192.168.4.55), on a Wi-Fi network Windows had
+named "NewWifi 2" and classed Public, so `w2m-sshd`, applied on the Private profile only (section 9), dropped SSH.
+Three changes, read back over SSH the same day:
+
+- `~/.ssh/config` on the Mac names the host, not the address: `Host w2m-laptop`, `HostName windowsmachine.local`
+  (mDNS), `User w2m`, `IdentityFile ~/.ssh/w2m_laptop`, `IdentitiesOnly yes`. The host key on record in
+  `~/.ssh/known_hosts` is under `192.168.4.55` (and `windowsmachine.local`, the same ed25519 key), so every `ssh` and
+  `scp` passes `-o HostKeyAlias=192.168.4.55`, as `windows_machine` does (`crates/windows_machine/src/lib.rs` `LINK`).
+- The network is Private: `Get-NetConnectionProfile` reads `NewWifi 2`, `Wi-Fi`, `NetworkCategory Private`.
+- The rule admits SSH on any profile, still from the local subnet only: `Set-NetFirewallRule -Name w2m-sshd -Profile
+  Any`, run at the laptop; `Get-NetFirewallRule -Name w2m-sshd` reads `Profile Any`, `Enabled True`, `Action Allow`,
+  and its address filter `RemoteAddress LocalSubnet`.
+
+The Mac's half of a job is `target/release/windows_machine` (Sprint 371), in Rust; `scripts/windows_machine.py`, which
+sent the jobs of 2026-10-13 to 2026-10-17, left the tree with the Python in Sprint 226.
