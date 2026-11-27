@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 373
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -101,4 +101,56 @@ with its reason; the batch's read of the joined family table is held by a test.
 
 ## result
 
-GATES-LINE
+- **The walk.** `crates/windows_machine/tests/reference_machine.rs` (new, 183 lines), test
+  `every_stored_windows_run_is_the_laptops_or_on_the_list` (118). `machine` (63) holds each folder of
+  `store/probe-runs/` and `store/game-runs/` to one of four kinds: `profile.txt` starting `laptop-`; a laptop batch's
+  folder, no `profile.txt` and `profile.json` naming `"machine": "laptop"`; a `gha-` profile under a numeric run id at
+  most 38311779649 (`LAST_RUNNER_BEFORE_THE_LAPTOP`, 17); a `gha-` profile above it named in the list (`LISTED`, 19).
+  A `profile.json` beside a `profile.txt` must name the laptop as the text does, as every one of the 43 stored does.
+  Anything else fails, the message naming `<store>/<run>` and its profile, every failure listed at once. The list's
+  rows must each name a stored runner run above the cut, each once with a reason, and the runner's runs before the
+  laptop are held at 419 (`RUNNER_RUNS_BEFORE_THE_LAPTOP`, 24): a closed set, since no later runner run has a smaller
+  id and no stored run is removed.
+- **The list.** `store/reference_machine/runner-runs-after-the-laptop-2026-11-27.tsv`: run, family, the sprint whose
+  commit stored it (from `git log --diff-filter=A` of each `profile.txt`), and the reason "made on GitHub's runner
+  against the Decision of 2026-10-16; its laptop re-run is card 374's comparison", for the nine runs 41326239822
+  (locked_race, 331), 45760720489 (344), 45763850660 (345), 45780352907 and 45783238565 (347), 45797800625 (350),
+  45813040124 (352), 45871497648 (356) and 46053401854 (369), all `gha-windows-2025-x64-10.0.26100.*-Server`.
+- **The walk's counts** (`cargo test -p windows_machine --test reference_machine -- --nocapture`, exit 0): "walked 677
+  runs: laptop 247, laptop batch 2, runner before the laptop 419, listed runner 9, failing 0; not a run:
+  store/probe-runs/semantics-037-cases.bin". By store: `probe-runs` 633 folders, 215 `lap-` (213 laptop runs and the
+  batch folders `lap-20261013T231059422Z-136bec80` and `lap-20261127T221622950Z-62b931c2`) and 418 numeric (409 before
+  the laptop, the nine listed); `game-runs` 44, 34 `lap-` and 10 numeric, every one at most 38275716702. The 428
+  numeric runs carry `gha-windows-2022` (190) or `gha-windows-2025` (238) profiles; no run lacks both profile files.
+- **The joined table's test.** `crates/windows_machine/tests/windows_machine.rs` 402-451,
+  `the_batch_reads_the_joined_table`: in a scratch root whose known table is the tree's with the joined table's
+  families' rows taken out, `batch_items(["named_sync_objects"])` is the tree's one item, the joined row's run
+  46053401854 and binary 446f77bc..., no DLL; with the joined table cut to its header the family is "name no family
+  named_sync_objects". Held against Sprint 372's grade fault: `batch_items`' `for table in [KNOWN, JOINED]` changed by
+  Edit to `[KNOWN]` (lib.rs 753, live 23:20:20-23:20:29 UTC, backup `scratchpad/plants/373/lib.rs.backup`), `cargo
+  test -p windows_machine --test windows_machine` exit 101, 20 passed and this one failed: "called `Result::unwrap()`
+  on an `Err` value: "store/family_runs/known-2026-10-29.tsv and store/family_runs/joined-2026-11-27.tsv name no
+  family named_sync_objects; name one of its stored runs as named_sync_objects@<run>"" (log
+  `scratchpad/plants/373/joined-check.log`); restored by `cp`, `cmp` equal. `windows_machine.rs` 21 tests pass.
+- **Plant 1** "1 stored runs not the laptop's and not on the record: store/probe-runs/45871497648: profile
+  gha-windows-2025-x64-10.0.26100.33828-Server: a GitHub runner's run made after the laptop arrived (id above
+  38311779649) and not named in store/reference_machine/runner-runs-after-the-laptop-2026-11-27.tsv", `cargo test -p
+  windows_machine --test reference_machine` exit 101; live 23:20:35-23:20:41 UTC:
+  - backup `scratchpad/plants/373/runner-runs.tsv.backup`;
+  - the row of 45871497648 (mutex_abandoned) removed by Edit; `grep -c 45871497648` on the list gave 0;
+  - the test failed as quoted, its count line "listed runner 8, failing 1" (log `scratchpad/plants/373/plant1.log`);
+  - restored by `cp`; `cmp` equal.
+- **Plant 2** "1 stored runs not the laptop's and not on the record:
+  store/probe-runs/lap-20261013T231059422Z-136bec80-001: profile gha-windows-2025-x64-10.0.26100.33828-Server: neither
+  the laptop's (laptop-...) nor a GitHub runner's (gha-...) under its numeric run id", `cargo test -p windows_machine
+  --test reference_machine` exit 101; live 23:20:53-23:21:04 UTC:
+  - backup `scratchpad/plants/373/profile.txt.backup` of the stored run's `profile.txt`
+    (`laptop-x64-10.0.26200.7840-Client`, 33 bytes, no newline), a laptop run with no `profile.json`;
+  - its text changed by Edit to `gha-windows-2025-x64-10.0.26100.33828-Server`; `cat` showed it;
+  - the test failed as quoted, "laptop 246, ... failing 1" (log `scratchpad/plants/373/plant2.log`);
+  - restored by `cp`; `cmp` equal; `git status --short store/probe-runs` empty, the store as before.
+- **No laptop run, nothing sent** to the laptop or to GitHub's runner.
+- **G3's two-vCPU batch run in these gates:** 131.78 s to the stop (`run_seconds` 131.777147752,
+  `build/batch_run/record-2-vcpus-1795821845000000000`, `load_at_start` "load averages 3.46 2.63 2.55; busy: Python
+  94%, mds_stores 92%; other w2m: none").
+- **Gates:** `exit 0 in 625 s	default	2026-11-27T23:32:37Z	sprint 373	95d2bf6f1a88df2774717a0fbe69117fc04519d3	5b884fd6654d60e7a2ff68473d1d6da7198236e9e343f571f19a8dbfcdfcab9a	root=1a6ac90305aaeb36c55e6ae5b52a88b7d57e7501	rust=all python=0 samples=0	base=36a4b5e4fb0bec9304a00f041955b322d18602b1` (copied from `tail -1 store/gates/passes.tsv`).

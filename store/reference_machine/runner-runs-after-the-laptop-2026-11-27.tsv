@@ -1,0 +1,10 @@
+# The GitHub runner's stored runs made after the laptop arrived, each kept on the record with its reason (Sprint 373; docs/postmortem-windows-runs-off-the-laptop-2026-11-27.md, "What the wrong machine reached"): run, family, the sprint whose commit stored it, reason. Read by crates/windows_machine/tests/reference_machine.rs, which passes a stored run off the laptop only when it is a runner's run with id at most 38311779649 (the last runner run of 2026-10-12, before the laptop arrived; the user's decision of 2026-10-11, "the runners' existing rows stay on the record") or a row here, and fails a row that names no stored runner run after that id
+41326239822	locked_race	331	made on GitHub's runner against the Decision of 2026-10-16; its laptop re-run is card 374's comparison
+45760720489	thread_values_race	344	made on GitHub's runner against the Decision of 2026-10-16; its laptop re-run is card 374's comparison
+45763850660	thread_slots_race	345	made on GitHub's runner against the Decision of 2026-10-16; its laptop re-run is card 374's comparison
+45780352907	tls_free_reach	347	made on GitHub's runner against the Decision of 2026-10-16; its laptop re-run is card 374's comparison
+45783238565	tls_expansion_first	347	made on GitHub's runner against the Decision of 2026-10-16; its laptop re-run is card 374's comparison
+45797800625	wait_closed_handle	350	made on GitHub's runner against the Decision of 2026-10-16; its laptop re-run is card 374's comparison
+45813040124	wait_closed_kinds	352	made on GitHub's runner against the Decision of 2026-10-16; its laptop re-run is card 374's comparison
+45871497648	mutex_abandoned	356	made on GitHub's runner against the Decision of 2026-10-16; its laptop re-run is card 374's comparison
+46053401854	named_sync_objects	369	made on GitHub's runner against the Decision of 2026-10-16; its laptop re-run is card 374's comparison

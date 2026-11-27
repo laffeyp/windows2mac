@@ -8,8 +8,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use windows_machine::{
-    Batch, BatchItem, EXECUTOR, Game, Job, Kind, Py, Request, batch_inputs, batch_items, run_id, sha256, split_batch,
-    split_game, stamp, store, store_game, stored_run, tree_tar, verdict, write_job,
+    Batch, BatchItem, EXECUTOR, Game, JOINED, Job, KNOWN, Kind, Py, Request, batch_inputs, batch_items, run_id, sha256,
+    split_batch, split_game, stamp, store, store_game, stored_run, tree_tar, verdict, write_job,
 };
 
 /// Sprint 372's references: the October batch the Python sent (195 binaries, its job.json and the runs split from
@@ -397,6 +397,56 @@ fn batch_items_as_the_october_batchs() {
         joined[0].binary,
         "446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f"
     );
+}
+
+/// `windows_machine batch named_sync_objects` takes its item from `store/family_runs/joined-2026-11-27.tsv` (Sprint
+/// 373): the family is in both tables, so at Sprint 372's grade the batch's lookup with the joined table dropped passed
+/// every test. In a root whose known table holds none of the joined table's families, the family's one item is the
+/// joined row's run and binary, as in the tree; with the joined table's rows gone, the family is not found.
+#[test]
+fn the_batch_reads_the_joined_table() {
+    let at = scratch("joined");
+    let joined = fs::read_to_string(root().join(JOINED)).unwrap();
+    let rows: Vec<Vec<&str>> = joined
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+        .map(|l| l.split('\t').collect())
+        .collect();
+    let families: Vec<&str> = rows.iter().map(|c| c[0]).collect();
+    let row = rows.iter().find(|c| c[0] == "named_sync_objects").unwrap();
+    let known: String = fs::read_to_string(root().join(KNOWN))
+        .unwrap()
+        .lines()
+        .filter(|l| !families.contains(&l.split('\t').next().unwrap()))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    assert!(!known.contains("named_sync_objects"));
+    fs::create_dir_all(at.join("store/family_runs")).unwrap();
+    fs::create_dir_all(at.join("probes/named_sync_objects")).unwrap();
+    fs::copy(
+        root().join("probes/named_sync_objects/probe.json"),
+        at.join("probes/named_sync_objects/probe.json"),
+    )
+    .unwrap();
+    fs::write(at.join(KNOWN), &known).unwrap();
+    fs::write(at.join(JOINED), &joined).unwrap();
+    let name = ["named_sync_objects".to_string()];
+    let items = batch_items(&at, &name).unwrap();
+    assert_eq!(items, batch_items(&root(), &name).unwrap());
+    assert_eq!(items.len(), 1);
+    assert_eq!(
+        (items[0].runs.as_str(), items[0].binary.as_str(), items[0].dll.as_ref()),
+        (row[1], row[2], None)
+    );
+    let header: String = joined
+        .lines()
+        .filter(|l| l.starts_with('#'))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    fs::write(at.join(JOINED), header).unwrap();
+    let why = batch_items(&at, &name).unwrap_err();
+    assert!(why.contains("name no family named_sync_objects"), "{why}");
+    let _ = fs::remove_dir_all(&at);
 }
 
 /// A family neither table holds is named by its stored run; without the run it is refused, as is a run not stored.
