@@ -1,0 +1,11 @@
+{
+ "kind": "probe",
+ "probe": "apcs_and_waitable_timers",
+ "execution_id": "apcs_and_waitable_timers-20261127T210820791Z",
+ "repeat": 3,
+ "commit": "b5a7cf3da095c8121e2d4b5a5d33b64a66941bbf",
+ "session": "desktop",
+ "inputs": {
+  "tree.tar": "33cd2ed5401605c70fbfc516f32a74ba53b2b7367e43f1f0fe39d0ad4d4a68b8"
+ }
+}

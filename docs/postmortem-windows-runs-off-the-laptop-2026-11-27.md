@@ -118,5 +118,23 @@ The project stops. No card proceeds and no Windows run is made until the followi
    run on the laptop, and comparing them with the runner's rows. Any difference is a defect in the reference, judged
    before any card relies on it.
 
+Three items join that order (reviewer-4's forty-fifth review, each checked against the record):
+
+- **A check in code for where a reference was made** (cause 6), in the card that builds the laptop's path or the one
+  after it: every probe run in `store/probe-runs/` carries its `profile.txt`; a test holds every family's and
+  contract's evidence runs to the reference profile, `laptop-x64-10.0.26200.*-Client`; a run off that profile passes
+  only when a list names it by run id with its Decision, and the runner rows made before 2026-10-30 go on that list;
+  the plant is a family held to a runner run not on the list.
+- **Which Windows w2m answers as, settled in the investigation.** The agent-resolved Decision of 2026-10-11 (BLACKBOARD
+  line 145) reads "w2m's Windows profile is build 26100 (Server 2025; the Windows 11 24H2 client shares it)"; the
+  reference is Windows 11 client build 26200. The game contract already holds one difference between them as
+  undetermined: FlsGetValue's error, 87 on Server (run 38216081440) and 0 on the laptop (runs
+  `lap-20261014T032442034Z-c8814547-01` to `-10`). The re-runs will show more. A Decision on which build w2m answers
+  as, on the grounds that the reference is the laptop and the game's players run client Windows, sorts each
+  difference into a w2m defect or a profile choice.
+- **The reference set's membership rules ported**, read at the tag `frozen-python-2026-10-29`, in the card that first
+  makes a laptop game run, so new laptop game runs can join G3's comparison (`crates/call_compare/src/lib.rs`
+  1251-1253: "the membership rules ... are not ported; the set is the frozen host's last choice").
+
 Sprint 370 is paused. Its builder is stopped, its uncommitted work stays in the tree, and its probe (8bd3e3269) has
 not been run anywhere.

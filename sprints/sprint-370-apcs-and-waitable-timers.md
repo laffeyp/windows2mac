@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 370
-status: active
+status: closed-partial
 phase: 6
 pass_kind: functional
 ---
@@ -114,4 +114,4 @@ Windows does, and all are held to Windows' own rows on one vCPU and two; every o
 
 ## result
 
-GATES-LINE
+Closed partial at the stop of 2026-11-27 (`docs/postmortem-windows-runs-off-the-laptop-2026-11-27.md`): no Windows run made for it on GitHub's runner; its probe ran on the laptop instead, `store/probe-runs/lap-20261127T210820791Z-b5a7cf3d/`. Its unfinished services (QueueUserAPC, CreateWaitableTimerA, SetWaitableTimer, ids 307-309, the id pin over 309 rows; 8 files) are kept in git stash@{0} and resume in a later card. No gates ran; nothing of it is committed but its card and probe.
