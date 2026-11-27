@@ -51,7 +51,7 @@ Mac's half again in Rust, so a builder sends a probe to the laptop with one comm
 
 ## prerequisites
 
-- 369 (closed)
+- 370 (closed-partial at the stop, 476e82490); this card was first committed inside d0c5d5432 at the stop and is committed under its own subject here
 
 ## context_files
 
