@@ -72,6 +72,50 @@ pub trait Memory {
     fn write(&mut self, va: u64, data: &[u8]) -> Result<(), String>;
 }
 
+/// A process's memory as a request reads and writes it while that process's vCPUs may run (Sprint 363; card 4f2 of
+/// `docs/design-a-process-that-starts-another-2026-11-26.md`, "The child's memory"): a view of its mapping, which
+/// makes no reference into it (`ConcurrentGuestMemory`; the census row D7 rule, every host access to guest memory while
+/// a vCPU may run goes through the view, never `as_mut_slice`), found through its maps, (VA, offset into the mapping,
+/// size) each.
+pub struct MappedMemoryView<'a> {
+    view: crate::concurrent_memory::ConcurrentGuestMemory<'a>,
+    maps: &'a [(u64, u64, u64)],
+}
+
+impl<'a> MappedMemoryView<'a> {
+    pub fn new(
+        view: crate::concurrent_memory::ConcurrentGuestMemory<'a>,
+        maps: &'a [(u64, u64, u64)],
+    ) -> MappedMemoryView<'a> {
+        MappedMemoryView { view, maps }
+    }
+
+    /// The offset in the mapping of `n` bytes at `va`, all inside one map and the mapping.
+    fn offset(&self, va: u64, n: usize) -> Result<u64, String> {
+        self.maps
+            .iter()
+            .find(|(v, _, size)| (*v..v + size).contains(&va))
+            .filter(|(v, _, size)| va + n as u64 <= v + size)
+            .map(|(v, at, _)| at + (va - v))
+            .filter(|at| at + n as u64 <= self.view.len() as u64)
+            .ok_or_else(|| format!("a kernel request's {n} bytes at unmapped 0x{va:x}"))
+    }
+}
+
+impl Memory for MappedMemoryView<'_> {
+    fn read(&self, va: u64, n: usize) -> Result<Vec<u8>, String> {
+        let at = self.offset(va, n)?;
+        let mut out = vec![0; n];
+        self.view.read(at, &mut out);
+        Ok(out)
+    }
+    fn write(&mut self, va: u64, data: &[u8]) -> Result<(), String> {
+        let at = self.offset(va, data.len())?;
+        self.view.write(at, data);
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Object {
     Event {
@@ -511,5 +555,40 @@ mod tests {
         // the parent's handle on the event is the last: its close removes the name
         k.request(4096, [CLOSE, ev, 0, 0], &mut mem).unwrap();
         assert_eq!(k.request(4096, [EVENT_OPEN, 0x1000, 2, 0], &mut mem).unwrap().second, 0);
+    }
+
+    /// Sprint 363: a pipe written and read through a view of a mapping, by its maps; bytes past a map's end, or at an
+    /// address no map holds, are refused by name, not read past the map.
+    #[test]
+    fn a_request_reads_and_writes_through_a_view_by_its_maps() {
+        let mut buffer = vec![0u8; 0x2000];
+        // SAFETY: the buffer outlives the view, and nothing else touches it meanwhile (the view's own doc test's form)
+        let view = unsafe {
+            crate::concurrent_memory::ConcurrentGuestMemory::from_raw_parts(buffer.as_mut_ptr(), buffer.len())
+        };
+        let maps = [(0x7000_0000, 0x1000, 0x800)];
+        let mut mem = MappedMemoryView::new(view, &maps);
+        mem.write(0x7000_0010, b"through the view").unwrap();
+        assert_eq!(view.read_u64(0x1010), u64::from_le_bytes(*b"through "));
+        let mut k = Objects::new();
+        let p = k.request(4096, [PIPE_CREATE, 0, 0, 0], &mut mem).unwrap();
+        assert_eq!(
+            k.request(4096, [PIPE_WRITE, p.second, 0x7000_0010, 16], &mut mem)
+                .unwrap()
+                .result,
+            16
+        );
+        assert_eq!(
+            k.request(4096, [PIPE_READ, p.result, 0x7000_0400, 16], &mut mem)
+                .unwrap()
+                .result,
+            16
+        );
+        assert_eq!(mem.read(0x7000_0400, 16).unwrap(), b"through the view");
+        assert_eq!(
+            mem.read(0x7000_07F8, 16).unwrap_err(),
+            "a kernel request's 16 bytes at unmapped 0x700007f8"
+        );
+        assert!(mem.write(0x6000_0000, b"x").is_err());
     }
 }

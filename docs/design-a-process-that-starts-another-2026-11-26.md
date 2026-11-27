@@ -356,8 +356,16 @@ billion; run-loop design 360-362).
 
 What the form costs the game. UnityPlayer's crossings are CreatePipe, three named events, CreateProcessW, three framed
 writes and zero-timeout waits on the process (`processes.c` 6-12, from game run 38176899195). Each is one request
-under `kernel` in the first process, or one round trip for the handler, a median of 0.58 to 0.71 µs (Change 4). Change
-4's revisit bound, 376 requests a second in play (1% of 37,600), stands. Removed with the turns: the game's process
+under `kernel` in the first process, or one round trip for the handler. Sprint 363 measured that round trip on this
+Mac at a median of 8,333 ns, p99 12,667 ns. The figure is over the 10,000 PIPE_WRITE requests of its two-process test,
+run alone, each request 50 µs after the last answer, so each finds the server asleep on its doorbell, as a request in
+play does (`crates/w2m_vm/src/cross_process.rs`, 2026-11-26 17:18 PST, load average 1.19). The client looks at its
+state for 20 µs before it blocks; blocking at once, the median was 9,875 to 10,417 ns. Back to back, with the server
+not yet asleep, the median was 3,250 to 3,333 ns. Beside them, the turn's round trip between two threads over SHARED
+words measured a median of 6,292 ns, p99 12,750 ns (`shared.rs` 173-176, 2026-10-28). Change 4's 0.58 to 0.71 µs (line
+99, as quoted) is not this Mac's figure. Change 4's revisit bound, 376 requests a second in play (1% of 37,600),
+stands; at 8,333 ns each they would hold the handler's requesting vCPU about 3.1 ms of each second, its spin at most
+7.5 ms. Removed with the turns: the game's process
 handing the machine to the handler at every slice's end while the handler is due (`run.rs` 1937-1960), and every slice
 cut to TIME_SLICE once a child exists (`run.rs` 1040-1044).
 

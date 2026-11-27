@@ -963,13 +963,22 @@ pub type KernelGuard<'k> = std::sync::MutexGuard<'k, Kernel>;
 impl KernelLock {
     /// `kernel` for the vCPU whose pages are `pages`: the runtime word asserted held, by the host or by that vCPU,
     /// before the lock is taken, in release builds too, as `GuestLock::serve` asserts it (card 4f1's guard). Card
-    /// 4f2's request server, which holds no word, takes it its own way; none exists before it. A lock its holder left
+    /// 4f2's request server, which holds no word, takes it by `take_for_request_server`. A lock its holder left
     /// poisoned by a panic is taken as that holder left it.
     pub fn take(&self, mem: ConcurrentGuestMemory<'_>, pages: VcpuPages) -> KernelGuard<'_> {
         assert!(
             crate::monitor_code::runtime_word_held(mem, crate::monitor_code::vcpu_owner(mem, pages.monitor)),
             "the kernel lock taken without a runtime word"
         );
+        self.kernel.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// `kernel` for the request server's thread (Sprint 363, card 4f2; `cross_process::Server`), which runs no guest
+    /// code and holds no guest's word, so it has none to assert: it takes `kernel` alone, and waits for no word and no
+    /// run's lock while it holds it (the design's lock order, "In the server: `kernel` alone"). `server` is a value
+    /// only that thread makes, so no other taker passes `take`'s assertion this way.
+    pub fn take_for_request_server(&self, server: &crate::cross_process::RequestServerThread) -> KernelGuard<'_> {
+        let _ = server;
         self.kernel.lock().unwrap_or_else(|e| e.into_inner())
     }
 

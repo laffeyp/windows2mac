@@ -21,6 +21,8 @@ pub mod cases;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod compile;
 pub mod concurrent_memory;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod cross_process;
 pub mod exit_ledger;
 pub mod file_bridge;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
