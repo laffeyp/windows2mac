@@ -94,7 +94,7 @@ const DEPARTURES: [(&str, &str); 14] = [
     (
         "tools/guest_runtime/processes.c",
         "Sprint 355: w2m_object_flags declared with its new form, the flags read and changed under the handle table's \
-         lock",
+         lock; Sprint 370: WaitForMultipleObjectsEx's bAlertable read, its wait sync_objects.c's w2m_wait_multiple_ex",
     ),
     (
         "tools/guest_runtime/runtime.c",
@@ -119,7 +119,8 @@ const DEPARTURES: [(&str, &str); 14] = [
          word's guard (hold_runtime_word, runtime_word_guard_end), which lets it go only when its take took it, and \
          w2m_take_runtime_word and w2m_let_runtime_word_go declared here; Sprint 368: \
          w2m_critical_section_leave_once and w2m_critical_section_enter declared; Sprint 369: W2M_KERNEL_NAMED_OPEN, \
-         the host's named open by kind (kernel.rs), its kinds, create flag and answers",
+         the host's named open by kind (kernel.rs), its kinds, create flag and answers; Sprint 370: W2M_NAMED_TIMER, \
+         and the thread scratch's wait_timeout, a wait's own deadline while a timer's time comes first",
     ),
     (
         "tools/guest_runtime/slim_locks.c",
@@ -152,7 +153,11 @@ const DEPARTURES: [(&str, &str); 14] = [
          w2m_unimplemented or w2m_logged, named; Sprint 369: the named sync objects the game declares, CreateMutexW, \
          OpenMutexW, OpenEventW, OpenEventA, OpenSemaphoreW and SignalObjectAndWait, CreateSemaphoreW named, and a \
          name of a mutex or semaphore refused to CreateEventW, held to probes/named_sync_objects' Windows rows; the \
-         three releases' state change one function, signal_object, which SignalObjectAndWait's signal shares",
+         three releases' state change one function, signal_object, which SignalObjectAndWait's signal shares; Sprint \
+         370: QueueUserAPC, CreateWaitableTimerA and SetWaitableTimer, the APC queue under the sync objects' lock, a \
+         timer's state brought to the counter when read, and the alertable flag of WaitForSingleObjectEx, \
+         WaitForMultipleObjectsEx and SignalObjectAndWait made real, a due APC run through guest_calls.c's CALL stub \
+         and the wait answering WAIT_IO_COMPLETION, held to probes/apcs_and_waitable_timers' Windows rows",
     ),
     (
         "tools/guest_runtime/thread_storage.c",
@@ -176,7 +181,9 @@ const DEPARTURES: [(&str, &str); 14] = [
          Sprint 356: the mark armed by a wait at its check (w2m_wait_armed) and set by w2m_ready_thread and w2m_signal \
          only on an armed thread not BLOCKED, by compare-and-swap, w2m_block clearing it by one exchange, so a thread \
          running guest code on another vCPU takes no mark; w2m_wait_again marks the running thread; Sprint 356's \
-         amendment: W2mThreadEnd abandons every mutex its thread owns before the host's THREAD_END",
+         amendment: W2mThreadEnd abandons every mutex its thread owns before the host's THREAD_END; Sprint 370: SleepEx \
+         alertable with an APC queued or for INFINITE runs the thread's due APCs (sync_objects.c), and W2mThreadEnd \
+         drops the thread's APCs and cancels a timer it set with a completion routine",
     ),
     (
         "tools/vm_compiler/vm_compiler.c",

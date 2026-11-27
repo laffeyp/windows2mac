@@ -46,7 +46,7 @@ u32 w2m_object_kind(u64 h, s64 *count);
 u32 w2m_object_flags(u64 h, u32 mask, u32 values);
 int w2m_object_inheritable(u64 (*out)[3], int room);
 const u16 *w2m_working_directory(void);                         /* paths.c */
-u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms);
+u64 w2m_wait_multiple_ex(u64 count, u64 handles, u64 all, u64 ms, u64 rsp);
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 static u32 current_pid(void) { return (u32)w2m_teb()->client_process; }
@@ -195,10 +195,10 @@ u64 k32_GetExitCodeProcess(u64 h, u64 out) {
     return w2m_logged(W2M_API_GetExitCodeProcess, h, 1);
 }
 
-/* WaitForMultipleObjectsEx(nCount, lpHandles, bWaitAll, dwMilliseconds, bAlertable): no APC is ever queued */
+/* WaitForMultipleObjectsEx(nCount, lpHandles, bWaitAll, dwMilliseconds, bAlertable): WaitForMultipleObjects' wait, its
+ * bAlertable read at RSP + 0x28 (sync_objects.c `w2m_wait_multiple_ex`, Sprint 370) */
 u64 k32_WaitForMultipleObjectsEx(u64 count, u64 handles, u64 all, u64 ms, u64 rsp) {
-    (void)rsp;
-    return k32_WaitForMultipleObjects(count, handles, all, ms);
+    return w2m_wait_multiple_ex(count, handles, all, ms, rsp);
 }
 
 /* SetConsoleCtrlHandler(HandlerRoutine, Add): the list Windows would call on Ctrl+C; w2m sends no console event */

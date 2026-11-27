@@ -399,10 +399,13 @@ W2M_VOID u64 k32_ExitThread(u64 code) {
 }
 
 void w2m_mutexes_abandoned(u32 tid);          /* sync_objects.c (Sprint 356's amendment) */
+void w2m_apcs_ended(u32 tid);                 /* sync_objects.c (Sprint 370) */
 
 /* The last call of every thread but the first: the exit code is final, waiters on its handle wake. Every mutex it
- * still owns is abandoned first (Sprint 356's amendment), its first waiter granted it with WAIT_ABANDONED. */
+ * still owns is abandoned first (Sprint 356's amendment), its first waiter granted it with WAIT_ABANDONED; its APCs are
+ * lost and a timer it set with a completion routine is canceled (Sprint 370). */
 W2M_VOID u64 k32_W2mThreadEnd(void) {
+    w2m_apcs_ended((u32)w2m_teb()->client_thread);
     w2m_mutexes_abandoned((u32)w2m_teb()->client_thread);
     host(W2M_THREAD_END, w2m_thread_scratch()->exit_code, 0, 0);
     w2m_state()->schedule |= W2M_SCHEDULE_END;
@@ -529,7 +532,7 @@ static int slept(u32 ms) {
         w2m_state()->schedule |= W2M_SCHEDULE_YIELD;
         return 1;
     }
-    if (ms == INFINITE) w2m_unimplemented(W2M_API_SleepEx, ms);             /* no APC ever ends it: not in the rows */
+    if (ms == INFINITE) w2m_unimplemented(W2M_API_SleepEx, ms);   /* not alertable, nothing ends it: not in the rows */
     if (!sc->wait_deadline) {
         w2m_block(w2m_counter_now() + (u64)ms * 10000, W2M_KEY_NONE);
         return 0;
@@ -542,8 +545,18 @@ static int slept(u32 ms) {
     return 1;
 }
 
-u64 k32_SleepEx(u64 ms, u64 alertable) {
-    (void)alertable;                               /* no APC is ever queued */
+int w2m_apcs_queued(void);                    /* sync_objects.c (Sprint 370) */
+u64 w2m_sleep_alertable(u32 ms, u64 rsp);
+
+/* SleepEx(dwMilliseconds, bAlertable), the stack pointer the bridge's fifth argument: not alertable, or alertable with
+ * no APC queued to any thread and a finite time, the sleep above, as before Sprint 370; alertable with an APC queued, or
+ * for INFINITE, sync_objects.c's, which runs the thread's due APCs and answers WAIT_IO_COMPLETION: "If an APC is queued
+ * to the thread (QueueUserAPC), the function returns when either the time-out period has elapsed or when the APC
+ * function is called" (Microsoft Learn, SleepEx). Not alertable, "If an APC is queued to the thread, the function does
+ * not immediately return and the APC function is not executed." */
+u64 k32_SleepEx(u64 ms, u64 alertable, u64 unused2, u64 unused3, u64 rsp) {
+    (void)unused2, (void)unused3;
+    if ((u32)alertable && (w2m_apcs_queued() || (u32)ms == INFINITE)) return w2m_sleep_alertable((u32)ms, rsp);
     if (!slept((u32)ms)) return 0;                 /* retried: the bridge does not return */
     return w2m_logged(W2M_API_SleepEx, (u32)ms, 0);
 }

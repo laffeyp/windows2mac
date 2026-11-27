@@ -91,8 +91,9 @@ pub const SLOTS_LOCK: [&str; 7] = [
 /// game declares, CreateMutexW, OpenMutexW, OpenEventW, OpenEventA and OpenSemaphoreW (and CreateSemaphoreW's name):
 /// a named mutex's or semaphore's make or open takes the runtime word in the C with no other lock held, for the host's
 /// name request, and holds it to the handle's publication, the table's lock taken under it (`named`); a named event's
-/// open takes it for the request alone, as CreateEventW's.
-pub const HANDLES_LOCK: [&str; 15] = [
+/// open takes it for the request alone, as CreateEventW's. From Sprint 370 CreateWaitableTimerA, an unnamed timer's
+/// make as the other creates', a named one's as CreateMutexW's.
+pub const HANDLES_LOCK: [&str; 16] = [
     "CreateEventA",
     "CreateEventExW",
     "CreateEventW",
@@ -100,6 +101,7 @@ pub const HANDLES_LOCK: [&str; 15] = [
     "CreateMutexW",
     "CreateSemaphoreExW",
     "CreateSemaphoreW",
+    "CreateWaitableTimerA",
     "DuplicateHandle",
     "GetProcessId",
     "GetThreadId",
@@ -122,12 +124,17 @@ pub const HANDLES_LOCK: [&str; 15] = [
 /// deadline), ReleaseSemaphore's `*lpPreviousCount`, its run entry's woken mark (armed under the sync objects' lock), its
 /// vCPU's state block (`schedule`), and the call ring by atomic add (`w2m_logged`); `w2m_unimplemented` and `w2m_logged`
 /// are called only with both leaves let go. From Sprint 369 SignalObjectAndWait, whose signal is a release's and whose
-/// wait is WaitForSingleObject's.
-pub const SYNC_LOCK: [&str; 9] = [
+/// wait is WaitForSingleObject's. From Sprint 370 QueueUserAPC, which queues under the sync objects' lock (the APC
+/// queue is its) and readies the thread under the word, and SetWaitableTimer, which sets the timer and its APC entry
+/// under that lock, reads the counter and the system time under the word, and readies the timer's waits under it; the
+/// waits' APCs run after both leaves are let go.
+pub const SYNC_LOCK: [&str; 11] = [
+    "QueueUserAPC",
     "ReleaseMutex",
     "ReleaseSemaphore",
     "ResetEvent",
     "SetEvent",
+    "SetWaitableTimer",
     "SignalObjectAndWait",
     "WaitForMultipleObjects",
     "WaitForMultipleObjectsEx",
@@ -520,9 +527,10 @@ mod tests {
     /// table, which take its lock inside the runtime word, stay on the word: CloseHandle (its file path), the waits and
     /// releases (card 5's), Get/SetHandleInformation (the file table), the process, pipe and thread services (host
     /// requests), the thread information calls, and ADVAPI32's token calls. Sprint 369: fifteen, with the named sync
-    /// objects' make and opens, CreateMutexW, OpenEventA, OpenEventW, OpenMutexW and OpenSemaphoreW.
+    /// objects' make and opens, CreateMutexW, OpenEventA, OpenEventW, OpenMutexW and OpenSemaphoreW. Sprint 370:
+    /// sixteen, with CreateWaitableTimerA.
     #[test]
-    fn the_fifteen_services_of_lock_class_handles_are_the_handle_tables() {
+    fn the_sixteen_services_of_lock_class_handles_are_the_handle_tables() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let texts = crate::texts(&root).unwrap();
         let all = services(&texts).unwrap();
@@ -542,6 +550,7 @@ mod tests {
                 "KERNEL32!CreateMutexW",
                 "KERNEL32!CreateSemaphoreExW",
                 "KERNEL32!CreateSemaphoreW",
+                "KERNEL32!CreateWaitableTimerA",
                 "KERNEL32!DuplicateHandle",
                 "KERNEL32!GetProcessId",
                 "KERNEL32!GetThreadId",
@@ -595,9 +604,10 @@ mod tests {
     /// counter read is a host request; the other services that reach these kinds' state or a wait stay where they were:
     /// CloseHandle and the pipe and process calls on the word, the creates, DuplicateHandle and the id lookups on the
     /// handle table's lock, Sleep, the critical sections and the slim locks on the word. Sprint 369: nine, with
-    /// SignalObjectAndWait, a release's signal and WaitForSingleObject's wait.
+    /// SignalObjectAndWait, a release's signal and WaitForSingleObject's wait. Sprint 370: eleven, with QueueUserAPC and
+    /// SetWaitableTimer; SleepEx stays on the word, as Sleep, its alertable path taking the sync objects' lock under it.
     #[test]
-    fn the_nine_services_of_lock_class_sync_objects_are_the_waits_and_releases() {
+    fn the_eleven_services_of_lock_class_sync_objects_are_the_waits_and_releases() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let texts = crate::texts(&root).unwrap();
         let all = services(&texts).unwrap();
@@ -610,10 +620,12 @@ mod tests {
         assert_eq!(
             sync,
             [
+                "KERNEL32!QueueUserAPC",
                 "KERNEL32!ReleaseMutex",
                 "KERNEL32!ReleaseSemaphore",
                 "KERNEL32!ResetEvent",
                 "KERNEL32!SetEvent",
+                "KERNEL32!SetWaitableTimer",
                 "KERNEL32!SignalObjectAndWait",
                 "KERNEL32!WaitForMultipleObjects",
                 "KERNEL32!WaitForMultipleObjectsEx",
@@ -645,6 +657,7 @@ mod tests {
             ("WriteFile", Lock::RuntimeWord),
             ("GetExitCodeProcess", Lock::RuntimeWord),
             ("Sleep", Lock::RuntimeWord),
+            ("SleepEx", Lock::RuntimeWord),
             ("EnterCriticalSection", Lock::RuntimeWord),
             ("SleepConditionVariableSRW", Lock::RuntimeWord),
         ] {
@@ -753,6 +766,18 @@ mod tests {
             "ab180912c4dd52e895e00044b2fbeedf8446a21d5d64fa4d21e15c818d0dd512",
             "api_ids.txt's rows 1-299 are not HEAD's"
         );
+        // every row, by one sha256 over the names one a line (the Decision "The runtime's API id pin covers every row",
+        // Sprint 370: at Sprint 369's grade ids 302 and 303 swapped passed, the pin holding rows 1-299 and of the rows
+        // above only 300, 301 and 306). The card that adds a row raises the count and the hash; a row moved, renamed or
+        // added without them fails here.
+        // rows 1-306 at the card's start: 3283ce7a26f65fdf9acab93ecd8ec2e7c48b9771a12e6726992728b77507d7dd; Sprint 370's
+        // three rows, 307-309, raise it
+        let every: String = head.iter().map(|n| format!("{n}\n")).collect();
+        assert_eq!(
+            (head.len(), crate::sha256::hex(every.as_bytes()).as_str()),
+            (309, "876448553bd42963a7161b502ff616457beaa88fb8416f12e6beb726d52986bf"),
+            "api_ids.txt's rows are not those the pin holds: a row moved, renamed or added unpinned"
+        );
         let first: Vec<&String> = head.iter().take(299).collect();
         let mut sorted = first.clone();
         sorted.sort();
@@ -772,6 +797,10 @@ mod tests {
             // Sprint 369: the named sync objects, each the next id after the largest
             (301, "CreateMutexW"),
             (306, "SignalObjectAndWait"),
+            // Sprint 370: the APCs and the waitable timer
+            (307, "QueueUserAPC"),
+            (308, "CreateWaitableTimerA"),
+            (309, "SetWaitableTimer"),
         ] {
             assert_eq!(head[id - 1], name, "the frozen id {id}");
         }

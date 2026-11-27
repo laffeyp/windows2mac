@@ -27,12 +27,17 @@ pub const REF: u64 = 12;
 /// "If lpName matches the name of an existing event, semaphore, waitable timer, job, or file-mapping object, the
 /// function fails and the GetLastError function returns ERROR_INVALID_HANDLE. This occurs because these objects share
 /// the same namespace" (Microsoft Learn, CreateMutexW). a3 is the kind (`NAMED_EVENT`, `NAMED_MUTEX`,
-/// `NAMED_SEMAPHORE`), with `NAMED_CREATE` to make a mutex or a semaphore absent by that name; the second word is
-/// `NAME_CREATED`, `NAME_EXISTED`, `NAME_ABSENT` or `NAME_OTHER_KIND`.
+/// `NAMED_SEMAPHORE`, `NAMED_TIMER`), with `NAMED_CREATE` to make a mutex, a semaphore or a waitable timer absent by
+/// that name; the second word is `NAME_CREATED`, `NAME_EXISTED`, `NAME_ABSENT` or `NAME_OTHER_KIND`.
 pub const NAMED_OPEN: u64 = 13;
 pub const NAMED_EVENT: u64 = 1;
 pub const NAMED_MUTEX: u64 = 2;
 pub const NAMED_SEMAPHORE: u64 = 3;
+/// A waitable timer (Sprint 370), held as a mutex or a semaphore is, its state the maker's guest runtime's: "If
+/// lpTimerName matches the name of an existing event, semaphore, mutex, job, or file-mapping object, the function fails
+/// and GetLastError returns ERROR_INVALID_HANDLE. This occurs because these objects share the same namespace" (Microsoft
+/// Learn, CreateWaitableTimerW).
+pub const NAMED_TIMER: u64 = 4;
 pub const NAMED_CREATE: u64 = 1 << 8;
 pub const NAME_CREATED: u64 = 0;
 pub const NAME_EXISTED: u64 = 1;
@@ -145,8 +150,9 @@ enum Object {
         readers: i64,
         writers: i64,
     },
-    /// A named mutex or semaphore (Sprint 369): its name and kind here, in the namespace the events share, its state
-    /// in the guest runtime of the process `pid` that made it, whose object names this id.
+    /// A named mutex or semaphore (Sprint 369), or waitable timer (Sprint 370): its name and kind here, in the
+    /// namespace the events share, its state in the guest runtime of the process `pid` that made it, whose object
+    /// names this id.
     Named {
         name: String,
         kind: u64,
@@ -311,7 +317,7 @@ impl Objects {
             NAMED_OPEN => {
                 let name = read_text(mem, a1, a2)?;
                 let (kind, create) = (a3 & 0xFF, a3 & NAMED_CREATE != 0);
-                if !(NAMED_EVENT..=NAMED_SEMAPHORE).contains(&kind) || (create && kind == NAMED_EVENT) {
+                if !(NAMED_EVENT..=NAMED_TIMER).contains(&kind) || (create && kind == NAMED_EVENT) {
                     return Err(format!("a named open of kind {a3:#x}"));
                 }
                 let Some(&oid) = self.names.get(&name) else {
@@ -594,6 +600,28 @@ mod tests {
             open(&mut k, &mut mem, 4096, NAMED_MUTEX | NAMED_CREATE),
             (0, NAME_OTHER_KIND)
         );
+        // Sprint 370: a waitable timer in the same namespace, refused the event's name and refusing its own to the others
+        assert_eq!(
+            open(&mut k, &mut mem, 4096, NAMED_TIMER | NAMED_CREATE),
+            (0, NAME_OTHER_KIND)
+        );
+        let mut timer = with_name("t");
+        let t = open(&mut k, &mut timer, 4096, NAMED_TIMER | NAMED_CREATE).0;
+        assert_eq!(
+            open(&mut k, &mut timer, 4096, NAMED_TIMER | NAMED_CREATE),
+            (t, NAME_EXISTED)
+        );
+        for kind in [NAMED_EVENT, NAMED_MUTEX | NAMED_CREATE, NAMED_SEMAPHORE] {
+            assert_eq!(
+                open(&mut k, &mut timer, 4096, kind),
+                (0, NAME_OTHER_KIND),
+                "kind {kind:#x}"
+            );
+        }
+        let e = k.request(4096, [EVENT_OPEN, 0x1000, 1, 0], &mut timer).unwrap();
+        assert_eq!((e.result, e.second), (0, NAME_OTHER_KIND));
+        k.request(4096, [CLOSE, t, 0, 0], &mut timer).unwrap();
+        assert_eq!(open(&mut k, &mut timer, 4096, NAMED_TIMER), (0, NAME_ABSENT));
     }
 
     /// kernel.py 232-257: a pipe's ends after the pipe's id; a write takes what fits in 4,096 bytes; a read takes what

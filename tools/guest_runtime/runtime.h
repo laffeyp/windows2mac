@@ -53,6 +53,10 @@ struct w2m_thread_scratch {
     u32 com_model;                   /* their apartment: 1 multithreaded, 2 single-threaded */
     u64 progress;                    /* a retried WriteFile to a pipe: the bytes the pipe took so far (Sprint 058) */
     u64 wait_key;                    /* what a blocked thread waits on (w2m_block); a signal with its key wakes it */
+    u64 wait_timeout;                /* a wait's own deadline while a waitable timer's due time, or a timer's APC, comes
+                                      * first (Sprint 370; sync_objects.c `park_until`): wait_deadline then holds that
+                                      * earlier time, which the thread wakes at, as the host and the switch read it; 0
+                                      * otherwise, wait_deadline being the wait's own */
 };
 #define W2M_BLOCKED (~0ull)          /* a service's helper blocked the thread: the call is retried, not returned */
 #define W2M_THREAD_SCRATCH_OFF 0x1900
@@ -311,7 +315,7 @@ enum { W2M_KERNEL_EVENT_OPEN = 1, W2M_KERNEL_EVENT_STATE, W2M_KERNEL_EVENT_TAKE,
        W2M_KERNEL_PROCESS_CREATE, W2M_KERNEL_PROCESS_STATE, W2M_KERNEL_REF,
        W2M_KERNEL_NAMED_OPEN };                    /* 13: Sprint 369, a named object by name and kind (kernel.rs) */
 /* W2M_KERNEL_NAMED_OPEN's kinds and create flag, and its answers' second word, EVENT_OPEN's for a name of another kind */
-enum { W2M_NAMED_EVENT = 1, W2M_NAMED_MUTEX, W2M_NAMED_SEMAPHORE };
+enum { W2M_NAMED_EVENT = 1, W2M_NAMED_MUTEX, W2M_NAMED_SEMAPHORE, W2M_NAMED_TIMER };   /* TIMER: Sprint 370 */
 #define W2M_NAMED_CREATE 0x100
 enum { W2M_NAME_CREATED, W2M_NAME_EXISTED, W2M_NAME_ABSENT, W2M_NAME_OTHER_KIND };
 /* sync_objects.c's object kinds for the host's objects (kernel.py KIND_*; PROCESS is 7) */

@@ -36,9 +36,11 @@
 enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN, THREAD, PROCESS, MAPPING,   /* TOKEN: token.c;
                                                                           * THREAD, PROCESS, MAPPING: Sprint 049 */
             SHARED_EVENT = W2M_OBJECT_SHARED_EVENT, PIPE_READ = W2M_OBJECT_PIPE_READ,
-            PIPE_WRITE = W2M_OBJECT_PIPE_WRITE, REMOTE_THREAD = W2M_OBJECT_REMOTE_THREAD };
+            PIPE_WRITE = W2M_OBJECT_PIPE_WRITE, REMOTE_THREAD = W2M_OBJECT_REMOTE_THREAD, TIMER = 13 };
             /* Sprint 055 (processes.c): a named event, a pipe's ends and another process's thread, each the host's
-             * object (src/w2m/kernel.py) whose id `count` holds; a PROCESS's `count` is its id, this one or another */
+             * object (src/w2m/kernel.py) whose id `count` holds; a PROCESS's `count` is its id, this one or another.
+             * TIMER (Sprint 370): a waitable timer, this file's, `count` its signaled state (0 or 1), `max` 1 when it
+             * is a manual-reset timer and 0 when a synchronization timer */
 
 /* Objects, and the handles that name them (Sprint 049: DuplicateHandle gives a second handle to one object, which
  * lives until its last handle closes). count: semaphore count, event 0/1, mutex recursion, a thread's id, a file
@@ -52,7 +54,12 @@ enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN, THREAD, PRO
  * references ("Each routine that opens a handle increases both the object reference count and the object handle
  * count by one", the same page); the host's closes come when they reach 0, at CloseHandle of the last, as before Sprint
  * 350 (reviewer-4's nineteenth review, Medium 1), so another process sees a shared object close when it did. */
-static struct object { u32 kind; s64 count, max; u32 refs, handles, abandoned; u64 name; } objects[OBJECTS];
+static struct object { u32 kind; s64 count, max; u32 refs, handles, abandoned; u64 name; u64 due; u32 period, active; }
+    objects[OBJECTS];
+/* due, period, active (Sprint 370): a set timer's next expiry on the 10 MHz counter the waits read, its period in ms (0:
+ * signaled once), and whether it is set; `sync_lock`'s, as a timer's `count` is. A timer's state is brought to a time
+ * only when a wait or SetWaitableTimer reads it (`timer_run`): the counter is read before `sync_lock` is taken, since on
+ * the host's clock it is a host request, which a leaf does not make. */
 /* name (Sprint 369): a named mutex's or semaphore's id in the host's namespace (kernel.rs NAMED_OPEN), 0 when unnamed;
  * written before the object's first handle is published and fixed after, as `kind` is. */
 /* abandoned (Sprint 356's amendment): a mutex whose owner thread ended holding it (`w2m_mutexes_abandoned`), cleared by
@@ -122,13 +129,15 @@ static void inherit_init(void);
  * process's thread). */
 static int sync_kind(const struct object *o) {
     return o->kind == SEMAPHORE || o->kind == EVENT_MANUAL || o->kind == EVENT_AUTO || o->kind == MUTEX ||
-           o->kind == TOKEN || o->kind == MAPPING;
+           o->kind == TOKEN || o->kind == MAPPING || o->kind == TIMER;
 }
 
-/* A kind whose `count` and `max` change after creation, under `sync_lock`: a semaphore, an event, a mutex. Every other
- * kind's are fixed, a mapping's descriptor and size among them, and read with no lock by a holder of a reference. */
+/* A kind whose `count` and `max` change after creation, under `sync_lock`: a semaphore, an event, a mutex, a timer's
+ * `count` (Sprint 370). Every other kind's are fixed, a mapping's descriptor and size among them, and read with no lock
+ * by a holder of a reference. */
 static int changes(const struct object *o) {
-    return o->kind == SEMAPHORE || o->kind == EVENT_MANUAL || o->kind == EVENT_AUTO || o->kind == MUTEX;
+    return o->kind == SEMAPHORE || o->kind == EVENT_MANUAL || o->kind == EVENT_AUTO || o->kind == MUTEX ||
+           o->kind == TIMER;
 }
 
 /* A free slot taken for entry `object`, its counts raised: the handle; 0 when every slot is taken. The table held. */
@@ -365,8 +374,9 @@ static u64 named(u64 api, u32 kind, u64 name, int create, s64 count, s64 max) {
     u64 chars = name_chars(api, (const unsigned short *)name), second = 0, h = 0;
     int found = 1;
     W2M_HELD(runtime_word);
-    u64 id = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_NAMED_OPEN, name, chars,
-                      (kind == MUTEX ? W2M_NAMED_MUTEX : W2M_NAMED_SEMAPHORE) | (create ? W2M_NAMED_CREATE : 0), &second);
+    u64 host_kind = kind == MUTEX ? W2M_NAMED_MUTEX : kind == TIMER ? W2M_NAMED_TIMER : W2M_NAMED_SEMAPHORE;
+    u64 id = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_NAMED_OPEN, name, chars, host_kind | (create ? W2M_NAMED_CREATE : 0),
+                      &second);
     if (second == W2M_NAME_ABSENT || second == W2M_NAME_OTHER_KIND) {
         set_error(second == W2M_NAME_ABSENT ? ERROR_FILE_NOT_FOUND : ERROR_INVALID_HANDLE);
         return 0;
@@ -455,6 +465,30 @@ u64 k32_OpenEventA(u64 access, u64 inherit, u64 name) {
     }
     wide[k] = 0;
     return open_event(W2M_API_OpenEventA, access, wide);
+}
+
+/* CreateWaitableTimerA(lpTimerAttributes, bManualReset, lpTimerName) (Sprint 370): "If this parameter is TRUE, the timer
+ * is a manual-reset notification timer. Otherwise, the timer is a synchronization timer"; "Timers are initially
+ * inactive" (Microsoft Learn, CreateWaitableTimerW, which documents the A form: Learn has no page of its own for it, and
+ * SetWaitableTimer). Unnamed, `make`'s object, its last error 0 as the other creates set it; named, the name's object,
+ * made or found (`named`), "If the named timer object exists before the function call, the function returns a handle to
+ * the existing object and GetLastError returns ERROR_ALREADY_EXISTS", its manual-reset flag then the maker's; the ANSI
+ * name widened byte for unit as OpenEventA's, a byte past ASCII stopping the run. Held to
+ * probes/apcs_and_waitable_timers' rows timer.manual and timer.named. */
+u64 k32_CreateWaitableTimerA(u64 attributes, u64 manual, u64 name) {
+    if (attributes) w2m_unimplemented(W2M_API_CreateWaitableTimerA, attributes);
+    s64 reset = (u32)manual ? 1 : 0;
+    if (!name) return make(W2M_API_CreateWaitableTimerA, TIMER, 0, reset);
+    unsigned short wide[NAME_CHARS + 1];
+    const unsigned char *a = (const unsigned char *)name;
+    u64 k = 0;
+    for (; a[k]; k++) {
+        if (k == NAME_CHARS || a[k] >= 0x80) w2m_unimplemented(W2M_API_CreateWaitableTimerA, k);
+        wide[k] = a[k];
+    }
+    wide[k] = 0;
+    return w2m_logged(W2M_API_CreateWaitableTimerA, TIMER,
+                      named(W2M_API_CreateWaitableTimerA, TIMER, (u64)wide, 1, 0, reset));
 }
 
 /* Threads blocked on one semaphore, auto-reset event or mutex, in the order they began to wait. A release grants the
@@ -674,6 +708,8 @@ static int sync_take(struct object *o, u32 tid) {
         o->abandoned = 0;
     } else if (o->kind == SEMAPHORE || o->kind == EVENT_AUTO) {
         o->count--;
+    } else if (o->kind == TIMER && !o->max) {
+        o->count = 0;     /* "a synchronization timer ... remains in this state until a thread completes a wait" */
     }
     return abandoned;
 }
@@ -880,10 +916,24 @@ u64 k32_ReleaseMutex(u64 h) {
  * `*deadline` and retries the call (runtime.h W2M_SCHEDULE_RETRY), other threads running meanwhile; -1 when the counter
  * is needed first (`now`, `have_now`), read with no leaf held, as it is a host request on the host's clock. ms is from
  * the first try, the deadline kept in the TEB, the waiting thread's own (only it and its vCPU's switch read it). */
+/* The wait's own deadline (Sprint 370): `wait_timeout` while a timer's time comes first and `wait_deadline` holds that
+ * (`park_until`), else `wait_deadline`; 0 on a first try. A wait that names no timer and runs no APC never sets
+ * `wait_timeout`, so for it this is `wait_deadline`, as before. */
+static u64 own_deadline(const struct w2m_thread_scratch *sc) {
+    return sc->wait_timeout ? sc->wait_timeout : sc->wait_deadline;
+}
+
+/* A wait over: both words cleared (Sprint 370; before it, `wait_deadline` alone, `wait_timeout` then always 0). */
+static void wait_over(struct w2m_thread_scratch *sc) {
+    sc->wait_deadline = 0;
+    sc->wait_timeout = 0;
+}
+
 static int timed_out_at(u32 ms, int have_now, u64 now, u64 *deadline) {
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
     if (ms == 0) return 1;
-    if (!sc->wait_deadline) {
+    u64 own = own_deadline(sc);
+    if (!own) {
         if (ms == INFINITE) {
             *deadline = ~0ull;
             return 0;
@@ -892,21 +942,397 @@ static int timed_out_at(u32 ms, int have_now, u64 now, u64 *deadline) {
         *deadline = now + (u64)ms * 10000;
         return 0;
     }
-    if (sc->wait_deadline != ~0ull) {
+    if (own != ~0ull) {
         if (!have_now) return -1;
-        if (now >= sc->wait_deadline) {
-            sc->wait_deadline = 0;
+        if (now >= own) {
+            wait_over(sc);
             return 1;
         }
     }
-    *deadline = sc->wait_deadline;
+    *deadline = own;
     return 0;
+}
+
+/* A wait's park (W2M_SCHEDULE_RETRY) until its own `deadline`, or until `wake` when that comes first (Sprint 370): a
+ * timer's next expiry among its objects, or the expiry of a timer's APC queued to it. The thread is woken at the
+ * earlier, its wait checked again; `wait_deadline` holds that time, which the switch and the host read (threads.rs
+ * reads a parked thread's deadline from the scratch's first word), and `wait_timeout` the wait's own. With no earlier
+ * `wake`, the words are as before Sprint 370, so a wait that names no timer parks as it did. */
+static void park_until(u64 deadline, u64 wake, u64 key) {
+    struct w2m_thread_scratch *sc = w2m_thread_scratch();
+    if (wake < deadline) {
+        sc->wait_timeout = deadline;
+        sc->wait_deadline = wake;
+        park(wake, key);
+        return;
+    }
+    if (sc->wait_timeout) {                        /* the timer's time passed or went: the wait's own again */
+        sc->wait_deadline = deadline;
+        sc->wait_timeout = 0;
+    }
+    park(deadline, key);
 }
 
 /* `timed_out_at` with the counter read when it is needed, no leaf held. */
 static int timed_out_now(u32 ms, u64 *deadline) {
     int t = timed_out_at(ms, 0, 0, deadline);
     return t < 0 ? timed_out_at(ms, 1, w2m_counter_now(), deadline) : t;
+}
+
+/* Waitable timers and asynchronous procedure calls (Sprint 370; docs/unserved-declared-imports-2026-11-27.md:
+ * mono-2.0-bdwgc.dll's QueueUserAPC, UnityPlayer.dll's CreateWaitableTimerA and SetWaitableTimer), held to
+ * probes/apcs_and_waitable_timers' Windows rows (contracts/windows.sync.apcs_and_waitable_timers).
+ *
+ * A timer's state is brought to a time when it is read (`timer_run`): at its due time it is signaled, and a periodic
+ * timer's next due time is its first after that time, "A periodic timer automatically reactivates each time the period
+ * elapses" (Microsoft Learn, SetWaitableTimer); a timer set once becomes inactive, "When the specified due time arrives,
+ * the timer becomes inactive". A wait that names a timer parks until the timer's due time if that comes before its own
+ * deadline (`park_until`), so it checks the timer again then; SetWaitableTimer readies the waits on the timer, which
+ * check it again at its new due time.
+ *
+ * The APC queue, one for every thread, entries by thread id: QueueUserAPC's, "Each thread has its own APC queue. The
+ * queuing of an APC is a request for the thread to call the APC function" (QueueUserAPC), and SetWaitableTimer's
+ * completion routine's, queued "to the thread that set the timer" at the due time. A timer's entry is made at
+ * SetWaitableTimer and is due at its expiry (`at`), before which no wait takes it: so "if there is no outstanding APC
+ * already queued" holds by the one entry, which a periodic timer's delivery puts at the first expiry after it; a second
+ * SetWaitableTimer removes it, "it does cancel any pending completion routines". An alertable wait takes the thread's
+ * due entries in the order they were queued, a timer's at its expiry and QueueUserAPC's at the counter read as it was
+ * queued, and calls each, "the thread handles all pending APCs in first in, first out (FIFO) order, and the wait
+ * operation returns WAIT_IO_COMPLETION" (QueueUserAPC), an APC that one of them queues among them, "An alertable
+ * function will return only after all APC entries have been processed" (Using a Waitable Timer with an Asynchronous
+ * Procedure Call). The calls are guest_calls.c's: a frame below the wait's stack pointer, each APC called through the
+ * CALL stub, the next taken at its return (`apc_next`), the wait's caller answered WAIT_IO_COMPLETION once none is due.
+ * The queue is `sync_lock`'s, so an alertable wait's check of its objects, of its queue and its arming are one holding:
+ * QueueUserAPC queues under the lock and readies the thread under the runtime word, which finds it parked or armed, as a
+ * release's grant does. It readies the thread in any wait, alertable or not: a wait that is not checks again and parks
+ * again, its answer the same. With no APC queued and no timer named, every wait reads the queue's count and nothing
+ * more, and its answer and its writes are those before Sprint 370. */
+#define WAIT_IO_COMPLETION 0xC0u                   /* "0x000000C0L" (WaitForSingleObjectEx) */
+#define ERROR_INVALID_PARAMETER 87u
+#define CURRENT_THREAD (~0ull - 1)
+#define APCS 64
+
+/* A timer brought to `now`, `sync_lock` held: its next due time while it is set, ~0 once it is not. */
+static u64 timer_run(struct object *o, u64 now) {
+    if (o->active && now >= o->due) {
+        o->count = 1;
+        if (o->period) {
+            u64 p = (u64)o->period * 10000;
+            o->due += ((now - o->due) / p + 1) * p;
+        } else {
+            o->active = 0;
+        }
+    }
+    return o->active ? o->due : ~0ull;
+}
+
+/* Every timer of n objects brought to `now`, `sync_lock` held: the earliest next due time among them, ~0 for none. */
+static u64 timers_run(struct object **os, u32 n, u64 now) {
+    u64 wake = ~0ull;
+    for (u32 i = 0; i < n; i++)
+        if (os[i]->kind == TIMER) {
+            u64 d = timer_run(os[i], now);
+            if (d < wake) wake = d;
+        }
+    return wake;
+}
+
+/* Whether any of n objects is a timer: its kind is fixed, read with no lock by a holder of a reference. */
+static int has_timer(struct object *const *os, u32 n) {
+    for (u32 i = 0; i < n; i++)
+        if (os[i]->kind == TIMER) return 1;
+    return 0;
+}
+
+/* The queue: a thread's entry, its function and argument, the time it is due from (`at`: a timer's expiry, a
+ * QueueUserAPC's counter as it was queued, due at once), the order of its queuing (`seq`), and for a timer's
+ * completion routine the timer, its entry holding a reference (Sprint 352's rule, as a waiter entry holds one), and its
+ * period in counter ticks. `napcs` is written under `sync_lock`, by a relaxed store, and read with no lock by SleepEx
+ * and a thread's end only to see whether any entry exists (`w2m_apcs_queued`). */
+static struct apc { u32 tid; u64 fn, arg, at, seq, period; struct object *timer; } apcs[APCS];
+static u32 napcs;
+static u64 apc_seq;
+
+static void apc_remove(u32 i) {
+    apcs[i] = apcs[napcs - 1];
+    __atomic_store_n(&napcs, napcs - 1, __ATOMIC_RELAXED);
+}
+
+/* An entry taken for its call: its function and argument, and a timer's expiry and the reference to drop. */
+struct apc_call { u64 fn, arg, expiry; struct object *done; int timer; };
+
+/* Thread tid's first due entry taken, `sync_lock` held: 1 and `*c`; 0 when none is due, `*wake` then the earliest time
+ * a timer's entry of its is due from; -1 when it has a timer's entry and the counter is needed (`now`, `have_now`). A
+ * periodic timer's entry stays, due from its first expiry after `now`; any other is removed. */
+static int apc_take(u32 tid, int have_now, u64 now, struct apc_call *c, u64 *wake) {
+    int best = -1;
+    for (u32 i = 0; i < napcs; i++) {
+        const struct apc *a = &apcs[i];
+        if (a->tid != tid) continue;
+        if (a->timer) {
+            if (!have_now) return -1;
+            if (a->at > now) {
+                if (a->at < *wake) *wake = a->at;
+                continue;
+            }
+        }
+        if (best < 0 || a->at < apcs[best].at || (a->at == apcs[best].at && a->seq < apcs[best].seq)) best = (int)i;
+    }
+    if (best < 0) return 0;
+    struct apc *a = &apcs[best];
+    *c = (struct apc_call){a->fn, a->arg, a->at, 0, a->timer != 0};
+    if (a->timer && a->period) {
+        a->at += ((now - a->at) / a->period + 1) * a->period;       /* the first expiry after this delivery */
+        a->seq = ++apc_seq;
+        return 1;
+    }
+    c->done = a->timer;
+    apc_remove((u32)best);
+    return 1;
+}
+
+/* A taken entry called through the CALL stub from `frame`: a timer's reference dropped (the table's lock, no leaf held)
+ * and its routine given "the UTC-based time at which the timer was signaled" (TimerAPCProc), its expiry as the system
+ * time, low and high words; a QueueUserAPC's function its data alone (PAPCFUNC). */
+static void apc_call_guest(struct w2m_guest_call *frame, struct apc_call *c) {
+    object_done(c->done);
+    u64 low = 0, high = 0;
+    if (c->timer) {
+        u64 t;
+        {
+            W2M_HELD(runtime_word);            /* the system time's first reading, and the host's clock, ask the host */
+            u64 ft = w2m_filetime_now(), now = w2m_counter_now();
+            t = now >= c->expiry ? ft - (now - c->expiry) : ft;
+        }
+        low = (u32)t;
+        high = t >> 32;
+    }
+    w2m_call_guest(frame, c->fn, c->arg, low, high, 0);
+}
+
+/* The APCs' frame: the wait's stack pointer, its API and logged argument, for its answer once none is due. */
+struct apc_frame {
+    struct w2m_guest_call call;
+    u64 rsp, api, arg0;
+};
+
+/* An APC returned (W2mGuestReturn, the runtime word held): the thread's next due entry called, or the wait's caller
+ * answered WAIT_IO_COMPLETION. */
+static void apc_next(struct w2m_guest_call *frame, u64 answer) {
+    (void)answer;
+    struct apc_frame *f = (struct apc_frame *)frame;
+    u32 me = current_tid();
+    struct apc_call c;
+    u64 now = 0, wake;
+    int have_now = 0, t;
+    for (;;) {
+        wake = ~0ull;
+        {
+            W2M_HELD(sync);
+            t = apc_take(me, have_now, now, &c, &wake);
+        }
+        if (t >= 0) break;
+        now = w2m_counter_now();
+        have_now = 1;
+    }
+    if (t) {
+        apc_call_guest(frame, &c);
+        return;
+    }
+    w2m_return_to(f->rsp, w2m_logged(f->api, f->arg0, WAIT_IO_COMPLETION));
+}
+
+/* An alertable wait's APCs run, the first taken (`c`), no leaf held: its frame made below the wait's stack pointer
+ * `rsp` and the first called; the answer is its function's address, which the bridge puts in RAX, where the CALL stub
+ * reads it (`w2m_call_guest` writes it too, and a service's answer overwrites RAX in the state block, guest.rs). */
+static u64 apcs_start(u64 api, u64 arg0, u64 rsp, struct apc_call *c) {
+    struct apc_frame *f = (struct apc_frame *)w2m_guest_frame(rsp, sizeof *f, apc_next);
+    f->rsp = rsp;
+    f->api = api;
+    f->arg0 = arg0;
+    apc_call_guest(&f->call, c);
+    return c->fn;
+}
+
+/* For threads.c: whether any entry is queued, read with no lock (SleepEx's and a thread end's first look). */
+int w2m_apcs_queued(void) { return __atomic_load_n(&napcs, __ATOMIC_RELAXED) != 0; }
+
+/* QueueUserAPC(pfnAPC, hThread, dwData): "Adds a user-mode asynchronous procedure call (APC) object to the APC queue of
+ * the specified thread"; "If the function succeeds, the return value is nonzero" (Microsoft Learn). The thread is
+ * this one (GetCurrentThread's pseudo-handle) or a thread handle's; another process's thread, or an object of another
+ * kind, stops the run (not in the rows). The entry is queued under `sync_lock`, then the thread readied under the
+ * runtime word, unless it is this one. */
+u64 k32_QueueUserAPC(u64 fn, u64 h, u64 data) {
+    u32 tid = current_tid();
+    if (!fn) w2m_unimplemented(W2M_API_QueueUserAPC, fn);
+    if (h != CURRENT_THREAD) {
+        struct object *o = object_of(h);
+        if (!o) {
+            if (h < OBJECT_BASE) w2m_unimplemented(W2M_API_QueueUserAPC, h);      /* a file's, the process's: no row */
+            set_error(ERROR_INVALID_HANDLE);                                     /* row apc.invalid, closed */
+            return w2m_logged(W2M_API_QueueUserAPC, h, 0);
+        }
+        int thread = o->kind == THREAD;
+        if (thread) tid = (u32)o->count;
+        object_done(o);
+        if (!thread) w2m_unimplemented(W2M_API_QueueUserAPC, h);
+    }
+    u64 at = w2m_counter_now();
+    {
+        W2M_HELD(sync);
+        if (napcs == APCS) {
+            W2M_LET_GO_EARLY(sync);
+            w2m_unimplemented(W2M_API_QueueUserAPC, APCS);
+        }
+        apcs[napcs] = (struct apc){tid, fn, data, at, ++apc_seq, 0, 0};
+        __atomic_store_n(&napcs, napcs + 1, __ATOMIC_RELAXED);
+    }
+    if (tid != current_tid()) {
+        W2M_HELD(runtime_word);
+        w2m_ready_thread(tid);
+    }
+    return w2m_logged(W2M_API_QueueUserAPC, fn, 1);
+}
+
+/* SetWaitableTimer(hTimer, lpDueTime, lPeriod, pfnCompletionRoutine, lpArgToCompletionRoutine, fResume), the last two on
+ * the guest's stack at RSP + 0x28 and + 0x30: lpDueTime "in 100 nanosecond intervals ... Positive values indicate
+ * absolute time ... Negative values indicate relative time", on the counter the waits read (an absolute time by its
+ * distance from the system time now, one past at once); "If the timer is already active when you call
+ * SetWaitableTimer, the timer is stopped, then it is reactivated ... it does cancel any pending completion routines";
+ * "When a timer is set, it is canceled if it was already active, the state of the timer is nonsignaled" (Waitable
+ * Timer Objects). A routine's entry is queued to this thread and keeps the lookup's reference; the waits on the timer
+ * are readied to check it again. fResume TRUE, a restore from a power state, stops the run (not in the rows). */
+u64 k32_SetWaitableTimer(u64 h, u64 due_time, u64 period, u64 routine, u64 rsp) {
+    u64 arg = *(const u64 *)(rsp + 0x28);
+    u32 resume = *(const u32 *)(rsp + 0x30);
+    struct object *o = object_of(h);
+    if (!o || o->kind != TIMER) {
+        if (h < OBJECT_BASE) w2m_unimplemented(W2M_API_SetWaitableTimer, h);
+        object_done(o);
+        set_error(ERROR_INVALID_HANDLE);                                         /* row timer.invalid, event */
+        return w2m_logged(W2M_API_SetWaitableTimer, h, 0);
+    }
+    if ((s32)period < 0) {                                         /* "If lPeriod is less than zero, the function fails" */
+        object_done(o);
+        set_error(ERROR_INVALID_PARAMETER);                                      /* row timer.invalid, period */
+        return w2m_logged(W2M_API_SetWaitableTimer, h, 0);
+    }
+    if (resume || !due_time) w2m_unimplemented(W2M_API_SetWaitableTimer, resume);
+    s64 due = *(const s64 *)due_time;
+    u64 at;
+    {
+        W2M_HELD(runtime_word);            /* the system time's first reading, and the host's clock, ask the host */
+        if (due < 0) {
+            at = w2m_counter_now() + ((u64)0 - (u64)due);
+        } else {
+            u64 ft = w2m_filetime_now(), now = w2m_counter_now();
+            at = (u64)due > ft ? now + ((u64)due - ft) : now;
+        }
+    }
+    struct readied r;                              /* its tids read only below n: not zeroed */
+    r.n = 0;
+    struct object *cancelled[APCS];
+    u32 nc = 0;
+    {
+        W2M_HELD(sync);
+        for (u32 i = 0; i < napcs;)
+            if (apcs[i].timer == o) {
+                cancelled[nc++] = o;
+                apc_remove(i);
+            } else {
+                i++;
+            }
+        o->count = 0;
+        o->due = at;
+        o->period = (u32)period;
+        o->active = 1;
+        if (routine) {
+            if (napcs == APCS) {
+                W2M_LET_GO_EARLY(sync);
+                w2m_unimplemented(W2M_API_SetWaitableTimer, APCS);
+            }
+            apcs[napcs] = (struct apc){current_tid(), routine, arg, at, ++apc_seq, (u64)(u32)period * 10000, o};
+            __atomic_store_n(&napcs, napcs + 1, __ATOMIC_RELAXED);
+        }
+        int index = (int)(o - objects);
+        for (int i = 0; i < nwaiters; i++)
+            if (waiters[i].object == index) to_ready(&r, waiters[i].tid);
+        for (int i = 0; i < nall; i++)
+            for (u32 k = 0; k < all_waiters[i].n; k++)
+                if (all_waiters[i].objects[k] == index) to_ready(&r, all_waiters[i].tid);
+    }
+    {
+        WORD_WHEN_NEEDED(word);
+        ready_all(&r, &word);
+    }
+    for (u32 i = 0; i < nc; i++) object_done(cancelled[i]);
+    if (!routine) object_done(o);                  /* with a routine, its entry holds the lookup's reference */
+    return w2m_logged(W2M_API_SetWaitableTimer, h, 1);
+}
+
+/* For threads.c's SleepEx, alertable, an APC queued or its time INFINITE, its bridge holding the runtime word: the
+ * thread's due APCs run (WAIT_IO_COMPLETION), or with none a yield for 0 ms ("A value of zero causes the thread to
+ * relinquish the remainder of its time slice"), the sleep's end at its time (0), or its park until then or until a
+ * timer's entry of its is due; "If an APC is queued to the thread (QueueUserAPC), the function returns when either the
+ * time-out period has elapsed or when the APC function is called" (SleepEx). */
+u64 w2m_sleep_alertable(u32 ms, u64 rsp) {
+    u32 me = current_tid();
+    struct w2m_thread_scratch *sc = w2m_thread_scratch();
+    struct apc_call c;
+    u64 now = 0, wake, deadline = 0;
+    int have_now = 0, t;
+    for (;;) {
+        wake = ~0ull;
+        {
+            W2M_HELD(sync);
+            t = apc_take(me, have_now, now, &c, &wake);
+        }
+        if (t >= 0) break;
+        now = w2m_counter_now();
+        have_now = 1;
+    }
+    if (t) {
+        wait_over(sc);
+        return apcs_start(W2M_API_SleepEx, ms, rsp, &c);
+    }
+    if (ms == 0) {
+        w2m_state()->schedule |= W2M_SCHEDULE_YIELD;
+        return w2m_logged(W2M_API_SleepEx, 0, 0);
+    }
+    int over = timed_out_at(ms, have_now, now, &deadline);
+    if (over < 0) over = timed_out_at(ms, 1, w2m_counter_now(), &deadline);
+    if (over) return w2m_logged(W2M_API_SleepEx, ms, 0);
+    park_until(deadline, wake, W2M_KEY_NONE);
+    return 0;                                      /* retried: the bridge does not return */
+}
+
+/* For threads.c's W2mThreadEnd, its bridge holding the runtime word: thread tid's entries removed, "When the thread is
+ * terminated using the ExitThread function or TerminateThread function function, the APCs in its APC queue are lost"
+ * (QueueUserAPC), and each timer it set with a routine canceled at its state now, "If the thread that set the timer
+ * terminates and there is an associated completion routine, the timer is canceled. However, the state of the timer
+ * remains unchanged" (SetWaitableTimer). With no entry queued, nothing is read or written. */
+void w2m_apcs_ended(u32 tid) {
+    if (!w2m_apcs_queued()) return;
+    u64 now = w2m_counter_now();
+    struct object *dropped[APCS];
+    u32 nd = 0;
+    {
+        W2M_HELD(sync);
+        for (u32 i = 0; i < napcs;) {
+            struct apc *a = &apcs[i];
+            if (a->tid != tid) {
+                i++;
+                continue;
+            }
+            if (a->timer) {
+                timer_run(a->timer, now);
+                a->timer->active = 0;
+                dropped[nd++] = a->timer;
+            }
+            apc_remove(i);
+        }
+    }
+    for (u32 i = 0; i < nd; i++) object_done(dropped[i]);
 }
 
 /* Every way out (Sprint 350; Sprint 352 every kind): a handle below the objects' stops the run; one that names no object
@@ -922,12 +1348,17 @@ static int timed_out_now(u32 ms, u64 *deadline) {
  * the check, which sees it, or finds the entry and grants it; the woken mark is armed in that holding, so a readying
  * between it and the park leaves the thread ready, and the park takes the word alone (`park`). One of the host's
  * objects is checked under the word, held from the check to the park (`wait_one_held`). */
-static u64 wait_one_held(u64 api, u64 h, struct object *o, u32 ms, int retry);
+static u64 wait_one_held(u64 api, u64 h, struct object *o, u32 ms, int retry, int alertable, u64 rsp);
 
 /* Sprint 359: each holding of `sync_lock` a guard's scope, the loop's body in the waits below. What must run with no
  * leaf held after it, the counter's read, the park and the lookups' references dropped, runs after the scope's end:
- * `need_now` and a `continue` bring the read to the loop's top, `parked` and a `break` the park to the loop's end. */
-static u64 wait_one(u64 api, u64 h, u32 ms) {
+ * `need_now` and a `continue` bring the read to the loop's top, `parked` and a `break` the park to the loop's end.
+ * Sprint 370: a timer is brought to the time first, the counter read before the holding (`need_now` from the start);
+ * an alertable wait whose object is not signaled takes a due APC before it times out or parks, "If dwMilliseconds is
+ * zero, the function tests the object's state, checks for queued completion routines or APCs, and returns
+ * immediately" (SignalObjectAndWait), its entry and its words then dropped as a timeout's are, its APCs run after the
+ * holding (`apcs_start`); a park waits to the timer's due time or a timer APC's when either comes first. */
+static u64 wait_one(u64 api, u64 h, u32 ms, int alertable, u64 rsp) {
     u32 me = current_tid();
     int w;
     struct object *o;
@@ -944,10 +1375,11 @@ static u64 wait_one(u64 api, u64 h, u32 ms) {
         set_error(ERROR_INVALID_HANDLE);
         return w2m_logged(api, h, WAIT_FAILED);
     }
-    if (!sync_kind(o)) return wait_one_held(api, h, o, ms, retry);
+    if (!sync_kind(o)) return wait_one_held(api, h, o, ms, retry, alertable, rsp);
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
-    u64 ret = WAIT_OBJECT_0, now = 0, deadline = 0;
-    int have_now = 0, need_now = 0, parked = 0;
+    struct apc_call call;
+    u64 ret = WAIT_OBJECT_0, now = 0, deadline = 0, wake = ~0ull;
+    int have_now = 0, need_now = o->kind == TIMER, parked = 0, apc = 0;
     for (;;) {
         if (need_now) {                                        /* a host request on the host's clock: no leaf held */
             now = w2m_counter_now();
@@ -955,11 +1387,25 @@ static u64 wait_one(u64 api, u64 h, u32 ms) {
             need_now = 0;
         }
         W2M_HELD(sync);
+        wake = o->kind == TIMER ? timer_run(o, now) : ~0ull;
         w = waiter_of(me);
         if (w >= 0 && waiters[w].granted) {                    /* a release handed it over while this thread waited */
-            sc->wait_deadline = 0;
+            wait_over(sc);
             if (waiters[w].granted == ABANDONED_GRANT) ret = WAIT_ABANDONED;   /* its owner ended (amendment) */
         } else if (!sync_signaled(o, me)) {
+            if (alertable) {
+                int a = apc_take(me, have_now, now, &call, &wake);
+                if (a < 0) {
+                    need_now = 1;
+                    continue;
+                }
+                if (a) {
+                    wait_over(sc);
+                    apc = 1;
+                    if (w >= 0) waiters_out(me);
+                    break;
+                }
+            }
             int t = timed_out_at(ms, have_now, now, &deadline);
             if (t < 0) {
                 need_now = 1;
@@ -979,58 +1425,86 @@ static u64 wait_one(u64 api, u64 h, u32 ms) {
             }
             ret = WAIT_TIMEOUT;
         } else {
-            sc->wait_deadline = 0;
+            wait_over(sc);
             if (sync_take(o, me)) ret = WAIT_ABANDONED;         /* its owner ended holding it (amendment) */
         }
         if (w >= 0) waiters_out(me);
         break;
     }
     if (parked) {
-        park(deadline, (u64)o);
+        park_until(deadline, wake, (u64)o);
         return 0;
     }
     object_done(o);                                            /* the entry's reference, or the lookup's */
+    if (apc) return apcs_start(api, h, rsp, &call);
     return w2m_logged(api, h, ret);
 }
 
 /* A wait on one of the host's objects (Sprint 356): the runtime word held from its check, a host request, to its park,
  * so no readying of the host's, nor this process's signal of a shared event, falls between them; its entry, never
  * granted, made and taken out under `sync_lock`, taken under the word as the order allows. */
-static u64 wait_one_held(u64 api, u64 h, struct object *o, u32 ms, int retry) {
-    W2M_HELD(runtime_word);
-    u64 ret = WAIT_OBJECT_0, deadline = 0;
-    if (!host_signaled(o)) {
-        if (!timed_out_now(ms, &deadline)) {                  /* retried: the bridge does not return */
-            if (!retry) {
-                W2M_HELD(sync);
-                if (nwaiters == WAITERS) {
-                    W2M_LET_GO_EARLY(sync);
-                    w2m_unimplemented(api, WAITERS);
+/* Sprint 370: alertable, a due APC is taken before the timeout and the park, in its own holding of `sync_lock` under
+ * the word, which a QueueUserAPC's readying waits for, so one queued after it finds the thread parked; its APCs run
+ * once the word is let go. */
+static u64 wait_one_held(u64 api, u64 h, struct object *o, u32 ms, int retry, int alertable, u64 rsp) {
+    u64 ret = WAIT_OBJECT_0, deadline = 0, wake = ~0ull;
+    struct apc_call call;
+    int apc = 0;
+    {
+        W2M_HELD(runtime_word);
+        if (!host_signaled(o)) {
+            if (alertable) {
+                u64 now = 0;
+                int have_now = 0;
+                for (;;) {
+                    {
+                        W2M_HELD(sync);
+                        apc = apc_take(current_tid(), have_now, now, &call, &wake);
+                    }
+                    if (apc >= 0) break;
+                    now = w2m_counter_now();
+                    have_now = 1;
                 }
-                waiter_add(current_tid(), o, -1);              /* the lookup's reference, kept */
             }
-            w2m_block(deadline, (u64)o);
-            return 0;                                          /* the word's guard lets it go after the block */
+            if (apc) {
+                wait_over(w2m_thread_scratch());
+            } else if (!timed_out_now(ms, &deadline)) {      /* retried: the bridge does not return */
+                if (!retry) {
+                    W2M_HELD(sync);
+                    if (nwaiters == WAITERS) {
+                        W2M_LET_GO_EARLY(sync);
+                        w2m_unimplemented(api, WAITERS);
+                    }
+                    waiter_add(current_tid(), o, -1);          /* the lookup's reference, kept */
+                }
+                park_until(deadline, wake, (u64)o);
+                return 0;                                      /* the word's guard lets it go after the block */
+            } else {
+                ret = WAIT_TIMEOUT;
+            }
+        } else {
+            w2m_thread_scratch()->wait_deadline = 0;
+            host_take(o);
         }
-        ret = WAIT_TIMEOUT;
-    } else {
-        w2m_thread_scratch()->wait_deadline = 0;
-        host_take(o);
+        if (retry) {
+            W2M_HELD(sync);
+            waiters_out(current_tid());
+        }
     }
-    if (retry) {
-        W2M_HELD(sync);
-        waiters_out(current_tid());
-    }
-    W2M_LET_GO_EARLY(runtime_word);
     object_done(o);
+    if (apc) return apcs_start(api, h, rsp, &call);
     return w2m_logged(api, h, ret);
 }
 
-u64 k32_WaitForSingleObject(u64 h, u64 ms) { return wait_one(W2M_API_WaitForSingleObject, h, (u32)ms); }
+u64 k32_WaitForSingleObject(u64 h, u64 ms) { return wait_one(W2M_API_WaitForSingleObject, h, (u32)ms, 0, 0); }
 
-u64 k32_WaitForSingleObjectEx(u64 h, u64 ms, u64 alertable) {
-    (void)alertable;                                           /* no APC is ever queued: one thread */
-    return wait_one(W2M_API_WaitForSingleObjectEx, h, (u32)ms);
+/* WaitForSingleObjectEx(hHandle, dwMilliseconds, bAlertable): "If this parameter is TRUE and the thread is in the
+ * waiting state, the function returns when the system queues an I/O completion routine or APC, and the thread runs the
+ * routine or function. Otherwise, the function does not return, and the completion routine or APC function is not
+ * executed" (Microsoft Learn); the stack pointer, the bridge's fifth argument, for the APCs' frame (Sprint 370). */
+u64 k32_WaitForSingleObjectEx(u64 h, u64 ms, u64 alertable, u64 unused, u64 rsp) {
+    (void)unused;
+    return wait_one(W2M_API_WaitForSingleObjectEx, h, (u32)ms, (u32)alertable != 0, rsp);
 }
 
 /* SignalObjectAndWait(hObjectToSignal, hObjectToWaitOn, dwMilliseconds, bAlertable) (Sprint 369): the object signaled
@@ -1040,10 +1514,10 @@ u64 k32_WaitForSingleObjectEx(u64 h, u64 ms, u64 alertable) {
  * wait not made; a handle that names no object WAIT_FAILED and ERROR_INVALID_HANDLE, both looked up before the signal.
  * The wait parks as WaitForSingleObject's does and its call is made again when the thread runs: that retry, which finds
  * this thread's waiter entry, signals nothing again. "Note that the "signal" and "wait" are not guaranteed to be
- * performed as an atomic operation": they are two holdings here. bAlertable is read as WaitForSingleObjectEx reads it:
- * no APC is ever queued (QueueUserAPC is not served). */
-u64 k32_SignalObjectAndWait(u64 signal, u64 wait, u64 ms, u64 alertable) {
-    (void)alertable;
+ * performed as an atomic operation": they are two holdings here. bAlertable is read as WaitForSingleObjectEx reads it
+ * (Sprint 370): "If this parameter is TRUE, the function returns when the system queues an I/O completion routine or
+ * APC function, and the thread calls the function", the stack pointer the bridge's fifth argument. */
+u64 k32_SignalObjectAndWait(u64 signal, u64 wait, u64 ms, u64 alertable, u64 rsp) {
     int retry;
     {
         W2M_HELD(sync);
@@ -1073,7 +1547,7 @@ u64 k32_SignalObjectAndWait(u64 signal, u64 wait, u64 ms, u64 alertable) {
             return w2m_logged(W2M_API_SignalObjectAndWait, signal, WAIT_FAILED);
         }
     }
-    return wait_one(W2M_API_SignalObjectAndWait, wait, (u32)ms);
+    return wait_one(W2M_API_SignalObjectAndWait, wait, (u32)ms, (u32)alertable != 0, rsp);
 }
 
 /* The objects of thread tid's blocked wait for any, by their index in its array, from its entries (Sprint 352); n. */
@@ -1094,11 +1568,12 @@ static void objects_done(struct object **os, u32 n) {
 
 /* A wait for any of n objects of this file's (Sprint 356): its grant, its first signaled object taken, its timeout, or
  * its entries made and its mark armed, in one holding of `sync_lock`; the park takes the word alone. */
-static u64 wait_any(u32 n, struct object **os, u32 ms, int retry) {
+static u64 wait_any(u32 n, struct object **os, u32 ms, int retry, int alertable, u64 rsp) {
     u32 me = current_tid();
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
-    u64 ret, now = 0, deadline = 0;
-    int have_now = 0, need_now = 0, parked = 0;
+    struct apc_call call;
+    u64 ret, now = 0, deadline = 0, wake = ~0ull;
+    int have_now = 0, need_now = has_timer(os, n), parked = 0, apc = 0;   /* timers: Sprint 370, as wait_one's */
     for (;;) {
         if (need_now) {                                        /* a host request on the host's clock: no leaf held */
             now = w2m_counter_now();
@@ -1106,13 +1581,27 @@ static u64 wait_any(u32 n, struct object **os, u32 ms, int retry) {
             need_now = 0;
         }
         W2M_HELD(sync);
+        wake = have_now ? timers_run(os, n, now) : ~0ull;
         ret = granted_slot(me);                                /* a release handed one over while this thread waited */
-        if (ret != WAIT_TIMEOUT) sc->wait_deadline = 0;
+        if (ret != WAIT_TIMEOUT) wait_over(sc);
         for (u32 i = 0; ret == WAIT_TIMEOUT && i < n; i++)
             if (sync_signaled(os[i], me)) {
-                sc->wait_deadline = 0;
+                wait_over(sc);
                 ret = (sync_take(os[i], me) ? WAIT_ABANDONED : WAIT_OBJECT_0) + i;   /* abandoned: the amendment */
             }
+        if (ret == WAIT_TIMEOUT && alertable) {
+            int a = apc_take(me, have_now, now, &call, &wake);
+            if (a < 0) {
+                need_now = 1;
+                continue;
+            }
+            if (a) {
+                wait_over(sc);
+                apc = 1;
+                if (retry) waiters_out(me);
+                break;
+            }
+        }
         if (ret == WAIT_TIMEOUT) {
             int t = timed_out_at(ms, have_now, now, &deadline);
             if (t < 0) {
@@ -1136,10 +1625,11 @@ static u64 wait_any(u32 n, struct object **os, u32 ms, int retry) {
         break;
     }
     if (parked) {
-        park(deadline, 0);
+        park_until(deadline, wake, 0);
         return 0;
     }
     objects_done(os, n);
+    if (apc) return apcs_start(W2M_API_WaitForMultipleObjects, n, rsp, &call);
     return w2m_logged(W2M_API_WaitForMultipleObjects, n, ret);
 }
 
@@ -1149,9 +1639,12 @@ static u64 wait_any(u32 n, struct object **os, u32 ms, int retry) {
  * grant, else the first object signaled now of this file's or the host's one found so, taken, else the timeout or the
  * park, its entries made. A release between the check and that holding is seen by it; one after it finds the entries,
  * and its readying waits for the word, so the park is never passed over and no mark is needed. */
-static u64 wait_any_held(u32 n, struct object **os, u32 ms, int retry) {
+static u64 wait_any_held(u32 n, struct object **os, u32 ms, int retry, int alertable, u64 rsp) {
     u32 me = current_tid();
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
+    struct apc_call call;
+    u64 wake = ~0ull;
+    int apc = 0;
     W2M_HELD(runtime_word);
     u64 granted;
     {
@@ -1181,6 +1674,19 @@ static u64 wait_any_held(u32 n, struct object **os, u32 ms, int retry) {
         for (u32 i = 0; ret == WAIT_TIMEOUT && i < n; i++)
             if ((int)i == host || (sync_kind(os[i]) && sync_signaled(os[i], me)))
                 ret = ((int)i != host && sync_take(os[i], me) ? WAIT_ABANDONED : WAIT_OBJECT_0) + i;
+        if (ret == WAIT_TIMEOUT && alertable) {                /* Sprint 370: a due APC before the timeout and park */
+            int a = apc_take(me, have_now, now, &call, &wake);
+            if (a < 0) {
+                need_now = 1;
+                continue;
+            }
+            if (a) {
+                wait_over(sc);
+                apc = 1;
+                if (retry) waiters_out(me);
+                break;
+            }
+        }
         if (ret == WAIT_TIMEOUT) {
             int t = timed_out_at(ms, have_now, now, &deadline);
             if (t < 0) {
@@ -1205,22 +1711,24 @@ static u64 wait_any_held(u32 n, struct object **os, u32 ms, int retry) {
         break;
     }
     if (parked) {
-        w2m_block(deadline, 0);
+        park_until(deadline, wake, 0);
         return 0;                                              /* the word's guard lets it go after the block */
     }
-    if (host >= 0 && ret == WAIT_OBJECT_0 + (u32)host) host_take(os[host]);
+    if (!apc && host >= 0 && ret == WAIT_OBJECT_0 + (u32)host) host_take(os[host]);
     W2M_LET_GO_EARLY(runtime_word);
     objects_done(os, n);
+    if (apc) return apcs_start(W2M_API_WaitForMultipleObjects, n, rsp, &call);
     return w2m_logged(W2M_API_WaitForMultipleObjects, n, ret);
 }
 
 /* A wait for all of n objects of this file's (Sprint 356): its grant (a release took them for it, Sprint 095), every
  * object signaled and taken, its timeout, or its entry made and its mark armed, in one holding of `sync_lock`. */
-static u64 wait_all(u32 n, struct object **os, u32 ms) {
+static u64 wait_all(u32 n, struct object **os, u32 ms, int alertable, u64 rsp) {
     u32 me = current_tid();
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
-    u64 ret, now = 0, deadline = 0;
-    int have_now = 0, need_now = 0, parked = 0;
+    struct apc_call call;
+    u64 ret, now = 0, deadline = 0, wake = ~0ull;
+    int have_now = 0, need_now = has_timer(os, n), parked = 0, apc = 0;   /* timers: Sprint 370, as wait_one's */
     for (;;) {
         if (need_now) {                                        /* a host request on the host's clock: no leaf held */
             now = w2m_counter_now();
@@ -1228,15 +1736,27 @@ static u64 wait_all(u32 n, struct object **os, u32 ms) {
             need_now = 0;
         }
         W2M_HELD(sync);
+        wake = have_now ? timers_run(os, n, now) : ~0ull;
         int a = all_of(me);
         ret = WAIT_OBJECT_0;
         if (a >= 0 && all_waiters[a].granted) {
-            sc->wait_deadline = 0;
+            wait_over(sc);
             ret = (u64)(all_waiters[a].granted - 1);           /* take_every's answer, kept + 1 (grant_all) */
         } else {
             u32 i = 0;
             while (i < n && sync_signaled(os[i], me)) i++;
-            if (i < n) {
+            int got = 0;
+            if (i < n && alertable) {
+                got = apc_take(me, have_now, now, &call, &wake);
+                if (got < 0) {
+                    need_now = 1;
+                    continue;
+                }
+            }
+            if (got) {
+                wait_over(sc);
+                apc = 1;
+            } else if (i < n) {
                 int t = timed_out_at(ms, have_now, now, &deadline);
                 if (t < 0) {
                     need_now = 1;
@@ -1259,7 +1779,7 @@ static u64 wait_all(u32 n, struct object **os, u32 ms) {
                 }
                 ret = WAIT_TIMEOUT;
             } else {
-                sc->wait_deadline = 0;
+                wait_over(sc);
                 ret = take_every(n, 0, os, me);
             }
         }
@@ -1267,10 +1787,11 @@ static u64 wait_all(u32 n, struct object **os, u32 ms) {
         break;
     }
     if (parked) {
-        park(deadline, 0);
+        park_until(deadline, wake, 0);
         return 0;
     }
     objects_done(os, n);
+    if (apc) return apcs_start(W2M_API_WaitForMultipleObjects, n, rsp, &call);
     return w2m_logged(W2M_API_WaitForMultipleObjects, n, ret);
 }
 
@@ -1282,9 +1803,12 @@ static u64 wait_all(u32 n, struct object **os, u32 ms) {
  * file's and is signaled now, a release came between them and found no entry: the thread is marked, and its call
  * checked again at once. A release after that holding finds the entry and readies it, its readying waiting for the
  * word. */
-static u64 wait_all_held(u32 n, struct object **os, u32 ms, int retry) {
+static u64 wait_all_held(u32 n, struct object **os, u32 ms, int retry, int alertable, u64 rsp) {
     u32 me = current_tid();
     struct w2m_thread_scratch *sc = w2m_thread_scratch();
+    struct apc_call call;
+    u64 wake = ~0ull;
+    int apc = 0;
     W2M_HELD(runtime_word);
     u32 k = 0;
     for (; k < n; k++) {
@@ -1309,9 +1833,21 @@ static u64 wait_all_held(u32 n, struct object **os, u32 ms, int retry) {
         int a = all_of(me), every = k == n;
         for (u32 i = 0; every && i < n; i++)
             if (sync_kind(os[i]) && !sync_signaled(os[i], me)) every = 0;
+        int got = 0;
+        if (!every && alertable) {                             /* Sprint 370: a due APC before the timeout and park */
+            got = apc_take(me, have_now, now, &call, &wake);
+            if (got < 0) {
+                need_now = 1;
+                continue;
+            }
+        }
         if (every) {
             ret = take_every(n, 0, os, me);
             sc->wait_deadline = 0;
+        } else if (got) {
+            wait_over(sc);
+            apc = 1;
+            ret = WAIT_TIMEOUT;                                /* no object taken; the host's are left */
         } else {
             int t = timed_out_at(ms, have_now, now, &deadline);
             if (t < 0) {
@@ -1340,7 +1876,7 @@ static u64 wait_all_held(u32 n, struct object **os, u32 ms, int retry) {
     }
     if (parked) {
         if (again) w2m_wait_again();
-        w2m_block(deadline, 0);
+        park_until(deadline, wake, 0);
         return 0;                                              /* the word's guard lets it go after the block */
     }
     if (ret != WAIT_TIMEOUT)                                   /* WAIT_OBJECT_0, or WAIT_ABANDONED_0 + k */
@@ -1348,6 +1884,7 @@ static u64 wait_all_held(u32 n, struct object **os, u32 ms, int retry) {
             if (!sync_kind(os[i])) host_take(os[i]);
     W2M_LET_GO_EARLY(runtime_word);
     objects_done(os, n);
+    if (apc) return apcs_start(W2M_API_WaitForMultipleObjects, n, rsp, &call);
     return w2m_logged(W2M_API_WaitForMultipleObjects, n, ret);
 }
 
@@ -1363,7 +1900,7 @@ static u64 wait_all_held(u32 n, struct object **os, u32 ms, int retry) {
  * Sprint 356: the entries read under `sync_lock` and the lookups made under the table's lock, neither held with the
  * other; a wait whose objects are all this file's is `wait_any` or `wait_all`, one naming the host's `wait_any_held` or
  * `wait_all_held`. */
-u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms) {
+static u64 wait_multiple(u64 count, u64 handles, u64 all, u64 ms, int alertable, u64 rsp) {
     const u64 *hs = (const u64 *)handles;
     u32 n = (u32)count;
     if (n == 0 || n > 64) w2m_unimplemented(W2M_API_WaitForMultipleObjects, n);
@@ -1394,8 +1931,23 @@ u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms) {
     int held = 0;
     for (u32 i = 0; i < n; i++)
         if (!sync_kind(os[i])) held = 1;                       /* a kind fixed at creation: read with no lock */
-    if ((u32)all) return held ? wait_all_held(n, os, (u32)ms, retry) : wait_all(n, os, (u32)ms);
-    return held ? wait_any_held(n, os, (u32)ms, retry) : wait_any(n, os, (u32)ms, retry);
+    if (held && has_timer(os, n))       /* a timer beside a thread, a process or a shared event: not in the rows */
+        w2m_unimplemented(W2M_API_WaitForMultipleObjects, n);
+    if ((u32)all)
+        return held ? wait_all_held(n, os, (u32)ms, retry, alertable, rsp) : wait_all(n, os, (u32)ms, alertable, rsp);
+    return held ? wait_any_held(n, os, (u32)ms, retry, alertable, rsp) : wait_any(n, os, (u32)ms, retry, alertable, rsp);
+}
+
+u64 k32_WaitForMultipleObjects(u64 count, u64 handles, u64 all, u64 ms) {
+    return wait_multiple(count, handles, all, ms, 0, 0);
+}
+
+/* For processes.c's WaitForMultipleObjectsEx(nCount, lpHandles, bWaitAll, dwMilliseconds, bAlertable), bAlertable on the
+ * guest's stack at RSP + 0x28 (Sprint 370): "If this parameter is TRUE and the thread is in the waiting state, the
+ * function returns when the system queues an I/O completion routine or APC, and the thread runs the routine or
+ * function" (Microsoft Learn). */
+u64 w2m_wait_multiple_ex(u64 count, u64 handles, u64 all, u64 ms, u64 rsp) {
+    return wait_multiple(count, handles, all, ms, *(const u32 *)(rsp + 0x28) != 0, rsp);
 }
 
 /* Sleep: threads.c (Sprint 051), which lets other threads run while it waits. */
