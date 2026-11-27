@@ -1,0 +1,14 @@
+{"s":"mutex","created":1,"create_error":null,"again":1,"again_error":183,"opened":1,"open_error":null,"opened_all":1,"open_all_error":null,"distinct":null,"other_owned":258,"owner_wait":0,"released":1,"released_open":1,"released_extra":0,"release_error":288,"other_free":0}
+{"s":"mutex.absent","opened":0,"error":2}
+{"s":"event","created":1,"create_error":null,"opened":1,"open_error":null,"opened_ansi":1,"open_ansi_error":null,"distinct":null,"before":258,"set":1,"after_set":0,"reset":1,"after_reset":258}
+{"s":"event.absent","opened":0,"error":null,"opened_ansi":0,"ansi_error":null}
+{"s":"semaphore","created":1,"create_error":null,"again":1,"again_error":183,"opened":1,"open_error":null,"opened_modify":1,"open_modify_error":null,"distinct":null,"take":0,"empty":258,"released":1,"previous":0,"over":0,"over_error":298}
+{"s":"semaphore.absent","opened":0,"error":null}
+{"s":"kind","create_mutex_on_event":0,"create_mutex_on_event_error":6,"open_mutex_on_semaphore":0,"open_mutex_on_semaphore_error":null,"open_event_on_mutex":0,"open_event_on_mutex_error":null,"open_event_ansi_on_semaphore":0,"open_event_ansi_on_semaphore_error":null,"open_semaphore_on_event":0,"open_semaphore_on_event_error":null,"create_event_on_mutex":0,"create_event_on_mutex_error":6,"create_semaphore_on_mutex":0,"create_semaphore_on_mutex_error":6}
+{"s":"closed","mutex":0,"mutex_error":2,"event":0,"event_error":null,"semaphore":0,"semaphore_error":null}
+{"s":"saw.event","wait":258,"signaled":0,"wait_set":0}
+{"s":"saw.semaphore","wait":0,"after":258,"full":null,"full_error":null,"after_full":null}
+{"s":"saw.mutex","wait":0,"other":0,"not_owner":4294967295,"not_owner_error":288,"wait_mutex":0,"other_owned":258}
+{"s":"saw.thread","wait":0}
+{"s":"saw.closed","signal":null,"signal_error":null,"wait":null,"wait_error":null,"signaled":null}
+{"s":"saw.handoff","ready":0,"ended":0,"worker_wait":0,"worker_error":null,"go_after":258}
