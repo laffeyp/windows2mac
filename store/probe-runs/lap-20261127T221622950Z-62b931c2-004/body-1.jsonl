@@ -1,0 +1,3 @@
+{"s":"teb_slot","index_at_least_64":0,"freed":1,"worker_after_free":0,"worker_after_free_error":0,"same_index_again":1,"worker_after_again":0,"main_after_again":0,"wait":0}
+{"s":"expansion","found":1}
+{"s":"expansion_slot","index_at_least_64":1,"freed":1,"worker_after_free":0,"worker_after_free_error":0,"same_index_again":1,"worker_after_again":0,"main_after_again":0,"wait":0}

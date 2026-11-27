@@ -1,0 +1,4 @@
+{"s":"operands","a_offset":1,"b_offset":4}
+{"s":"wait","ret":0}
+{"s":"a","sum":100000,"expected":100000}
+{"s":"b","lost":0,"counted_some":1}

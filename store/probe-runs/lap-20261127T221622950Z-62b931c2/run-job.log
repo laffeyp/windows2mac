@@ -1,0 +1,29 @@
+22:16:50.260 job lap-20261127T221622950Z-62b931c2: batch , repeat 2, commit 62b931c2506dc7cc245f8731416b78fcc75d2ec2
+22:16:50.331 inputs verified; workspace lock after 0 s
+22:16:58.592 error mode 0x8003 (was 0x8001)
+22:16:59.671 profile taken
+22:17:09.921 locked_race-20261127T221622950Z-001 execution 1 exit 0 in 10.2121339 s, affinity unpinned
+22:17:09.988 locked_race-20261127T221622950Z-001 execution 2 exit 0 in 0.0651357 s, affinity unpinned
+22:17:11.762 thread_values_race-20261127T221622950Z-002 execution 1 exit 0 in 1.7396164 s, affinity unpinned
+22:17:11.817 thread_values_race-20261127T221622950Z-002 execution 2 exit 0 in 0.0539183 s, affinity unpinned
+'D:\a\windows2mac\windows2mac\probe.exe' was blocked by your organization's Device Guard policy.
+Contact your support person for more info.
+22:17:12.676 thread_slots_race-20261127T221622950Z-003 execution 1 exit 4551 in 0.8364381 s, affinity unpinned
+22:17:13.390 tls_free_reach-20261127T221622950Z-004 execution 1 exit 0 in 0.6634554 s, affinity unpinned
+22:17:13.456 tls_free_reach-20261127T221622950Z-004 execution 2 exit 0 in 0.0637933 s, affinity unpinned
+22:17:19.153 tls_expansion_first-20261127T221622950Z-005 execution 1 exit 0 in 5.6641079 s, affinity unpinned
+22:17:19.198 tls_expansion_first-20261127T221622950Z-005 execution 2 exit 0 in 0.042675 s, affinity unpinned
+'D:\a\windows2mac\windows2mac\probe.exe' was blocked by your organization's Device Guard policy.
+Contact your support person for more info.
+22:17:19.580 wait_closed_handle-20261127T221622950Z-006 execution 1 exit 4551 in 0.3573919 s, affinity unpinned
+22:17:20.875 wait_closed_kinds-20261127T221622950Z-007 execution 1 exit 0 in 1.2634852 s, affinity unpinned
+22:17:21.341 wait_closed_kinds-20261127T221622950Z-007 execution 2 exit 0 in 0.4648791 s, affinity unpinned
+22:17:22.208 mutex_abandoned-20261127T221622950Z-008 execution 1 exit 0 in 0.8354124 s, affinity unpinned
+22:17:22.494 mutex_abandoned-20261127T221622950Z-008 execution 2 exit 0 in 0.2845783 s, affinity unpinned
+22:17:22.991 named_sync_objects-20261127T221622950Z-009 execution 1 exit 0 in 0.4662304 s, affinity unpinned
+22:17:23.060 named_sync_objects-20261127T221622950Z-009 execution 2 exit 0 in 0.0680592 s, affinity unpinned
+22:17:23.731 sync_objects-20261127T221622950Z-010 execution 1 exit 0 in 0.6368694 s, affinity unpinned
+22:17:23.786 sync_objects-20261127T221622950Z-010 execution 2 exit 0 in 0.0538004 s, affinity unpinned
+22:17:24.584 sync_objects-20261127T221622950Z-011 execution 1 exit 0 in 0.7766106 s, affinity unpinned
+22:17:24.637 sync_objects-20261127T221622950Z-011 execution 2 exit 0 in 0.0519113 s, affinity unpinned
+22:17:24.726 done

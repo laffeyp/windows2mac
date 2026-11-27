@@ -1,0 +1,11 @@
+{
+ "kind": "probe",
+ "probe": "wait_closed_handle",
+ "execution_id": "wait_closed_handle-20261127T225150596Z",
+ "repeat": 2,
+ "commit": "62b931c2506dc7cc245f8731416b78fcc75d2ec2",
+ "session": "desktop",
+ "inputs": {
+  "tree.tar": "3d775be6eab08638f2b598f2f0226890a082b7bcd189eada6daeaa6bc775878a"
+ }
+}

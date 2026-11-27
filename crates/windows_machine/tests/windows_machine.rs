@@ -8,8 +8,60 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use windows_machine::{
-    EXECUTOR, Job, Kind, Request, run_id, sha256, stamp, store, stored_run, tree_tar, verdict, write_job,
+    Batch, BatchItem, EXECUTOR, Game, Job, Kind, Py, Request, batch_inputs, batch_items, run_id, sha256, split_batch,
+    split_game, stamp, store, store_game, stored_run, tree_tar, verdict, write_job,
 };
+
+/// Sprint 372's references: the October batch the Python sent (195 binaries, its job.json and the runs split from
+/// it), and one execution of the reference set's game job.
+const BATCH: &str = "lap-20261013T231059422Z-136bec80";
+const GAME_RUN: &str = "lap-20261014T032442034Z-c8814547";
+/// The nine families whose rows the runner made, each by its runner run (`docs/postmortem-windows-runs-off-the-laptop-
+/// 2026-11-27.md`, "What the wrong machine reached"), as Sprint 372's batch names them.
+const RUNNER_FAMILIES: [(&str, &str); 9] = [
+    ("locked_race", "41326239822"),
+    ("thread_values_race", "45760720489"),
+    ("thread_slots_race", "45763850660"),
+    ("tls_free_reach", "45780352907"),
+    ("tls_expansion_first", "45783238565"),
+    ("wait_closed_handle", "45797800625"),
+    ("wait_closed_kinds", "45813040124"),
+    ("mutex_abandoned", "45871497648"),
+    ("named_sync_objects", "46053401854"),
+];
+
+/// Sprint 372's batch is exactly the nine runner runs' binaries, each its run's probe.sha256, then the control's two;
+/// named_sync_objects by its table row is the same item as by its run.
+#[test]
+fn the_batch_is_the_nine_runner_binaries_and_the_control() {
+    let mut names: Vec<String> = RUNNER_FAMILIES.iter().map(|(f, r)| format!("{f}@{r}")).collect();
+    names.push("sync_objects".into());
+    let items = batch_items(&root(), &names).unwrap();
+    assert_eq!(items.len(), 11);
+    for (item, (family, run)) in items.iter().zip(RUNNER_FAMILIES) {
+        let sha = fs::read_to_string(root().join("store/probe-runs").join(run).join("probe.sha256")).unwrap();
+        assert_eq!(
+            (
+                item.family.as_str(),
+                item.probe.as_str(),
+                item.binary.as_str(),
+                item.runs.as_str()
+            ),
+            (family, family, sha.trim(), run)
+        );
+        assert_eq!(item.dll, None);
+    }
+    let control: Vec<&str> = items[9..].iter().map(|i| i.binary.as_str()).collect();
+    assert_eq!(
+        control,
+        [
+            "a564e428b9e44d62b809d084179a261b08927fad516d862a6f8339a29bf0bbf6",
+            "530e281c3c7800ab121fa13cf1ed9f1d15e95bbef4bb7e806ff04bd961c4482c"
+        ]
+    );
+    let by_table = batch_items(&root(), &["named_sync_objects".to_string()]).unwrap();
+    assert_eq!(by_table, items[8..9]);
+}
 
 const HAND_SENT: &str = "lap-20261127T210820791Z-b5a7cf3d";
 const HAND_SENT_COMMIT: &str = "b5a7cf3da095c8121e2d4b5a5d33b64a66941bbf";
@@ -255,5 +307,330 @@ fn a_binary_jobs_folder() {
     }
     assert!(spec.json().contains("\"kind\": \"binary\""));
     assert!(spec.json().contains("\"cpu_class\": \"efficiency\""));
+    let _ = fs::remove_dir_all(&at);
+}
+
+/// The October batch's items, read from its stored job.json.
+fn october_items() -> (serde_json::Value, Vec<BatchItem>) {
+    let text = fs::read_to_string(root().join("store/probe-runs").join(BATCH).join("job.json")).unwrap();
+    let spec: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let s = |v: &serde_json::Value, k: &str| v[k].as_str().unwrap().to_string();
+    let items = spec["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| BatchItem {
+            family: s(i, "family"),
+            probe: s(i, "probe"),
+            binary: s(i, "binary"),
+            runs: s(i, "runs"),
+            dll: i.get("dll").map(|_| (s(i, "dll"), s(i, "dll_name"))),
+            execution_id: s(i, "execution_id"),
+        })
+        .collect();
+    (spec, items)
+}
+
+/// The October batch's job.json is the program's, byte for byte: its 195 items in the Python's key order, the binaries
+/// and DLLs under bin/ once each in the items' order, `json.dumps(indent=1)`'s form.
+#[test]
+fn the_october_batchs_job_json_is_the_programs() {
+    let (spec, items) = october_items();
+    assert_eq!(items.len(), 195);
+    let batch = Batch {
+        run: BATCH.into(),
+        repeat: 2,
+        commit: spec["commit"].as_str().unwrap().into(),
+        window: "hidden".into(),
+        pin: None,
+        inputs: batch_inputs(spec["inputs"]["tree.tar"].as_str().unwrap(), &items),
+        items,
+    };
+    let stored = fs::read_to_string(root().join("store/probe-runs").join(BATCH).join("job.json")).unwrap();
+    assert_eq!(batch.json(), stored);
+    let pinned = Batch {
+        pin: Some("performance".into()),
+        ..batch
+    };
+    assert!(
+        pinned
+            .json()
+            .contains("\n ],\n \"cpu_class\": \"performance\",\n \"inputs\": {\n")
+    );
+}
+
+/// `json.dumps`'s escapes, ensure_ascii's included, and its empty containers.
+#[test]
+fn python_json_escapes() {
+    // the escapes built from their hex digits: e9, 7f, and U+1F600's UTF-16 pair
+    let u = |hex: &str| format!("{}u{hex}", '\\');
+    let want = format!(r#""a\"b\\c\n\t{}{}{}{}""#, u("00e9"), u("007f"), u("d83d"), u("de00"));
+    assert_eq!(Py::str("a\"b\\c\n\t\u{e9}\u{7f}\u{1F600}").dumps(), want);
+    assert_eq!(
+        Py::Dict(vec![("l".into(), Py::List(vec![])), ("d".into(), Py::Dict(vec![]))]).dumps(),
+        "{\n \"l\": [],\n \"d\": {}\n}"
+    );
+}
+
+/// The tables' items as the Python's batch_items made them for the October batch: late_tls's with their DLLs,
+/// sync_objects' four runs as two binaries, in the order the families are named; named_sync_objects (in both tables)
+/// once.
+#[test]
+fn batch_items_as_the_october_batchs() {
+    let (_, october) = october_items();
+    let names = ["late_tls".to_string(), "sync_objects".to_string()];
+    let got = batch_items(&root(), &names).unwrap();
+    let want: Vec<BatchItem> = october
+        .into_iter()
+        .filter(|i| names.contains(&i.family))
+        .map(|i| BatchItem {
+            execution_id: String::new(),
+            ..i
+        })
+        .collect();
+    assert_eq!(want.len(), 4);
+    assert_eq!(got, want);
+    let joined = batch_items(&root(), &["named_sync_objects".to_string()]).unwrap();
+    assert_eq!(joined.len(), 1);
+    assert_eq!(joined[0].runs, "46053401854");
+    assert_eq!(
+        joined[0].binary,
+        "446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f"
+    );
+}
+
+/// A family neither table holds is named by its stored run; without the run it is refused, as is a run not stored.
+#[test]
+fn a_run_named_by_id() {
+    let got = batch_items(&root(), &["locked_race@41326239822".to_string()]).unwrap();
+    assert_eq!(
+        got,
+        vec![BatchItem {
+            family: "locked_race".into(),
+            probe: "locked_race".into(),
+            binary: "d19052c8d9ebfc8fc8a1992a8761a1ec7389501f2acfc661e552057094e053f9".into(),
+            runs: "41326239822".into(),
+            dll: None,
+            execution_id: String::new(),
+        }]
+    );
+    let why = batch_items(&root(), &["locked_race".to_string()]).unwrap_err();
+    assert!(why.contains("name no family locked_race"), "{why}");
+    assert!(batch_items(&root(), &["locked_race@no_such_run".to_string()]).is_err());
+    let why = batch_items(&root(), &["late_tls@38229484497".to_string()]).unwrap_err();
+    assert!(why.contains("loads a DLL"), "{why}");
+}
+
+/// A bundle as the laptop leaves it for the October batch's sync_objects binaries (items 154 and 155), under `at`.
+fn sync_objects_bundle(at: &Path, batch: &str) -> Vec<BatchItem> {
+    let mut items = batch_items(&root(), &["sync_objects".to_string()]).unwrap();
+    let bundle = at.join("build/batches").join(batch);
+    fs::create_dir_all(&bundle).unwrap();
+    for name in ["profile.json", "run-job.log", "job.json"] {
+        fs::copy(
+            root().join("store/probe-runs").join(BATCH).join(name),
+            bundle.join(name),
+        )
+        .unwrap();
+    }
+    for (k, item) in items.iter_mut().enumerate() {
+        item.execution_id = format!("sync_objects-x-{:03}", k + 1);
+        let from = root().join("store/probe-runs").join(format!("{BATCH}-{}", 154 + k));
+        let to = bundle.join(&item.execution_id);
+        fs::create_dir_all(&to).unwrap();
+        for e in fs::read_dir(&from).unwrap() {
+            let p = e.unwrap().path();
+            if p.file_name().unwrap() != "batch.txt" {
+                fs::copy(&p, to.join(p.file_name().unwrap())).unwrap();
+            }
+        }
+    }
+    items
+}
+
+/// A batch's bundle split into one run a binary and stored as the October batch's runs are: each run's files those of
+/// the stored run, batch.txt naming the batch, the batch's three files once beside them.
+#[test]
+fn a_batch_is_split_and_stored() {
+    let at = scratch("batch");
+    let items = sync_objects_bundle(&at, "lap-b");
+    let runs = split_batch(&at, "lap-b", &items, 2).unwrap();
+    let short: Vec<&str> = runs.iter().filter(|r| r.1 != 0).map(|r| r.2.as_str()).collect();
+    assert!(short.is_empty(), "short binaries: {short:?}");
+    assert_eq!(
+        runs.iter().map(|r| r.0.as_str()).collect::<Vec<_>>(),
+        ["lap-b-001", "lap-b-002"]
+    );
+    fs::create_dir_all(at.join("store/binaries")).unwrap();
+    for (k, (id, _, _)) in runs.iter().enumerate() {
+        let sha = &items[k].binary;
+        fs::copy(
+            root().join(format!("store/binaries/{sha}.exe")),
+            at.join(format!("store/binaries/{sha}.exe")),
+        )
+        .unwrap();
+        let line = store(&at, id).unwrap();
+        assert!(
+            line.contains("8 files, 2 executions, profile laptop-x64-10.0.26200.7840-Client"),
+            "{line}"
+        );
+        assert!(line.ends_with(", batch lap-b"), "{line}");
+        let october = root().join("store/probe-runs").join(format!("{BATCH}-{}", 154 + k));
+        let stored = at.join("store/probe-runs").join(id);
+        assert_eq!(fs::read_dir(&stored).unwrap().count(), 8);
+        for e in fs::read_dir(&october).unwrap() {
+            let name = e.unwrap().file_name();
+            let got = fs::read(stored.join(&name)).unwrap();
+            if name == "batch.txt" {
+                assert_eq!(got, b"lap-b", "the frozen Python's write_text(run): no newline");
+            } else {
+                assert_eq!(got, fs::read(october.join(&name)).unwrap(), "{name:?}");
+            }
+        }
+    }
+    for name in ["profile.json", "run-job.log", "job.json"] {
+        assert_eq!(
+            fs::read(at.join("store/probe-runs/lap-b").join(name)).unwrap(),
+            fs::read(root().join("store/probe-runs").join(BATCH).join(name)).unwrap()
+        );
+    }
+    let _ = fs::remove_dir_all(&at);
+}
+
+/// A binary whose folder did not come back is named with no executions, and fails the batch.
+#[test]
+fn a_binary_with_no_executions_is_named() {
+    let at = scratch("short");
+    let items = sync_objects_bundle(&at, "lap-s");
+    fs::remove_dir_all(at.join("build/batches/lap-s").join(&items[1].execution_id)).unwrap();
+    let runs = split_batch(&at, "lap-s", &items, 2).unwrap();
+    assert_eq!(runs[0].1, 0);
+    assert_eq!(runs[1].1, 1);
+    assert_eq!(
+        runs[1].2,
+        "lap-s-002 sync_objects (38051400336, binary 530e281c3c7800ab121fa13cf1ed9f1d15e95bbef4bb7e806ff04bd961c4482c): \
+         0 of 2 executions"
+    );
+    let _ = fs::remove_dir_all(&at);
+}
+
+/// The game job's limit is the Python's `executions * (seconds + 180) // 60 + 10`: 26 minutes for this sprint's job of
+/// three 150-s executions, the floor of the division kept (3 × 330 = 990, 16.5 minutes).
+#[test]
+fn the_game_limit_is_the_pythons() {
+    let job = |executions, seconds| Game {
+        executions,
+        seconds,
+        audio: "off".into(),
+        ..Game::default()
+    };
+    for (executions, seconds, limit) in [(3, 150, 26), (3, 180, 28), (10, 180, 70), (1, 150, 15), (10, 150, 65)] {
+        assert_eq!(
+            job(executions, seconds).limit_minutes(),
+            limit,
+            "{executions} x {seconds} s"
+        );
+    }
+    assert!(
+        job(3, 150)
+            .json("lap-g", "c", "t")
+            .contains("\n \"limit_minutes\": 26,\n")
+    );
+}
+
+/// Each of these jobs' limits outlasts one execution, so none is refused before it is sent; a limit below one
+/// execution's seconds would be (the game job's second plant).
+#[test]
+fn a_limit_below_one_execution_is_refused() {
+    for (executions, seconds) in [(3, 150), (3, 180), (10, 180), (1, 150), (1, 3600)] {
+        let game = Game {
+            executions,
+            seconds,
+            ..Game::default()
+        };
+        assert_eq!(
+            game.checked_limit(),
+            Ok(game.limit_minutes()),
+            "{executions} x {seconds} s: limit {} minutes",
+            game.limit_minutes()
+        );
+    }
+}
+
+/// The game job's job.json in the Python's key order, its limit the Python's formula.
+#[test]
+fn a_game_jobs_json() {
+    let game = Game {
+        executions: 3,
+        ..Game::default()
+    };
+    assert_eq!(game.limit_minutes(), 28);
+    let want = "{\n \"kind\": \"game\",\n \"execution_id\": \"lap-g\",\n \"game\": \"hail-to-the-rainbow\",\n \
+                \"exe\": \"Hail to the Rainbow\",\n \"seconds\": 180,\n \"mode\": \"batch\",\n \"audio\": \"on\",\n \
+                \"input_script\": null,\n \"record\": false,\n \"pmc\": false,\n \"pmc_sample\": false,\n \
+                \"capture\": \"on\",\n \"person\": false,\n \"frame_seconds\": 10,\n \"initial_state\": \"empty\",\n \
+                \"plant_state\": false,\n \"executions\": 3,\n \"repeat\": 0,\n \"commit\": \"c0ffee\",\n \
+                \"session\": \"desktop\",\n \"limit_minutes\": 28,\n \"inputs\": {\n  \"tree.tar\": \"t\"\n }\n}";
+    assert_eq!(game.json("lap-g", "c0ffee", "t"), want);
+    assert_eq!(Game::default().limit_minutes(), 70);
+    let person = Game {
+        person: true,
+        input_script: Some("round-trip".into()),
+        executions: 1,
+        seconds: 150,
+        ..Game::default()
+    };
+    assert_eq!(person.limit_minutes(), 15);
+    let text = person.json("lap-p", "c", "t");
+    assert!(text.contains("\"input_script\": \"round-trip\","), "{text}");
+    assert!(text.contains("\"person\": true,\n \"frame_seconds\": 30,"), "{text}");
+}
+
+/// A game job's bundle split into executions and stored as the reference set's: the execution's files, batch.txt naming
+/// the job, the job's profile.json; an execution without exec.json skipped; a runner's profile refused.
+#[test]
+fn a_game_job_is_split_and_stored() {
+    let at = scratch("game");
+    let bundle = at.join("build/batches/lap-g");
+    let reference = root().join("store/game-runs").join(format!("{GAME_RUN}-01"));
+    fs::create_dir_all(bundle.join("1")).unwrap();
+    fs::create_dir_all(bundle.join("2")).unwrap();
+    fs::copy(reference.join("profile.json"), bundle.join("profile.json")).unwrap();
+    fs::copy(reference.join("unity.log"), bundle.join("2/unity.log")).unwrap();
+    for e in fs::read_dir(&reference).unwrap() {
+        let p = e.unwrap().path();
+        let name = p.file_name().unwrap();
+        if name != "batch.txt" && name != "profile.json" {
+            fs::copy(&p, bundle.join("1").join(name)).unwrap();
+        }
+    }
+    let (done, lines) = split_game(&at, "lap-g", 2).unwrap();
+    assert_eq!(done, 1);
+    assert_eq!(lines, ["lap-g-02: no exec.json"]);
+    let line = store_game(&at, "lap-g-01").unwrap();
+    assert_eq!(
+        line,
+        "lap-g-01: stored store/game-runs/lap-g-01, 19 files, profile laptop-x64-10.0.26200.7840-Client, unity.log 180 \
+         lines, trace 3499 lines"
+    );
+    for e in fs::read_dir(&reference).unwrap() {
+        let name = e.unwrap().file_name();
+        let got = fs::read(at.join("store/game-runs/lap-g-01").join(&name)).unwrap();
+        if name == "batch.txt" {
+            assert_eq!(got, b"lap-g");
+        } else {
+            assert_eq!(got, fs::read(reference.join(&name)).unwrap(), "{name:?}");
+        }
+    }
+    let runner = at.join("build/game-runs/lap-r");
+    fs::create_dir_all(&runner).unwrap();
+    fs::write(
+        runner.join("profile.txt"),
+        "gha-windows-2025-x64-10.0.26100.33828-Server",
+    )
+    .unwrap();
+    let why = store_game(&at, "lap-r").unwrap_err();
+    assert!(why.contains("only a laptop run is stored"), "{why}");
+    assert!(!at.join("store/game-runs/lap-r").exists());
     let _ = fs::remove_dir_all(&at);
 }

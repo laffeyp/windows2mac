@@ -1,0 +1,101 @@
+{
+ "kind": "batch",
+ "execution_id": "lap-20261127T221622950Z-62b931c2",
+ "repeat": 2,
+ "commit": "62b931c2506dc7cc245f8731416b78fcc75d2ec2",
+ "session": "desktop",
+ "console_window": "hidden",
+ "items": [
+  {
+   "family": "locked_race",
+   "probe": "locked_race",
+   "binary": "d19052c8d9ebfc8fc8a1992a8761a1ec7389501f2acfc661e552057094e053f9",
+   "runs": "41326239822",
+   "execution_id": "locked_race-20261127T221622950Z-001"
+  },
+  {
+   "family": "thread_values_race",
+   "probe": "thread_values_race",
+   "binary": "c9b9847f83dfc33b9f6c27cf332257bd04d0c3ab1fbdcad823d24657bd1e7574",
+   "runs": "45760720489",
+   "execution_id": "thread_values_race-20261127T221622950Z-002"
+  },
+  {
+   "family": "thread_slots_race",
+   "probe": "thread_slots_race",
+   "binary": "1c778788fa460b630e132042801ff2f03511102e618837d25e613e5d951a5cc6",
+   "runs": "45763850660",
+   "execution_id": "thread_slots_race-20261127T221622950Z-003"
+  },
+  {
+   "family": "tls_free_reach",
+   "probe": "tls_free_reach",
+   "binary": "0dd9cc91c64a4bba26631ccfb60d61108fd3210929d13986836e10cdff0a58a5",
+   "runs": "45780352907",
+   "execution_id": "tls_free_reach-20261127T221622950Z-004"
+  },
+  {
+   "family": "tls_expansion_first",
+   "probe": "tls_expansion_first",
+   "binary": "e7bc99857b39e9fbbace17526c3228176bb4486f10ab64e48afe93d781973c49",
+   "runs": "45783238565",
+   "execution_id": "tls_expansion_first-20261127T221622950Z-005"
+  },
+  {
+   "family": "wait_closed_handle",
+   "probe": "wait_closed_handle",
+   "binary": "f0ae78e5b96405f18e8a3dc0666dba2d8e085f2832df418202486dcdc35e96e1",
+   "runs": "45797800625",
+   "execution_id": "wait_closed_handle-20261127T221622950Z-006"
+  },
+  {
+   "family": "wait_closed_kinds",
+   "probe": "wait_closed_kinds",
+   "binary": "af9e903d12825b807699d6750f08a498194e281816fb716f1e3e325d7e11e083",
+   "runs": "45813040124",
+   "execution_id": "wait_closed_kinds-20261127T221622950Z-007"
+  },
+  {
+   "family": "mutex_abandoned",
+   "probe": "mutex_abandoned",
+   "binary": "2e7af44bbb4cc2bad201cd08bcd3ac0ead6b7f4ad52857536c3cfb838a424319",
+   "runs": "45871497648",
+   "execution_id": "mutex_abandoned-20261127T221622950Z-008"
+  },
+  {
+   "family": "named_sync_objects",
+   "probe": "named_sync_objects",
+   "binary": "446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f",
+   "runs": "46053401854",
+   "execution_id": "named_sync_objects-20261127T221622950Z-009"
+  },
+  {
+   "family": "sync_objects",
+   "probe": "sync_objects",
+   "binary": "a564e428b9e44d62b809d084179a261b08927fad516d862a6f8339a29bf0bbf6",
+   "runs": "38051398628 38051401855",
+   "execution_id": "sync_objects-20261127T221622950Z-010"
+  },
+  {
+   "family": "sync_objects",
+   "probe": "sync_objects",
+   "binary": "530e281c3c7800ab121fa13cf1ed9f1d15e95bbef4bb7e806ff04bd961c4482c",
+   "runs": "38051400336 38051403311",
+   "execution_id": "sync_objects-20261127T221622950Z-011"
+  }
+ ],
+ "inputs": {
+  "tree.tar": "9b767c0ae9158924a30b65827b73cfc888737670b176c81f2d81012b512c6c87",
+  "bin/d19052c8d9ebfc8fc8a1992a8761a1ec7389501f2acfc661e552057094e053f9.exe": "d19052c8d9ebfc8fc8a1992a8761a1ec7389501f2acfc661e552057094e053f9",
+  "bin/c9b9847f83dfc33b9f6c27cf332257bd04d0c3ab1fbdcad823d24657bd1e7574.exe": "c9b9847f83dfc33b9f6c27cf332257bd04d0c3ab1fbdcad823d24657bd1e7574",
+  "bin/1c778788fa460b630e132042801ff2f03511102e618837d25e613e5d951a5cc6.exe": "1c778788fa460b630e132042801ff2f03511102e618837d25e613e5d951a5cc6",
+  "bin/0dd9cc91c64a4bba26631ccfb60d61108fd3210929d13986836e10cdff0a58a5.exe": "0dd9cc91c64a4bba26631ccfb60d61108fd3210929d13986836e10cdff0a58a5",
+  "bin/e7bc99857b39e9fbbace17526c3228176bb4486f10ab64e48afe93d781973c49.exe": "e7bc99857b39e9fbbace17526c3228176bb4486f10ab64e48afe93d781973c49",
+  "bin/f0ae78e5b96405f18e8a3dc0666dba2d8e085f2832df418202486dcdc35e96e1.exe": "f0ae78e5b96405f18e8a3dc0666dba2d8e085f2832df418202486dcdc35e96e1",
+  "bin/af9e903d12825b807699d6750f08a498194e281816fb716f1e3e325d7e11e083.exe": "af9e903d12825b807699d6750f08a498194e281816fb716f1e3e325d7e11e083",
+  "bin/2e7af44bbb4cc2bad201cd08bcd3ac0ead6b7f4ad52857536c3cfb838a424319.exe": "2e7af44bbb4cc2bad201cd08bcd3ac0ead6b7f4ad52857536c3cfb838a424319",
+  "bin/446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f.exe": "446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f",
+  "bin/a564e428b9e44d62b809d084179a261b08927fad516d862a6f8339a29bf0bbf6.exe": "a564e428b9e44d62b809d084179a261b08927fad516d862a6f8339a29bf0bbf6",
+  "bin/530e281c3c7800ab121fa13cf1ed9f1d15e95bbef4bb7e806ff04bd961c4482c.exe": "530e281c3c7800ab121fa13cf1ed9f1d15e95bbef4bb7e806ff04bd961c4482c"
+ }
+}

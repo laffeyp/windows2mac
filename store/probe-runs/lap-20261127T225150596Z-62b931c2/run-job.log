@@ -1,0 +1,11 @@
+22:52:19.166 job wait_closed_handle-20261127T225150596Z: probe wait_closed_handle, repeat 2, commit 62b931c2506dc7cc245f8731416b78fcc75d2ec2
+22:52:19.266 inputs verified; workspace lock after 0 s
+22:52:28.583 error mode 0x8003 (was 0x8001)
+22:52:29.642 profile taken
+clang version 20.1.8
+Target: x86_64-pc-windows-msvc
+Thread model: posix
+InstalledDir: C:\Program Files\LLVM\bin
+22:52:33.147 wait_closed_handle-20261127T225150596Z execution 1 exit 0 in 1.6115456 s, affinity unpinned
+22:52:34.231 wait_closed_handle-20261127T225150596Z execution 2 exit 0 in 1.0816284 s, affinity unpinned
+22:52:35.766 done

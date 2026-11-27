@@ -11,6 +11,11 @@
 //! folder comes back to `build/probe-runs/<run>/traces-<execution>/`, and only then is the laptop's job folder removed.
 //! A run whose results are all back and whose executions all exited 0 is stored: its files to `store/probe-runs/<run>/`,
 //! its binary to `store/binaries/<sha256>.exe`, and only a run whose `profile.txt` is the laptop's.
+//!
+//! Sprint 372 adds the Python's other two kinds, `run_batch` with `batch_items` and `run_game`. A batch runs many stored
+//! binaries in one job, its bundle split into one run per binary, `lap-<stamp>-<commit>-<n>`, each naming the batch in
+//! `batch.txt`, the batch's `profile.json`, `job.json` and `run-job.log` kept once in `store/probe-runs/<batch>/`. A game
+//! job runs the game `executions` times in the desktop session, each execution stored as `store/game-runs/<run>-<i>/`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -53,17 +58,24 @@ pub const LINK: [&str; 8] = [
 pub const JOB_SECONDS: u64 = 2 * 3600;
 /// The lock that holds one job at a time to the laptop's one workspace.
 pub const LOCK: &str = "build/windows_machine.lock";
-/// A stored run's files besides its executions' (`store_probe_runs.py` `KEPT`, less a batch's `batch.txt`).
-pub const KEPT: [&str; 6] = [
+/// A stored run's files besides its executions' (`store_probe_runs.py` `KEPT`).
+pub const KEPT: [&str; 7] = [
     "cpu.txt",
     "probe.sha256",
     "profile.txt",
     "profile.json",
     "job.json",
     "run-job.log",
+    "batch.txt",
 ];
 /// The family runs' lookup: family, run, binary, contract, the beside DLL as `name:sha256`, ...
 pub const KNOWN: &str = "store/family_runs/known-2026-10-29.tsv";
+/// The families that joined on the Rust host (Sprint 369), in `KNOWN`'s first five columns; read after it.
+pub const JOINED: &str = "store/family_runs/joined-2026-11-27.tsv";
+/// Where a batch's or a game job's bundle comes back: the job's `out/`, `job.json` beside it.
+pub const BATCHES: &str = "build/batches";
+/// A batch's files, kept once in `store/probe-runs/<batch>/` (`store_probe_runs.py` `BATCH_FILES`).
+pub const BATCH_FILES: [&str; 3] = ["profile.json", "job.json", "run-job.log"];
 
 /// The kind of job: a probe built from the committed tree, or a stored binary run unchanged.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -276,28 +288,37 @@ pub fn stored_run(root: &Path, family: &str, run: Option<&str>) -> Result<Stored
         None => &rows[0],
     };
     let dll = row[4].split_once(':').map(|(_, sha)| sha.to_string());
-    let job = root.join("store/probe-runs").join(row[1]).join("job.json");
-    let named = fs::read_to_string(&job)
-        .ok()
-        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        .and_then(|v| v.get("probe").and_then(Value::as_str).map(str::to_string));
-    let probe = match named {
-        Some(p) => p,
-        None if root.join("probes").join(family).is_dir() => family.to_string(),
-        None => {
-            return Err(format!(
-                "family {family}: run {}'s store has no job.json and there is no probes/{family}, so its probe is not \
-                 known",
-                row[1]
-            ));
-        }
-    };
     Ok(StoredRun {
         run: row[1].to_string(),
         binary: row[2].to_string(),
         dll,
-        probe,
+        probe: run_probe(root, family, row[1])?,
     })
+}
+
+/// A family run's probe: the one its stored `job.json` names, else the folder `probes/<family>`.
+fn run_probe(root: &Path, family: &str, run: &str) -> Result<String, String> {
+    let job = root.join("store/probe-runs").join(run).join("job.json");
+    let named = fs::read_to_string(&job)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .and_then(|v| v.get("probe").and_then(Value::as_str).map(str::to_string));
+    match named {
+        Some(p) => Ok(p),
+        None if root.join("probes").join(family).is_dir() => Ok(family.to_string()),
+        None => Err(format!(
+            "family {family}: run {run}'s store has no job.json and there is no probes/{family}, so its probe is not \
+             known"
+        )),
+    }
+}
+
+/// `probes/<probe>/probe.json`, or null for a probe without one.
+fn probe_config(root: &Path, probe: &str) -> Result<Value, String> {
+    match fs::read_to_string(root.join("probes").join(probe).join("probe.json")) {
+        Ok(t) => serde_json::from_str(&t).map_err(|e| format!("probes/{probe}/probe.json: {e}")),
+        Err(_) => Ok(Value::Null),
+    }
 }
 
 /// What one job sends: its kind, its probe, and for a stored binary the binary and its DLL.
@@ -544,8 +565,33 @@ pub fn store(root: &Path, run: &str) -> Result<String, String> {
         }
         Some(bytes)
     };
+    // a batch's run: the batch's three files, from its bundle, once in store/probe-runs/<batch>/
+    let batch = fs::read_to_string(src.join("batch.txt"))
+        .ok()
+        .map(|b| b.trim().to_string());
+    let mut once: Vec<(PathBuf, PathBuf)> = Vec::new();
+    if let Some(b) = &batch {
+        let kept = root.join("store/probe-runs").join(b);
+        for name in BATCH_FILES {
+            if !kept.join(name).exists() {
+                let from = root.join(BATCHES).join(b).join(name);
+                if !from.is_file() {
+                    return Err(format!(
+                        "{run}: batch {b}'s {name} is not stored and not in {BATCHES}/{b}"
+                    ));
+                }
+                once.push((from, kept.join(name)));
+            }
+        }
+    }
     let dst = root.join("store/probe-runs").join(run);
     fs::create_dir_all(&dst).map_err(|e| format!("{}: {e}", dst.display()))?;
+    for (from, to) in &once {
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        fs::copy(from, to).map_err(|e| format!("{}: {e}", to.display()))?;
+    }
     let mut files: Vec<PathBuf> = fs::read_dir(src)
         .map_err(|e| format!("{}: {e}", src.display()))?
         .filter_map(|e| e.ok().map(|e| e.path()))
@@ -567,11 +613,716 @@ pub fn store(root: &Path, run: &str) -> Result<String, String> {
     }
     let executions = files.iter().filter(|p| named(p, "exec-", ".json")).count();
     let cpu = read("cpu.txt").unwrap_or_default();
+    let of_batch = batch.map(|b| format!(", batch {b}")).unwrap_or_default();
     Ok(format!(
         "{run}: stored store/probe-runs/{run}, {} files, {executions} executions, profile {}, cpu {}, binary \
-         store/binaries/{sha}.exe",
+         store/binaries/{sha}.exe{of_batch}",
         files.len(),
         profile.trim(),
         cpu.trim()
+    ))
+}
+
+/// A JSON value in the order a Python dict kept its keys, written as `json.dumps(value, indent=1)` writes it: one
+/// space a level, `", "` closing a line and `": "` after a key, an empty list `[]` and an empty dict `{}`, no final
+/// newline, every character outside space to tilde escaped (`ensure_ascii`, the default).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Py {
+    Str(String),
+    Int(i64),
+    Bool(bool),
+    Null,
+    List(Vec<Py>),
+    Dict(Vec<(String, Py)>),
+}
+
+impl Py {
+    pub fn str(s: &str) -> Py {
+        Py::Str(s.to_string())
+    }
+
+    /// `json.dumps(self, indent=1)`.
+    pub fn dumps(&self) -> String {
+        let mut out = String::new();
+        self.write(&mut out, 0);
+        out
+    }
+
+    fn write(&self, out: &mut String, level: usize) {
+        match self {
+            Py::Str(s) => quote(s, out),
+            Py::Int(n) => out.push_str(&n.to_string()),
+            Py::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+            Py::Null => out.push_str("null"),
+            Py::List(items) if items.is_empty() => out.push_str("[]"),
+            Py::Dict(items) if items.is_empty() => out.push_str("{}"),
+            Py::List(items) => {
+                out.push('[');
+                for (k, v) in items.iter().enumerate() {
+                    out.push_str(if k == 0 { "\n" } else { ",\n" });
+                    out.push_str(&" ".repeat(level + 1));
+                    v.write(out, level + 1);
+                }
+                out.push('\n');
+                out.push_str(&" ".repeat(level));
+                out.push(']');
+            }
+            Py::Dict(items) => {
+                out.push('{');
+                for (k, (key, v)) in items.iter().enumerate() {
+                    out.push_str(if k == 0 { "\n" } else { ",\n" });
+                    out.push_str(&" ".repeat(level + 1));
+                    quote(key, out);
+                    out.push_str(": ");
+                    v.write(out, level + 1);
+                }
+                out.push('\n');
+                out.push_str(&" ".repeat(level));
+                out.push('}');
+            }
+        }
+    }
+}
+
+/// A string as `json.dumps` writes it with `ensure_ascii`: `"` and `\` escaped, `\n \r \t \b \f` by letter, any other
+/// character outside space to tilde as `\uXXXX` in lowercase hex, a character past U+FFFF as its UTF-16 pair.
+fn quote(s: &str, out: &mut String) {
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            ' '..='~' => out.push(c),
+            _ => {
+                let mut units = [0u16; 2];
+                for u in c.encode_utf16(&mut units) {
+                    out.push_str(&format!("\\u{u:04x}"));
+                }
+            }
+        }
+    }
+    out.push('"');
+}
+
+/// One binary of a batch (the Python's `batch_items` item): its family and probe, its sha256 under `store/binaries/`,
+/// the stored runs that used it, the DLL beside it, and the execution id the batch gives it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BatchItem {
+    pub family: String,
+    pub probe: String,
+    pub binary: String,
+    /// The stored runs that used the binary, space-separated, in the tables' order.
+    pub runs: String,
+    /// The DLL's sha256 and the name it is loaded by (`probe.json` `dll.name`).
+    pub dll: Option<(String, String)>,
+    /// `<family>-<stamp>-<n>`, set when the batch is made; empty before.
+    pub execution_id: String,
+}
+
+impl BatchItem {
+    /// The item as the Python's dict held it: family, probe, binary, runs, the DLL's two keys, then the execution id
+    /// `run_batch` added.
+    fn py(&self) -> Py {
+        let mut d = vec![
+            ("family".to_string(), Py::str(&self.family)),
+            ("probe".to_string(), Py::str(&self.probe)),
+            ("binary".to_string(), Py::str(&self.binary)),
+            ("runs".to_string(), Py::str(&self.runs)),
+        ];
+        if let Some((sha, name)) = &self.dll {
+            d.push(("dll".to_string(), Py::str(sha)));
+            d.push(("dll_name".to_string(), Py::str(name)));
+        }
+        d.push(("execution_id".to_string(), Py::str(&self.execution_id)));
+        Py::Dict(d)
+    }
+}
+
+/// The batch's items (the Python's `batch_items`): for each name, one item per distinct binary of that family in
+/// `KNOWN` and then `JOINED` (a row of both counted once), in the tables' order, a repeated binary adding its run to the
+/// first item's `runs`; no name, every family the tables hold, sorted. A name `<family>@<run>` is one item, the binary
+/// `store/probe-runs/<run>/probe.sha256` names, for a family whose runs neither table holds; a probe that loads a DLL
+/// is refused there, since such a run records no DLL.
+pub fn batch_items(root: &Path, names: &[String]) -> Result<Vec<BatchItem>, String> {
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    for table in [KNOWN, JOINED] {
+        let text = fs::read_to_string(root.join(table)).map_err(|e| format!("{table}: {e}"))?;
+        for line in text.lines().filter(|l| !l.starts_with('#') && !l.is_empty()) {
+            let c: Vec<String> = line.split('\t').map(str::to_string).collect();
+            if c.len() > 4 && !rows.iter().any(|r| r[0] == c[0] && r[1] == c[1]) {
+                rows.push(c);
+            }
+        }
+    }
+    let names: Vec<String> = if names.is_empty() {
+        let mut all: Vec<String> = rows.iter().map(|c| c[0].clone()).collect();
+        all.sort();
+        all.dedup();
+        all
+    } else {
+        names.to_vec()
+    };
+    let mut items = Vec::new();
+    for name in &names {
+        if let Some((family, run)) = name.split_once('@') {
+            items.push(run_item(root, family, run)?);
+            continue;
+        }
+        let mine: Vec<&Vec<String>> = rows.iter().filter(|c| c[0] == *name).collect();
+        let Some(first) = mine.first() else {
+            return Err(format!(
+                "{KNOWN} and {JOINED} name no family {name}; name one of its stored runs as {name}@<run>"
+            ));
+        };
+        let probe = run_probe(root, name, &first[1])?;
+        let mut seen: Vec<BatchItem> = Vec::new();
+        for c in mine {
+            if let Some(item) = seen.iter_mut().find(|i| i.binary == c[2]) {
+                item.runs.push(' ');
+                item.runs.push_str(&c[1]);
+                continue;
+            }
+            let dll = match c[4].split_once(':') {
+                Some((_, sha)) => {
+                    let config = probe_config(root, &probe)?;
+                    let dll_name = config
+                        .get("dll")
+                        .and_then(|d| d.get("name"))
+                        .and_then(Value::as_str)
+                        .ok_or(format!(
+                            "probes/{probe}/probe.json names no dll, and run {} has one",
+                            c[1]
+                        ))?;
+                    Some((sha.to_string(), dll_name.to_string()))
+                }
+                None => None,
+            };
+            seen.push(BatchItem {
+                family: name.clone(),
+                probe: probe.clone(),
+                binary: c[2].clone(),
+                runs: c[1].clone(),
+                dll,
+                execution_id: String::new(),
+            });
+        }
+        items.extend(seen);
+    }
+    Ok(items)
+}
+
+/// `<family>@<run>`'s item: the run's stored binary, the family's probe.
+fn run_item(root: &Path, family: &str, run: &str) -> Result<BatchItem, String> {
+    let at = format!("store/probe-runs/{run}/probe.sha256");
+    let sha = fs::read_to_string(root.join(&at))
+        .map_err(|e| format!("{family}@{run}: {at}: {e}"))?
+        .trim()
+        .to_string();
+    if !root.join("store/binaries").join(format!("{sha}.exe")).is_file() {
+        return Err(format!("{family}@{run}: store/binaries/{sha}.exe is not stored"));
+    }
+    let probe = run_probe(root, family, run)?;
+    if probe_config(root, &probe)?.get("dll").is_some() {
+        return Err(format!(
+            "{family}@{run}: probes/{probe} loads a DLL and a run named by id records none; its family's table row \
+             names it"
+        ));
+    }
+    Ok(BatchItem {
+        family: family.to_string(),
+        probe,
+        binary: sha,
+        runs: run.to_string(),
+        dll: None,
+        execution_id: String::new(),
+    })
+}
+
+/// A batch's inputs: `tree.tar`, then each item's binary and DLL as `bin/<sha256>.exe` and `.dll`, once each, in the
+/// items' order (the Python's loop over items and kinds).
+pub fn batch_inputs(tree_sha: &str, items: &[BatchItem]) -> Vec<(String, String)> {
+    let mut inputs = vec![("tree.tar".to_string(), tree_sha.to_string())];
+    for item in items {
+        let files = [
+            Some(format!("bin/{}.exe", item.binary)).map(|f| (f, item.binary.clone())),
+            item.dll
+                .as_ref()
+                .map(|(sha, _)| (format!("bin/{sha}.dll"), sha.clone())),
+        ];
+        for (file, sha) in files.into_iter().flatten() {
+            if !inputs.iter().any(|(f, _)| *f == file) {
+                inputs.push((file, sha));
+            }
+        }
+    }
+    inputs
+}
+
+/// A batch's `job.json` (the Python's `spec`): kind, execution id (the batch's run), repeat, commit, session, the
+/// console window, the items, the core class when pinned, the inputs.
+#[derive(Clone, Debug)]
+pub struct Batch {
+    pub run: String,
+    pub repeat: u32,
+    pub commit: String,
+    pub window: String,
+    pub pin: Option<String>,
+    pub items: Vec<BatchItem>,
+    pub inputs: Vec<(String, String)>,
+}
+
+impl Batch {
+    pub fn json(&self) -> String {
+        let mut d = vec![
+            ("kind".to_string(), Py::str("batch")),
+            ("execution_id".to_string(), Py::str(&self.run)),
+            ("repeat".to_string(), Py::Int(i64::from(self.repeat))),
+            ("commit".to_string(), Py::str(&self.commit)),
+            ("session".to_string(), Py::str("desktop")),
+            ("console_window".to_string(), Py::str(&self.window)),
+            (
+                "items".to_string(),
+                Py::List(self.items.iter().map(BatchItem::py).collect()),
+            ),
+        ];
+        if let Some(class) = &self.pin {
+            d.push(("cpu_class".to_string(), Py::str(class)));
+        }
+        d.push(("inputs".to_string(), inputs_py(&self.inputs)));
+        Py::Dict(d).dumps()
+    }
+}
+
+fn inputs_py(inputs: &[(String, String)]) -> Py {
+    Py::Dict(inputs.iter().map(|(f, sha)| (f.clone(), Py::str(sha))).collect())
+}
+
+/// The lock held for the whole job, HEAD read under it, and the run's stamp (the Python's first lines of each kind).
+fn begin(root: &Path) -> Result<(fs::File, String, String), String> {
+    fs::create_dir_all(root.join("build")).map_err(|e| format!("build: {e}"))?;
+    let lock = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(root.join(LOCK))
+        .map_err(|e| format!("{LOCK}: {e}"))?;
+    lock.lock().map_err(|e| format!("{LOCK}: {e}"))?;
+    let head = String::from_utf8_lossy(&git(root, &["rev-parse", "HEAD"])?)
+        .trim()
+        .to_string();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("clock: {e}"))?;
+    Ok((lock, head, stamp(now.as_millis())))
+}
+
+/// The executor scripts from the committed tree, into the job folder.
+fn write_executor(root: &Path, job: &Path, commit: &str) -> Result<(), String> {
+    for script in EXECUTOR {
+        let bytes = git(root, &["show", &format!("{commit}:tools/windows_machine/{script}")])?;
+        fs::write(job.join(script), bytes).map_err(|e| format!("{}/{script}: {e}", job.display()))?;
+    }
+    Ok(())
+}
+
+/// A job folder sent and run in the desktop session, its `out/` brought back to `bundle` with `job.json` beside it,
+/// then the laptop's job folder removed (the steps `run_batch` and `run_game` share). Returns run-job's code and
+/// whether the bundle came back.
+fn send(job: &Path, run: &str, spec: &str, seconds: u64, bundle: &Path) -> Result<(i32, bool), String> {
+    if !copy(&["-r", &job.to_string_lossy(), &format!("{HOST}:{JOBS}/")]) {
+        return Err(format!("{run}: the job could not be copied to the laptop"));
+    }
+    let code = ssh(&format!("{JOBS}/{run}/run-in-desktop.ps1 -Job {JOBS}/{run}"), seconds);
+    if let Some(parent) = bundle.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    }
+    let fetched = copy(&["-r", &format!("{HOST}:{JOBS}/{run}/out"), &bundle.to_string_lossy()]);
+    if fetched {
+        fs::write(bundle.join("job.json"), spec).map_err(|e| format!("{}/job.json: {e}", bundle.display()))?;
+        let _ = Command::new("ssh")
+            .args(LINK)
+            .arg(HOST)
+            .arg(format!("Remove-Item -Recurse -Force {JOBS}/{run}"))
+            .status();
+    }
+    Ok((code, fetched))
+}
+
+/// `src`'s files and folders, copied into `dst` (the Python's `shutil.copytree(src, dst, dirs_exist_ok=True)`).
+/// Returns the count of files copied.
+pub fn copy_tree(src: &Path, dst: &Path) -> Result<usize, String> {
+    fs::create_dir_all(dst).map_err(|e| format!("{}: {e}", dst.display()))?;
+    let mut n = 0;
+    for e in fs::read_dir(src).map_err(|e| format!("{}: {e}", src.display()))? {
+        let p = e.map_err(|e| format!("{}: {e}", src.display()))?.path();
+        let to = dst.join(p.file_name().expect("an entry has a name"));
+        if p.is_dir() {
+            n += copy_tree(&p, &to)?;
+        } else {
+            fs::copy(&p, &to).map_err(|e| format!("{}: {e}", to.display()))?;
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
+/// A batch on the laptop, start to stored runs (the Python's `run_batch`, then `store_probe_runs.py` on each run):
+/// returns the batch's exit status.
+pub fn run_batch(root: &Path, items: Vec<BatchItem>, repeat: u32, pin: Option<String>, window: &str) -> i32 {
+    match run_batch_inner(root, items, repeat, pin, window) {
+        Ok(code) => code,
+        Err(why) => {
+            eprintln!("windows_machine: {why}");
+            1
+        }
+    }
+}
+
+fn run_batch_inner(
+    root: &Path,
+    mut items: Vec<BatchItem>,
+    repeat: u32,
+    pin: Option<String>,
+    window: &str,
+) -> Result<i32, String> {
+    if items.is_empty() {
+        return Err("a batch of no binaries".to_string());
+    }
+    let (_lock, head, stamp) = begin(root)?;
+    let run = run_id(&stamp, &head);
+    for (n, item) in items.iter_mut().enumerate() {
+        item.execution_id = format!("{}-{stamp}-{:03}", item.family, n + 1);
+    }
+    let scratch = Scratch(std::env::temp_dir().join(format!("windows_machine-{}", std::process::id())));
+    let job = scratch.0.join(&run);
+    fs::create_dir_all(job.join("bin")).map_err(|e| format!("{}: {e}", job.display()))?;
+    let tree = git(root, &["archive", "--format=tar", &head, "--", "probes"])?;
+    fs::write(job.join("tree.tar"), &tree).map_err(|e| format!("{run}/tree.tar: {e}"))?;
+    write_executor(root, &job, &head)?;
+    let inputs = batch_inputs(&sha256(&tree), &items);
+    for (file, _) in &inputs[1..] {
+        let from = root.join("store/binaries").join(&file["bin/".len()..]);
+        fs::copy(&from, job.join(file)).map_err(|e| format!("{}: {e}", from.display()))?;
+    }
+    let spec = Batch {
+        run: run.clone(),
+        repeat,
+        commit: head.clone(),
+        window: window.to_string(),
+        pin,
+        items: items.clone(),
+        inputs,
+    }
+    .json();
+    fs::write(job.join("job.json"), &spec).map_err(|e| format!("{run}/job.json: {e}"))?;
+    let bundle = root.join(BATCHES).join(&run);
+    let (code, fetched) = send(&job, &run, &spec, JOB_SECONDS, &bundle)?;
+    drop(scratch);
+    if !fetched {
+        println!("{run}: bundle not copied back; the laptop's job folder is kept");
+        return Ok(if code == 0 { 1 } else { code });
+    }
+    let runs = split_batch(root, &run, &items, repeat)?;
+    let short: Vec<&(String, i32, String)> = runs.iter().filter(|r| r.1 != 0).collect();
+    for (_, _, line) in &short {
+        println!("{line}");
+    }
+    println!(
+        "{run}: {} binaries, {} with {repeat} executions; run-job exit {code}; bundle {BATCHES}/{run}",
+        items.len(),
+        items.len() - short.len()
+    );
+    if code != 0 {
+        return Ok(code);
+    }
+    if !short.is_empty() {
+        return Ok(1);
+    }
+    // the batch is one job on one machine: every run's profile is read before any is stored
+    for (id, _, _) in &runs {
+        let profile = fs::read_to_string(traces(root, id)?.join("profile.txt")).map_err(|e| format!("{id}: {e}"))?;
+        if !profile.starts_with("laptop-") {
+            return Err(format!(
+                "{id}: profile.txt is {:?}, not the laptop's: nothing stored",
+                profile.trim()
+            ));
+        }
+    }
+    for (id, _, _) in &runs {
+        println!("{}", store(root, id)?);
+    }
+    Ok(0)
+}
+
+/// A run's one `traces-*` folder under `build/probe-runs/<run>/`.
+fn traces(root: &Path, run: &str) -> Result<PathBuf, String> {
+    let base = root.join("build/probe-runs").join(run);
+    let found: Vec<PathBuf> = fs::read_dir(&base)
+        .map_err(|e| format!("{}: {e}", base.display()))?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.is_dir() && named(p, "traces-", ""))
+        .collect();
+    match found.as_slice() {
+        [one] => Ok(one.clone()),
+        _ => Err(format!(
+            "{run}: {} trace folders under build/probe-runs/{run}",
+            found.len()
+        )),
+    }
+}
+
+/// The batch's bundle split into one run per binary (the Python's loop after the fetch): `build/batches/<batch>/
+/// <execution>/` to `build/probe-runs/<batch>-<n>/traces-<execution>/`, with `batch.txt` naming the batch, each held to
+/// the verdict. Returns each run's id, status, and a line naming its binary.
+pub fn split_batch(
+    root: &Path,
+    batch: &str,
+    items: &[BatchItem],
+    repeat: u32,
+) -> Result<Vec<(String, i32, String)>, String> {
+    let bundle = root.join(BATCHES).join(batch);
+    let mut out = Vec::new();
+    for (n, item) in items.iter().enumerate() {
+        let id = format!("{batch}-{:03}", n + 1);
+        let dst = root
+            .join("build/probe-runs")
+            .join(&id)
+            .join(format!("traces-{}", item.execution_id));
+        let src = bundle.join(&item.execution_id);
+        if src.is_dir() {
+            copy_tree(&src, &dst)?;
+        }
+        fs::create_dir_all(&dst).map_err(|e| format!("{}: {e}", dst.display()))?;
+        // its profile.json, run-job.log and job.json: the batch's
+        fs::write(dst.join("batch.txt"), batch).map_err(|e| format!("{id}/batch.txt: {e}"))?;
+        let (status, line) = verdict(0, true, &dst, repeat);
+        let first = item.runs.split(' ').next().unwrap_or_default();
+        let text = format!("{id} {} ({first}, binary {}): {line}", item.family, item.binary);
+        out.push((id, status, text));
+    }
+    Ok(out)
+}
+
+/// A game job (the Python's `run_game` arguments, its defaults in `Default`); the counter options are not here, their
+/// summaries having run Python on the laptop.
+#[derive(Clone, Debug)]
+pub struct Game {
+    pub game: String,
+    pub exe: String,
+    pub executions: u32,
+    pub seconds: u32,
+    pub mode: String,
+    pub audio: String,
+    pub input_script: Option<String>,
+    pub record: bool,
+    pub capture: String,
+    pub person: bool,
+    pub initial_state: String,
+    pub plant_state: bool,
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Game {
+            game: "hail-to-the-rainbow".to_string(),
+            exe: "Hail to the Rainbow".to_string(),
+            executions: 10,
+            seconds: 180,
+            mode: "batch".to_string(),
+            audio: "on".to_string(),
+            input_script: None,
+            record: false,
+            capture: "on".to_string(),
+            person: false,
+            initial_state: "empty".to_string(),
+            plant_state: false,
+        }
+    }
+}
+
+impl Game {
+    /// The desktop task's limit in minutes: each execution's tree mirror and check (about a minute), its seconds and
+    /// its stop, the Python's `executions * (seconds + 180) // 60 + 10`.
+    pub fn limit_minutes(&self) -> u64 {
+        u64::from(self.executions) * (u64::from(self.seconds) + 180) / 60 + 10
+    }
+
+    /// The limit held against one execution's seconds before the job is sent: a desktop task stopped before its first
+    /// execution ends brings back no execution, so such a limit is refused (Sprint 372's second plant). Returns the
+    /// limit in minutes.
+    pub fn checked_limit(&self) -> Result<u64, String> {
+        let limit = self.limit_minutes();
+        if limit * 60 < u64::from(self.seconds) {
+            return Err(format!(
+                "the job's limit, {limit} minutes, is below one execution's {} s: the desktop task would stop it before \
+                 its first execution ends",
+                self.seconds
+            ));
+        }
+        Ok(limit)
+    }
+
+    /// The job's `job.json` (the Python's `spec`, `pmc` and `pmc_sample` false).
+    pub fn json(&self, run: &str, commit: &str, tree_sha: &str) -> String {
+        let s = |k: &str, v: &str| (k.to_string(), Py::str(v));
+        let b = |k: &str, v: bool| (k.to_string(), Py::Bool(v));
+        let i = |k: &str, v: i64| (k.to_string(), Py::Int(v));
+        Py::Dict(vec![
+            s("kind", "game"),
+            s("execution_id", run),
+            s("game", &self.game),
+            s("exe", &self.exe),
+            i("seconds", i64::from(self.seconds)),
+            s("mode", &self.mode),
+            s("audio", &self.audio),
+            (
+                "input_script".to_string(),
+                self.input_script.as_deref().map_or(Py::Null, Py::str),
+            ),
+            b("record", self.record),
+            b("pmc", false),
+            b("pmc_sample", false),
+            s("capture", &self.capture),
+            b("person", self.person),
+            i("frame_seconds", if self.person { 30 } else { 10 }),
+            s("initial_state", &self.initial_state),
+            b("plant_state", self.plant_state),
+            i("executions", i64::from(self.executions)),
+            i("repeat", 0),
+            s("commit", commit),
+            s("session", "desktop"),
+            i(
+                "limit_minutes",
+                i64::try_from(self.limit_minutes()).expect("a limit within i64"),
+            ),
+            (
+                "inputs".to_string(),
+                inputs_py(&[("tree.tar".to_string(), tree_sha.to_string())]),
+            ),
+        ])
+        .dumps()
+    }
+}
+
+/// A game job on the laptop, start to stored executions (the Python's `run_game`, each execution then stored): returns
+/// the job's exit status.
+pub fn run_game(root: &Path, game: &Game) -> i32 {
+    match run_game_inner(root, game) {
+        Ok(code) => code,
+        Err(why) => {
+            eprintln!("windows_machine: {why}");
+            1
+        }
+    }
+}
+
+fn run_game_inner(root: &Path, game: &Game) -> Result<i32, String> {
+    let limit = game.checked_limit()?;
+    let (_lock, head, stamp) = begin(root)?;
+    let run = run_id(&stamp, &head);
+    let scratch = Scratch(std::env::temp_dir().join(format!("windows_machine-{}", std::process::id())));
+    let job = scratch.0.join(&run);
+    fs::create_dir_all(&job).map_err(|e| format!("{}: {e}", job.display()))?;
+    let folder = format!("games/{}", game.game);
+    let tree = git(
+        root,
+        &["archive", "--format=tar", &head, "--", "tools/jit_capture", &folder],
+    )?;
+    fs::write(job.join("tree.tar"), &tree).map_err(|e| format!("{run}/tree.tar: {e}"))?;
+    write_executor(root, &job, &head)?;
+    let spec = game.json(&run, &head, &sha256(&tree));
+    fs::write(job.join("job.json"), &spec).map_err(|e| format!("{run}/job.json: {e}"))?;
+    let bundle = root.join(BATCHES).join(&run);
+    println!(
+        "{run}: game {}, {} executions of {} s, mode {}, audio {}, limit {limit} minutes",
+        game.game, game.executions, game.seconds, game.mode, game.audio
+    );
+    let (code, fetched) = send(&job, &run, &spec, limit * 60 + 600, &bundle)?;
+    drop(scratch);
+    if !fetched {
+        println!("{run}: bundle not copied back; the laptop's job folder is kept");
+        return Ok(if code == 0 { 1 } else { code });
+    }
+    let (done, lines) = split_game(root, &run, game.executions)?;
+    for line in &lines {
+        println!("{line}");
+    }
+    println!(
+        "{run}: {done} of {} executions back; run-job exit {code}; bundle {BATCHES}/{run}",
+        game.executions
+    );
+    if code != 0 {
+        return Ok(code);
+    }
+    if done != game.executions {
+        return Ok(1);
+    }
+    let ids: Vec<String> = (1..=game.executions).map(|i| format!("{run}-{i:02}")).collect();
+    for id in &ids {
+        let profile = fs::read_to_string(root.join("build/game-runs").join(id).join("profile.txt"))
+            .map_err(|e| format!("{id}: profile.txt: {e}"))?;
+        if !profile.starts_with("laptop-") {
+            return Err(format!(
+                "{id}: profile.txt is {:?}, not the laptop's: nothing stored",
+                profile.trim()
+            ));
+        }
+    }
+    for id in &ids {
+        println!("{}", store_game(root, id)?);
+    }
+    Ok(0)
+}
+
+/// The game job's bundle split into one folder per execution (the Python's loop after the fetch): `build/batches/<run>/
+/// <i>/` to `build/game-runs/<run>-<i>/`, with `batch.txt` naming the job and the job's `profile.json` (the machine the
+/// game asked); an execution without `exec.json` is named and skipped. Returns the count split and the lines naming
+/// the skipped.
+pub fn split_game(root: &Path, run: &str, executions: u32) -> Result<(u32, Vec<String>), String> {
+    let bundle = root.join(BATCHES).join(run);
+    let (mut done, mut lines) = (0, Vec::new());
+    for i in 1..=executions {
+        let src = bundle.join(i.to_string());
+        if !src.join("exec.json").is_file() {
+            lines.push(format!("{run}-{i:02}: no exec.json"));
+            continue;
+        }
+        let dst = root.join("build/game-runs").join(format!("{run}-{i:02}"));
+        copy_tree(&src, &dst)?;
+        fs::write(dst.join("batch.txt"), run).map_err(|e| format!("{}/batch.txt: {e}", dst.display()))?;
+        if bundle.join("profile.json").is_file() {
+            fs::copy(bundle.join("profile.json"), dst.join("profile.json"))
+                .map_err(|e| format!("{}/profile.json: {e}", dst.display()))?;
+        }
+        done += 1;
+    }
+    Ok((done, lines))
+}
+
+/// One game execution stored: `build/game-runs/<id>/` to `store/game-runs/<id>/`, refused before anything is written
+/// unless its `profile.txt` is the laptop's. Returns the line naming what was stored, with its log's and its call
+/// trace's line counts.
+pub fn store_game(root: &Path, id: &str) -> Result<String, String> {
+    let src = root.join("build/game-runs").join(id);
+    let profile = fs::read_to_string(src.join("profile.txt")).map_err(|e| format!("{id}: profile.txt: {e}"))?;
+    if !profile.starts_with("laptop-") {
+        return Err(format!(
+            "{id}: profile.txt is {:?}, not the laptop's (laptop-...): only a laptop run is stored",
+            profile.trim()
+        ));
+    }
+    let dst = root.join("store/game-runs").join(id);
+    let n = copy_tree(&src, &dst)?;
+    let lines = |name: &str| fs::read_to_string(src.join(name)).map_or(0, |t| t.lines().count());
+    Ok(format!(
+        "{id}: stored store/game-runs/{id}, {n} files, profile {}, unity.log {} lines, trace {} lines",
+        profile.trim(),
+        lines("unity.log"),
+        lines("jit_capture.bin.trace.tsv")
     ))
 }

@@ -12,7 +12,7 @@
 | H2 | Resolve-and-record holds up on a project whose key facts (TSO access, oracle behavior) can only be settled by probes: the agent records the decision provisionally and a probe sprint confirms or supersedes it, with no wait state. | partially | 2026-10-03: four same-day agent decisions superseded cleanly by the v0.2 user decision; but two of them were scope (intent), not probe-settleable facts. OQ-1 is still the first probe test. |
 | H3 | The ≤2-files sprint rule fits a compiler/runtime project if contracts are one file each. | refuted | Sprints 023-033: ten of eleven cards recorded an exception; Sprints 029-032 touched 27-55 files each. The checkable unit is one path from input to verdict. Project override recorded 2026-10-09. |
 | H4 | A correctness check that passes on zero observed failures needs a same-run control that fails. | confirmed | Sprint 011: the native MP check passed with no power until the plain control was required to fail. |
-| H5 | A lesson reaches new code only as a check in code; a lesson held in prose recurs. | supported | 2026-10-28: the Emits rule (126, 131, 162), multi-line edits outside the Edit tool (128-158), a skipping judge (149, 154) recurred in prose; Signal Reports (a gate since 127) and planted samples (read from 162) have not. |
+| H5 | A lesson reaches new code only as a check in code; a lesson held in prose recurs. | supported | 2026-10-28: the Emits rule (126, 131, 162), multi-line edits outside the Edit tool (128-158), a skipping judge (149, 154) recurred in prose; Signal Reports (a gate since 127) and planted samples (read from 162) have not.; 2026-11-27: the laptop as the reference (BLACKBOARD Decision 2026-10-16) held in prose and a memory line, undone by Sprint 226's deferral and unchecked for about forty sprints (#117); the store's profile refusal (Sprint 371) and card 373's test are its checks. |
 | H6 | A builder that does not grade its own work, and a supervisor that reruns its contracts before committing, catch defects self-grading missed. | _pending_ | Opened 2026-11-24 with the user's split of the three roles (reviewer-4's Low 3 at 331). Evidence: the count of the supervisor's findings per sprint on a builder's tree, against the self-graded sprints 269-331. |
 
 ---
@@ -1086,3 +1086,16 @@ card. Two corrections the same day: a builder reads neither BLACKBOARD nor its t
 from reviewer-4's second review, a builder stops at a gated working tree, the supervisor committing after its own
 grade. H6 tracks whether the split catches what self-grading missed.
 
+
+### 2026-11-27 — Sprints 370-372: a user's decision held only in prose drifted for about forty sprints
+
+**What happened:** the user made the Windows laptop the reference on 2026-10-13, and a Decision of 2026-10-16 sent
+every probe and game run to it by default. Sprint 226 (2026-10-29) removed the laptop's dispatcher with the Python and
+named GitHub's runner as its replacement; from 2026-10-30 every probe went to the runner, and no card, gate or review
+held a run's machine to the Decision. A memory file said the laptop had not arrived. The user stopped the project on
+2026-11-27 (`docs/postmortem-windows-runs-off-the-laptop-2026-11-27.md`); Sprints 371 and 372 built the laptop path in
+Rust, and the store refuses a run whose `profile.txt` is not the laptop's.
+
+**Finding (#117):** a Decision stated in prose, with no check in code, was undone by a later card's deferral, and the
+reviews that read every card never held a row to it. The store's refusal is the first check; card 373 holds every
+evidence run's profile to the reference in a test, before any card compares or relies on a row.

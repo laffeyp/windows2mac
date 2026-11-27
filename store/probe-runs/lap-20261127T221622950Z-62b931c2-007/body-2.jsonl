@@ -1,0 +1,6 @@
+{"s":"any_closed","wait":4294967295,"error":6,"after":0}
+{"s":"all_closed","wait":4294967295,"error":6,"after":0}
+{"s":"main","duplicated":1,"closed":1,"set":1,"ended":0,"closed_first":1,"set_second":1,"ended_any":0}
+{"s":"manual_worker","wait":0,"error":0}
+{"s":"any_worker","wait":1,"error":0}
+{"s":"cycles","created":600,"set":600,"released":600,"all_taken":600,"any_first":600,"waited":600,"reset":600,"mutex_released":600,"thread_named":600,"process_named":600,"closes":3000}

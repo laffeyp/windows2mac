@@ -1,0 +1,5 @@
+{"s":"slot","allocated":1}
+{"s":"wait","ret":0}
+{"s":"a","rounds":200000,"last_error_wrong":0,"tls_wrong":0,"tid_wrong":0}
+{"s":"b","rounds":200000,"last_error_wrong":0,"tls_wrong":0,"tid_wrong":0}
+{"s":"overlap","a_saw_b_move":88255,"b_saw_a_move":88364}

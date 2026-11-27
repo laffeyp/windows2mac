@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-//! The walk's rules judged on every target (Sprint 254; Deferred (Sprint 253)): each of the 290 images under
-//! `store/binaries/` walks to its counts in `store/translation-cache/walk-fixtures-2026-10-30.json`, 647,743
+//! The walk's rules judged on every target (Sprint 254; Deferred (Sprint 253)): each of the 291 images under
+//! `store/binaries/` walks to its counts in `store/translation-cache/walk-fixtures-2026-10-30.json`, 648,036
 //! instructions and 116 switch tables in all, so a change to the walk fails CI as well as the depot's test. A binary
 //! added to `store/binaries/` adds its entry, the `image_walk` binary's counts (Sprint 331: `probes/locked_race`'s,
 //! the 281st; 280 and 641,041 before; Sprint 344: `probes/thread_values_race`'s, the 282nd; 281 and 641,343 before;
@@ -10,7 +10,8 @@
 //! 350: `probes/wait_closed_handle`'s, the 286th; 285 and 643,344 before; Sprint 352: `probes/wait_closed_kinds`'s, the
 //! 287th; 286 and 643,637 before; Sprint 356: `probes/mutex_abandoned`'s, the 288th; 287 and 644,291 before; Sprint
 //! 369: `probes/named_sync_objects`'s, the 289th; 288 and 644,877 before; the laptop run of 2026-11-27,
-//! `probes/apcs_and_waitable_timers`'s, the 290th; 289 and 646,177 before).
+//! `probes/apcs_and_waitable_timers`'s, the 290th; 289 and 646,177 before; Sprint 372: the laptop's build of
+//! `probes/wait_closed_handle`, the 291st; 290 and 647,743 before).
 
 use std::fs;
 use std::path::{Path, PathBuf};
