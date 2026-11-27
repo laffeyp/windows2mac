@@ -23,7 +23,8 @@
 //! the wall clock above one (`w2m-vm`). From Sprint 364 (card 4f3 of
 //! `docs/design-a-process-that-starts-another-2026-11-26.md`) a process that starts another runs on two vCPUs, its child
 //! on one, what crosses between them answered by the request server, and the six runs the list held are held to their
-//! one-vCPU runs' rows; the list holds none.
+//! one-vCPU runs' rows; the list holds none. From Sprint 365 (card 4f4) the child runs on two vCPUs too, its parent's
+//! count.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -1355,7 +1356,8 @@ fn state_of(root: &Path, c: &[&str], base: &Path, stop: &str) -> Option<String> 
 const REFUSED: &str = "store/family_runs/two-vcpus-refused-2026-11-26.tsv";
 
 /// `REFUSED` holds no run (Sprint 364): the host refuses no family run on two vCPUs, a process that starts another
-/// running there with its child on one vCPU, and each of the six it held is held to its one-vCPU run's rows.
+/// running there with its child on one vCPU (on two from Sprint 365), and each of the six it held is held to its
+/// one-vCPU run's rows.
 #[test]
 fn the_refused_list_holds_none() {
     let refused = by_run(&root(), REFUSED);

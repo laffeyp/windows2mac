@@ -316,7 +316,10 @@ fn the_batch_runs_log_is_the_references_line_for_line() {
     assert_eq!(ours.len(), reference.len(), "the batch run's unity.log lines");
 }
 
-/// Each guest that ends at ExitProcess prints what the frozen Python host's run printed (Sprint 191).
+/// Each guest that ends at ExitProcess prints what the frozen Python host's run printed (Sprint 191); a guest the frozen
+/// host never ran ("-" in both its columns, from Sprint 364) is held to its stop alone here (Sprint 365:
+/// `two_process_pipe_pingpong` exits 0 only when its 10,000 rounds and its child's exit code are right, and
+/// `run_loop.rs` holds its output on two vCPUs).
 #[test]
 fn each_guest_that_ends_prints_what_the_python_host_printed() {
     let root = root();
@@ -327,7 +330,7 @@ fn each_guest_that_ends_prints_what_the_python_host_printed() {
     let mut compared = 0;
     for cols in guests {
         let (name, rust_stop, python_output) = (&cols[1], &cols[2], cols[4].replace("\\n", "\n"));
-        if !rust_stop.starts_with("ExitProcess") {
+        if !rust_stop.starts_with("ExitProcess") || (cols[3] == "-" && cols[4] == "-") {
             continue;
         }
         let ours = written(&root, &format!("guest-{name}.txt")).unwrap();

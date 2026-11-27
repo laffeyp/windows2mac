@@ -18,7 +18,8 @@
 //!
 //! From Sprint 364 (card 4f3, "Which lock or request each crossing takes", "The deadlock rule", "The stop") a run
 //! reaches it: a spawn on several vCPUs starts the server under `kernel` and adopts the child (`Server::spawn`), which
-//! runs on one vCPU with the `Client` link. After a waking answer the server raises every live process's wake count:
+//! runs with the `Client` link, on one vCPU at Sprint 364 and on the run's vCPUs from Sprint 365 (card 4f4: its start
+//! carries the run's count). After a waking answer the server raises every live process's wake count:
 //! a child's on the page (`WAKES`), the first process's in-process (`FirstProcess`, since the header says SHARED "should
 //! not be used when synchronizing among multiple threads of a single process"); each process's link thread applies it
 //! (`run.rs`). Each process posts whether every one of its vCPUs is parked with no blocked thread holding a deadline
@@ -372,7 +373,8 @@ impl Server {
     /// `spawner` on several vCPUs (Sprint 364; kernel.py 437-468, as `turns::Supervisor::spawn` makes it on one): a
     /// child `w2m-vm` started `--child` with the page's and its memory's descriptors and its slot, the next free one,
     /// its start one JSON line on its standard input, which carries `request_server`, so the child opens a `Client`
-    /// and runs at once; then adopted. Made by the spawning vCPU under `kernel`, which the children's table is under.
+    /// and runs at once, on the run's vCPUs, which the start carries too (Sprint 365); then adopted. Made by the
+    /// spawning vCPU under `kernel`, which the children's table is under.
     pub fn spawn(&self, child: &crate::kernel::Spawn, start: serde_json::Value) -> Result<(), String> {
         let slot = self.served.children.lock().unwrap_or_else(|e| e.into_inner()).len();
         if slot >= SLOTS {

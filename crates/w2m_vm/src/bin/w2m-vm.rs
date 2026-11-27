@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 //! `w2m-vm`, the Rust host as a program (Sprint 158; step 3 of `docs/rust-port-plan-2026-10-24.md`): it loads a guest,
-//! runs it on one vCPU with the host compiling the blocks the VM's C declines (`w2m_vm::run::run_compiling`), writes the
+//! runs it on its vCPUs (one unless `--vcpus` asks more; a child its parent's count) with the host compiling the blocks
+//! the VM's C declines (`w2m_vm::run::run_compiling`), writes the
 //! guest's standard output to a file, and writes the run's record, `record_translations`' events
 //! (`w2m_vm::record`), to its own standard output in substrate's line protocol.
 //!
@@ -323,7 +324,8 @@ mod run {
             None => None,
         };
         // the run's vCPUs (Sprint 308), 1 by default, refused above it by name before any VM is made; a child process,
-        // started `--child` alone, never has the option and runs on one
+        // started `--child` alone, never has the option: it runs on the count its start line carries, its parent's
+        // (Sprint 365)
         let vcpus = match args.iter().position(|a| a == "--vcpus") {
             Some(i) if args.len() >= i + 2 => {
                 let n = args.drain(i..i + 2).nth(1).unwrap();
@@ -344,7 +346,7 @@ mod run {
         // checked again once its options are read
         let lse2 = hypervisor::feature("FEAT_LSE2");
         let clock = instruction_clock || args.iter().any(|a| a == "--game");
-        w2m_vm::run::vcpus_allowed(vcpus, lse2, &diagnostics, false, clock)?;
+        w2m_vm::run::vcpus_allowed(vcpus, lse2, &diagnostics, clock)?;
         // a guest run's instruction budget (Sprint 221): the family sweep ends a hang by count
         let max_steps = match args.iter().position(|a| a == "--max-steps") {
             Some(i) if args.len() >= i + 2 => {
@@ -428,15 +430,16 @@ mod run {
         }
         // a refusal of the start's vCPUs, before any VM, is the run's stop when one is asked for (Sprint 351: the family
         // runs on the instruction clock, refused on two vCPUs and held by name to it in the family test until Sprint 360,
-        // which runs them on the wall clock there)
-        if let Err(why) = w2m_vm::run::vcpus_allowed(vcpus, lse2, &[], false, start.instruction_clock.is_some()) {
+        // which runs them on the wall clock there); the run loop refuses the clock above one vCPU too, for every caller
+        // (Sprint 365), the fallback above applied before it
+        if let Err(why) = w2m_vm::run::vcpus_allowed(vcpus, lse2, &[], start.instruction_clock.is_some()) {
             if let Some(("--stop", file)) = measure {
                 fs::write(root().join(file), format!("{why}\n")).map_err(|e| format!("{file}: {e}"))?;
             }
             return Err(why);
         }
-        // the count the run's requests read: a process that starts another is refused above one vCPU (Sprint 325). The
-        // game's start keeps 1: `--game` takes the instruction clock, which `vcpus_allowed` holds to one vCPU
+        // the count the run's requests read, and its children's (Sprint 365: `child_start` carries it). The game's start
+        // keeps 1: `--game` takes the instruction clock, which `vcpus_allowed` holds to one vCPU
         start.vcpus = vcpus;
         let root = root();
         start.program_path = Some(root.join(guest_path));
@@ -471,7 +474,7 @@ mod run {
         let mut guest = guest_of(&root, &loaded, &start)?;
         guest.served.files = Some(w2m_vm::file_bridge::FileBridge::new(&app, false, None)?);
         guest.limited = true;
-        let out = on_one_vcpu(
+        let out = run_on_its_vcpus(
             &mut guest,
             &loaded,
             Some(GUEST_SECONDS),
@@ -635,10 +638,11 @@ mod run {
         Guest::new(loaded, &image, &services, start, &modules, &symbols).map_err(|e| format!("the guest: {e:?}"))
     }
 
-    /// The guest run on one vCPU, the host compiling the blocks the VM's C declines, to its stop, `seconds`, or
-    /// `max_steps` instructions (`--max-steps`, Sprint 221: a family run that hangs ends at the same step on every run,
-    /// not at a wall-clock limit).
-    fn on_one_vcpu(
+    /// The guest run on its start's vCPUs (`Start::vcpus`: `--vcpus`, or a child's start line; until Sprint 365 this was
+    /// `on_one_vcpu`, named for the one count it had before Sprint 308), the host compiling the blocks the VM's C
+    /// declines, to its stop, `seconds`, or `max_steps` instructions (`--max-steps`, Sprint 221: a family run that hangs
+    /// ends at the same step on every run, not at a wall-clock limit).
+    fn run_on_its_vcpus(
         guest: &mut Guest,
         loaded: &pe_loader::Loaded,
         seconds: Option<u64>,
@@ -671,6 +675,14 @@ mod run {
         // every run's count of locked model steps, each with every other vCPU stopped (Sprint 331), which a guest's test
         // holds to its known count; the batch run's stop file holds the game's
         eprintln!("w2m-vm: {} model steps of a locked form", out.locked_steps);
+        // the process's vCPUs and each one's count of runs (Sprint 365): a child's line beside its parent's on the
+        // stderr they share says the child ran on its run's vCPUs, its parent's count
+        eprintln!(
+            "w2m-vm: process {} on {} vCPUs, runs by vCPU {:?}",
+            guest.served.process.process_id,
+            guest.start.vcpus.max(1),
+            out.runs_by_vcpu
+        );
         Ok(out)
     }
 
@@ -713,9 +725,10 @@ mod run {
     /// for a PROCESS_CREATE (`spawner`, kernel.py 437-468), its start one JSON line on standard input. Its program is
     /// the command line's first token, quoted or not, found in C:\w2m\app on the host or, for a run with no program
     /// directory, the parent's own program when the name is its name; its DLLs from the program's directory. It runs
-    /// in its turns and tells the supervisor its end or its stop. A start that carries `request_server` (Sprint 364; card
-    /// 4f3) is a several-vCPU run's: the child opens a `Client` of the request page instead, posts its maps once, and
-    /// runs at once on one vCPU with no turns, its KERNEL 33 requests answered by the first process's request server.
+    /// in its turns, on one vCPU, and tells the supervisor its end or its stop. A start that carries `request_server`
+    /// (Sprint 364; card 4f3) is a several-vCPU run's: the child opens a `Client` of the request page instead, posts its
+    /// maps once, and runs at once with no turns, on the run's vCPUs from Sprint 365 (card 4f4), its KERNEL 33 requests
+    /// answered by the first process's request server.
     fn child(page_fd: i32, memory_fd: i32, slot: usize) -> Result<(), String> {
         let mut line = String::new();
         io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
@@ -730,6 +743,14 @@ mod run {
         link.first_turn();
         let run = || -> Result<Outcome, String> {
             let (mut guest, loaded) = child_guest(&s, memory_fd)?;
+            // the machine's turns are one vCPU's (the design's "What one vCPU keeps unchanged"): a child of a one-vCPU
+            // run runs on one (Sprint 365)
+            if guest.start.vcpus != 1 {
+                return Err(format!(
+                    "a child of the machine's turns runs on one vCPU, and its start carries {}",
+                    guest.start.vcpus
+                ));
+            }
             // the link behind `kernel` (Sprint 362), made before the run, no vCPU yet
             std::sync::Arc::get_mut(&mut guest.kernel)
                 .ok_or("a child's kernel lock shared before its run")?
@@ -741,7 +762,7 @@ mod run {
             w2m_vm::threads::catch_up(&mut guest, link.machine(), 2);
             guest.limited = s["limited"].as_bool().unwrap_or(true);
             let seconds = guest.limited.then_some(GUEST_SECONDS);
-            on_one_vcpu(&mut guest, &loaded, seconds, MAX_STEPS, &mut HostCompiler::default())
+            run_on_its_vcpus(&mut guest, &loaded, seconds, MAX_STEPS, &mut HostCompiler::default())
         };
         match run() {
             Ok(out) => match out.stop {
@@ -756,8 +777,9 @@ mod run {
     /// `w2m-vm --child` of a several-vCPU run (Sprint 364; card 4f3 of
     /// `docs/design-a-process-that-starts-another-2026-11-26.md`): the child opens its slot of the request page, ends
     /// with its parent as the turn form's does, builds its guest as `child_guest` builds it, posts its maps once (the
-    /// layout is fixed after load), and runs at once on one vCPU, on the wall clock, its `Client` behind `kernel` and its
-    /// parks posting to the server's verdict; its end or its stop then posted to the server.
+    /// layout is fixed after load), and runs at once on the run's vCPUs (Sprint 365; card 4f4: its start's `vcpus`, its
+    /// parent's), on the wall clock, its `Client` behind `kernel` and its parks posting to the server's verdict; its end
+    /// or its stop then posted to the server.
     fn child_of_the_request_server(
         s: &serde_json::Value,
         page_fd: i32,
@@ -778,7 +800,7 @@ mod run {
                 .link(w2m_vm::threads::ParkPost(std::sync::Arc::clone(&guest.kernel)));
             guest.limited = s["limited"].as_bool().unwrap_or(true);
             let seconds = guest.limited.then_some(GUEST_SECONDS);
-            on_one_vcpu(&mut guest, &loaded, seconds, MAX_STEPS, &mut HostCompiler::default())
+            run_on_its_vcpus(&mut guest, &loaded, seconds, MAX_STEPS, &mut HostCompiler::default())
         };
         match run() {
             Ok(out) => match out.stop {
@@ -845,6 +867,17 @@ mod run {
         start.instruction_clock = s["instruction_clock"]
             .as_array()
             .and_then(|c| Some((c.first()?.as_u64()?, c.get(1)?.as_u64()?)));
+        // the run's vCPU count, its parent's (Sprint 365; card 4f4), set before the guest is built (`Guest::new` reads
+        // it) and refused as a run's own options are, before any VM: the parent passed the same reasons, so a refusal
+        // here names a start this binary did not make
+        start.vcpus = u32::try_from(number("vcpus")?).map_err(|e| format!("a child's start's vcpus: {e}"))?;
+        let diagnostics: Vec<&str> = text("exit_ledger").map(|_| "--exit-ledger").into_iter().collect();
+        w2m_vm::run::vcpus_allowed(
+            start.vcpus,
+            hypervisor::feature("FEAT_LSE2"),
+            &diagnostics,
+            start.instruction_clock.is_some(),
+        )?;
         start.app_root = text("app_root").map(PathBuf::from);
         start.program_path = Some(path.clone());
         start.memory_fd = Some(memory_fd);
@@ -1086,7 +1119,7 @@ mod run {
             guest.place_cache_file(&bytes)?;
             host.use_cache(&mut guest, file)?;
         }
-        let out = on_one_vcpu(&mut guest, &loaded, Some(GAME_SECONDS), MAX_STEPS, &mut host)?;
+        let out = run_on_its_vcpus(&mut guest, &loaded, Some(GAME_SECONDS), MAX_STEPS, &mut host)?;
         // the log beside the stop file, which `batch_run.rs` holds to the reference's, line for line (Sprint 219)
         if let Some(log) = &log {
             let beside = w2m_vm::run_outputs::companion(stop_file, ".unity.log");

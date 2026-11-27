@@ -224,7 +224,10 @@ fn environment_now(guest: &Guest) -> Result<Vec<String>, String> {
 }
 
 /// A child's start as `spawner` makes it (kernel.py 437-468), for `w2m-vm --child`: the command line, its ids, the
-/// inherited handles and current directory, the parent's environment now, process group, clock and program directory.
+/// inherited handles and current directory, the parent's environment now, process group, clock and program directory;
+/// and the run's vCPU count (Sprint 365; card 4f4 of `docs/design-a-process-that-starts-another-2026-11-26.md`: "a
+/// child is started with its parent's count"), which a child of a several-vCPU run runs on and a child of a one-vCPU
+/// run, the machine's turns, holds to one.
 fn child_start(guest: &Guest, child: &crate::kernel::Spawn) -> Result<serde_json::Value, String> {
     let s = &guest.start;
     let environment = environment_now(guest)?;
@@ -236,6 +239,7 @@ fn child_start(guest: &Guest, child: &crate::kernel::Spawn) -> Result<serde_json
         "directory": child.directory,
         "environment": environment,
         "process_group": s.process_group,
+        "vcpus": s.vcpus,
         "instruction_clock": s.instruction_clock.map(|(rate, epoch)| [rate, epoch]),
         "app_root": s.app_root.as_ref().map(|p| p.to_string_lossy().to_string()),
         "parent_image": s.image_name,
@@ -267,7 +271,7 @@ fn kernel_request(guest: &mut Guest, a: [u64; 4]) -> Result<u64, HostError> {
         .map_err(HostError::Failed)?;
     if let Some(child) = &answer.spawn {
         // `spawner` (kernel.py 437-468): a second `w2m-vm`, run in its turn on one vCPU (Sprint 197), at once on several
-        // (Sprint 364)
+        // (Sprint 364), on the run's vCPUs (Sprint 365)
         let start = child_start(guest, child).map_err(HostError::Failed)?;
         if held.link.is_none() {
             // the link installed once, `linked` (and the turn form's `turns`) set beside it (Sprints 362, 364): the run's

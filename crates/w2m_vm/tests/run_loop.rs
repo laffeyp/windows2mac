@@ -1245,8 +1245,9 @@ fn guest_through_w2m_vm_in_a_group(name: &str, tag: &str, extra: &[&str], vcpus:
 }
 
 /// Sprint 364 (card 4f3; until then Sprint 327's refusal by name): `busychild` through `w2m-vm --vcpus 2` runs its
-/// parent on two vCPUs and its child on one at once, no turns between them: the child spins for ever in its own process
-/// while the parent's two threads take their 20 rounds and end the run, which ends the child; none of the group is left.
+/// parent and its child at once, no turns between them (the child on one vCPU at Sprint 364, on two from Sprint 365):
+/// the child spins for ever in its own process while the parent's two threads take their 20 rounds and end the run,
+/// which ends the child; none of the group is left.
 #[test]
 fn busychild_through_w2m_vm_on_two_vcpus_runs_its_child_at_once() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
@@ -1307,6 +1308,100 @@ fn a_stopped_run_ends_a_child_waiting_on_an_unanswered_slot() {
         r.stderr
     );
     assert_eq!(r.left, "", "processes of the run's group left after its end");
+}
+
+/// Sprint 365 (card 4f4's gate, `docs/design-a-process-that-starts-another-2026-11-26.md` "The cards that follow" 4):
+/// `two_process_pipe_pingpong` through `w2m-vm --vcpus 2`, its child started with the run's count, so both processes
+/// run on two vCPUs at once: the parent and its child pass one byte back and forth over two pipes, 10,000 rounds, every
+/// read INFINITE. Each read blocks as often as not until the other process's write wakes it through the request server
+/// and its link thread, so a wake lost between processes leaves both reading until GUEST_SECONDS (60 s), whose stop is
+/// "the run's time limit". Twenty runs, each held to its own exit (`ExitProcess { code: 0 }`), the parent's count of
+/// rounds answered right and the child's exit code ("rounds 10000, child 7"), each process's stderr line naming two
+/// vCPUs (4096 the parent, 4100 the child), and none of the group left; each run's result and time printed, the failed
+/// runs counted before the assertion, so a plant's result says in how many of 20 it failed. No time is held
+/// (`crates/hypervisor/tests/no_wall_clock_bound.rs`).
+#[test]
+fn a_pipe_pingpong_across_two_processes_on_two_vcpus_ends_in_every_run() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let mut failed = Vec::new();
+    for run in 1..=20 {
+        let r = guest_through_w2m_vm_in_a_group("two_process_pipe_pingpong", &format!("pipe-pingpong-{run}"), &[], 2);
+        let vcpus: Vec<&str> = r
+            .stderr
+            .lines()
+            .filter(|l| l.contains(" vCPUs, runs by vCPU "))
+            .collect();
+        println!(
+            "two_process_pipe_pingpong on 2 vCPUs, run {run}: {:?}, output {:?} in {:?}; {vcpus:?}",
+            r.stopped, r.said, r.took
+        );
+        let on_two = |pid: u64| {
+            vcpus
+                .iter()
+                .any(|l| l.starts_with(&format!("w2m-vm: process {pid} on 2 vCPUs, runs by vCPU ")))
+        };
+        if r.stopped != "ExitProcess { code: 0 }"
+            || r.said != "rounds 10000, child 7\n"
+            || !on_two(4096)
+            || !on_two(4100)
+            || !r.left.is_empty()
+        {
+            failed.push(format!(
+                "run {run}: stop {:?}, output {:?}, vCPUs {vcpus:?}, left {:?}",
+                r.stopped, r.said, r.left
+            ));
+        }
+    }
+    assert!(
+        failed.is_empty(),
+        "two_process_pipe_pingpong: {} of 20 runs on two vCPUs failed: {failed:#?}",
+        failed.len()
+    );
+}
+
+/// Sprint 365 (reviewer-4's thirty-third review, Low 1, taken into card 4f4): the run loop itself refuses the
+/// instruction clock above one vCPU, by `run::instruction_clock_allowed`'s words, for every caller, before any thread or
+/// vCPU; until then only `w2m-vm` refused it (`vcpus_allowed`), and a `run_compiling` caller with two vCPUs and the
+/// clock ran (the Decision "The instruction clock on several vCPUs": "Only `w2m-vm` refuses it"). `qpc` started on the
+/// instruction clock at the batch run's rate and epoch: on one vCPU it ends; on two the run stops at once by name,
+/// no instruction run.
+#[test]
+fn the_run_loop_refuses_the_instruction_clock_above_one_vcpu() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let root = root();
+    let data = fs::read(root.join("tests/data/timed_waits/qpc.exe")).unwrap();
+    let loaded = load(&data, None, "probe.exe").unwrap();
+    for vcpus in [1, 2] {
+        let mut start = Start::console("probe.exe");
+        start.vcpus = vcpus;
+        // `w2m-vm`'s CLOCK_RATE and REFERENCE_START, the batch run's
+        start.instruction_clock = Some((1_400_000_000, 134_362_624_920_000_000));
+        let mut guest = guest_with(&root, &loaded, &start);
+        let out = run_limited(
+            &mut guest,
+            &loaded,
+            &mut HostCompiler::default(),
+            Some(Duration::from_secs(60)),
+        );
+        println!(
+            "qpc on the instruction clock, {vcpus} vCPU(s): stop {:?}, {} instructions",
+            out.stop, out.executed
+        );
+        if vcpus == 1 {
+            assert_eq!(
+                out.stop,
+                Stop::ExitProcess { code: 0 },
+                "qpc on the instruction clock, one vCPU"
+            );
+        } else {
+            assert_eq!(
+                out.stop,
+                Stop::Exit("2 vCPUs refused: the instruction clock reads the running vCPU's own count".into()),
+                "qpc on the instruction clock, two vCPUs: the run loop's own refusal"
+            );
+            assert_eq!(out.executed, 0, "instructions run before the refusal");
+        }
+    }
 }
 
 /// Deferred (Sprint 327, partial), met at Sprint 328: `statsize`'s worker, on vCPU 1 while the main thread spins on

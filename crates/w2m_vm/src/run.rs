@@ -653,9 +653,12 @@ fn give_back(guest: &mut Guest, after_stop: u64) -> Result<(), String> {
 /// Whether a run may have `n` vCPUs (Sprint 308; the run-loop design's card 4a): one always; more refused, each reason
 /// by name: FEAT_LSE2 not reported (the dispatch pair's single-copy atomicity rests on it, the guest-memory design's
 /// choice 3; `lse2` is `hypervisor::feature("FEAT_LSE2")`); a diagnostic (each reads every exit in order, which two
-/// threads do not have); a child process (one vCPU until its KERNEL 33 wait lets the word go, the design's host-request
-/// row); the instruction clock (Sprint 315); more than the layout's vCPUs. The second vCPU itself is built (Sprint 327).
-pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], child: bool, clock: bool) -> Result<(), String> {
+/// threads do not have); the instruction clock (Sprint 315; `instruction_clock_allowed`, which the run loop applies
+/// to every caller from Sprint 365); more than the layout's vCPUs. The second vCPU itself is built (Sprint 327). A
+/// child process is no reason from Sprint 365 (card 4f4 of `docs/design-a-process-that-starts-another-2026-11-26.md`):
+/// a child gets its parent's count, a child of a several-vCPU run running on its run's vCPUs and a child of a one-vCPU
+/// run on one (`w2m-vm --child`).
+pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], clock: bool) -> Result<(), String> {
     if n <= 1 {
         return Ok(());
     }
@@ -665,24 +668,29 @@ pub fn vcpus_allowed(n: u32, lse2: Option<i32>, diagnostics: &[&str], child: boo
     if let Some(d) = diagnostics.first() {
         return Err(format!("{n} vCPUs refused: {d} reads every exit in order"));
     }
-    if child {
-        return Err(format!("{n} vCPUs refused: a child process runs on one"));
-    }
-    // the C runtime's clock reads the running vCPU's own count (`process.c` 45; Sprint 315), and stays on one vCPU
-    // (Sprint 360, the per-vCPU pages design's "Not decided here" settled): the deterministic clock for tests, its
-    // threads taken in turn, as QEMU's `--icount` falls back to round robin ("System emulation will fall back to the
-    // original round robin approach if: ... enabling --icount mode", `docs/devel/multi-thread-tcg.rst`); a family's start
-    // on it runs on the wall clock above one vCPU (`w2m-vm`)
-    if clock {
-        return Err(format!(
-            "{n} vCPUs refused: the instruction clock reads the running vCPU's own count"
-        ));
-    }
+    instruction_clock_allowed(n, clock)?;
     // the monitor region has pages for this many vCPUs (`MAX_VCPUS`, its eight vCPU areas; Sprint 327)
     if u64::from(n) > guest_runtime::layout::MAX_VCPUS {
         return Err(format!(
             "{n} vCPUs refused: the layout has pages for {}",
             guest_runtime::layout::MAX_VCPUS
+        ));
+    }
+    Ok(())
+}
+
+/// Whether a run of `n` vCPUs may take the instruction clock (`clock`): on one vCPU only. The C runtime's clock reads
+/// the running vCPU's own count (`process.c` 45; Sprint 315), and stays on one vCPU (Sprint 360, the per-vCPU pages
+/// design's "Not decided here" settled): the deterministic clock for tests, its threads taken in turn, as QEMU's
+/// `--icount` falls back to round robin ("System emulation will fall back to the original round robin approach if: ...
+/// enabling --icount mode", `docs/devel/multi-thread-tcg.rst`); a family's start on it runs on the wall clock above one
+/// vCPU (`w2m-vm`, before it calls the run loop). `vcpus_allowed` asks it, and from Sprint 365 the run loop itself does
+/// (`run`), so no caller of the run loop runs the clock on several vCPUs (the Decision "The instruction clock on several
+/// vCPUs"; reviewer-4's thirty-third review, Low 1).
+pub fn instruction_clock_allowed(n: u32, clock: bool) -> Result<(), String> {
+    if n > 1 && clock {
+        return Err(format!(
+            "{n} vCPUs refused: the instruction clock reads the running vCPU's own count"
         ));
     }
     Ok(())
@@ -1190,6 +1198,12 @@ fn run(
         created_suspended: false,
     };
     let mut out = Outcome::empty();
+    // the instruction clock on one vCPU only, refused by name for every caller before any thread or vCPU (Sprint 365;
+    // reviewer-4's thirty-third review, Low 1: until then only `w2m-vm` refused it)
+    if let Err(why) = instruction_clock_allowed(guest.start.vcpus, guest.start.instruction_clock.is_some()) {
+        out.stop = Stop::Exit(why);
+        return Ok(out);
+    }
     if let Err(why) = add_thread(guest, first) {
         out.stop = Stop::Exit(format!("the first thread's entry: {why}")); // a guest run before
         return Ok(out);
@@ -2367,25 +2381,31 @@ mod tests {
     use super::known_block;
     use guest_runtime::layout::{MONITOR_SIZE, RUN_TABLE, TRANSPORT_OFF};
 
-    /// Each reason against a second vCPU refused by its own words, and one vCPU allowed whatever holds (Sprint 308).
+    /// Each reason against a second vCPU refused by its own words, and one vCPU allowed whatever holds (Sprint 308); a
+    /// child process no reason from Sprint 365, and the instruction clock refused by `instruction_clock_allowed`'s words.
     #[test]
     fn each_reason_against_a_second_vcpu_is_refused_by_name() {
-        use super::vcpus_allowed;
+        use super::{instruction_clock_allowed, vcpus_allowed};
         let lse2 = Some(1);
-        assert_eq!(vcpus_allowed(1, None, &["--exit-ledger"], true, false), Ok(()));
+        assert_eq!(vcpus_allowed(1, None, &["--exit-ledger"], true), Ok(()));
         let refused = |r: Result<(), String>| r.expect_err("allowed");
-        assert!(refused(vcpus_allowed(2, None, &[], false, false)).contains("FEAT_LSE2 not reported (None)"));
-        assert!(refused(vcpus_allowed(2, Some(0), &[], false, false)).contains("FEAT_LSE2 not reported (Some(0))"));
-        assert!(
-            refused(vcpus_allowed(2, lse2, &["--exit-ledger"], false, false))
-                .contains("--exit-ledger reads every exit")
+        assert!(refused(vcpus_allowed(2, None, &[], false)).contains("FEAT_LSE2 not reported (None)"));
+        assert!(refused(vcpus_allowed(2, Some(0), &[], false)).contains("FEAT_LSE2 not reported (Some(0))"));
+        assert!(refused(vcpus_allowed(2, lse2, &["--exit-ledger"], false)).contains("--exit-ledger reads every exit"));
+        assert_eq!(
+            refused(vcpus_allowed(2, lse2, &[], true)),
+            "2 vCPUs refused: the instruction clock reads the running vCPU's own count"
         );
-        assert!(refused(vcpus_allowed(2, lse2, &[], true, false)).contains("a child process runs on one"));
-        assert!(refused(vcpus_allowed(2, lse2, &[], false, true)).contains("the instruction clock reads the running"));
+        assert_eq!(
+            refused(vcpus_allowed(2, lse2, &[], true)),
+            refused(instruction_clock_allowed(2, true))
+        );
+        assert_eq!(instruction_clock_allowed(1, true), Ok(()));
+        assert_eq!(instruction_clock_allowed(2, false), Ok(()));
         // the second vCPU is built (Sprint 327); above the layout's eight, refused
-        assert_eq!(vcpus_allowed(2, lse2, &[], false, false), Ok(()));
-        assert_eq!(vcpus_allowed(8, lse2, &[], false, false), Ok(()));
-        assert!(refused(vcpus_allowed(9, lse2, &[], false, false)).contains("the layout has pages for 8"));
+        assert_eq!(vcpus_allowed(2, lse2, &[], false), Ok(()));
+        assert_eq!(vcpus_allowed(8, lse2, &[], false), Ok(()));
+        assert!(refused(vcpus_allowed(9, lse2, &[], false)).contains("the layout has pages for 8"));
     }
 
     /// `super::recon_lookup` over a copy of `table`'s bytes, through the view.
