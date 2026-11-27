@@ -64,9 +64,16 @@ Sources: `store/probe-runs/lap-20261017T040446837Z-dc268176/profile.txt` and `cp
   (45797800625), `wait_closed_kinds` (45813040124), `mutex_abandoned` (45871497648) and `named_sync_objects`
   (46053401854). Their contracts and family runs are held to those rows. A tenth run, `semantics_065c` (41018967302,
   Sprint 227), checked the case-set download and kept no files.
-- **The game's call contract** `contracts/windows.game.calls/0.2.0.json` cites runner game runs only (38176899195,
-  38203364352, 38206263976, 38216081440, all from 2026-10-11 and 2026-10-12, before the laptop). G3, met at Sprint
-  368, is judged against it. The laptop's game runs are cited only as evidence for one entry's order.
+- **The game's call comparison is mostly the laptop's, and its contract's evidence is the runner's.** G3's
+  `call_compare` holds w2m to a reference set of eleven Windows runs: runner run 38216081440 and ten laptop runs,
+  `lap-20261014T032442034Z-c8814547-01` to `-10` (the frozen host's record
+  `store/runs/frontier-643a6283510c-1792623423346201000`, its `reference_set`; each G3 record's `reference_ref`). The
+  set is the frozen host's last choice: its membership rules, which read laptop and runner runs, were not ported
+  (`crates/call_compare/src/lib.rs` 1251-1253), so no laptop game run since 2026-10-14 can join it. The contract
+  `contracts/windows.game.calls/0.2.0.json` cites runner runs only as its entries' evidence (38176899195, 38203364352,
+  38206263976, 38216081440, from 2026-10-11 and 2026-10-12).
+- **What the store already holds from the laptop:** 201 probe runs (`store/probe-runs/lap-*`), 34 game runs
+  (`store/game-runs/lap-*`) and the play-run traces (`store/laptop-traces/`).
 - **What was lost with the Mac side:** per-thread instruction counts from the CPU's counters (`pmc_*`), the dtrace and
   calibration tools, and the only path that makes a new laptop reference. No laptop run has been made since 2026-10-17.
 - **What the runner cannot give at all:** a game run past 180 s, any GPU or audio behavior, the Steam client (step 10's
