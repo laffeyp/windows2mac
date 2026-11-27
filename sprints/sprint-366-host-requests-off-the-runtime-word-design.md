@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 366
-status: active
+status: done
 phase: 6
 pass_kind: docs
 ---
@@ -113,4 +113,44 @@ request, places each vCPU's transport page, and orders the cards that take host 
 
 ## result
 
-GATES-LINE
+exit 0 in 241 s	default	2026-11-27T04:43:52Z	sprint 366	5fd4d381dccd94825ffcd89b60c6d98b388ed074	6764edb17e92010fd519a93bbd2b814874a3b0fc3fa2934b3a6cb00480bb2e11	root=0af6d2d0ce3f7e1f608a5d1af269a11e75c7f816	rust=crates python=0 samples=0	base=7ca67b25aa773bb11a9b42e723704de1ae2989f2
+
+- **The design:** `docs/design-host-requests-off-the-runtime-word-2026-11-26.md`, 536 lines. The grep's 67 lines in 14
+  files are the request's definition (`runtime.c` 26), two wrappers' bodies (`runtime.c` 22, `threads.c` 83) and 64
+  direct calls; the wrappers' 13 callers and `runtime.h` 341's two make the class 79 request sites. 39 hold guest state
+  across the `hvc #8`, 40 hold none. By kind: a shared static buffer 14, a table slot 15 (13 of `files[]`, 2 of
+  `searches[]`; 4 of them a file's position too), an object's id with its reference dropped 5, the wait's check 6, the
+  process's one exception area 3, a set-once static 1. No site holds a heap mid-change or the module table during a
+  load (that table is the host's).
+- **The per-vCPU page:** the 19th page of each vCPU's slot, `slot + 18 * PAGE`, mapped at `PROCESS_VA + TRANSPORT_OFF`
+  beside the state block; the tables move one page, 27 of 32; no table added, the page sharing the state block's
+  2 MB block. `struct w2m_transport` and `w2m_host`'s text unchanged; `VcpuPages` gains `transport`, and the host's
+  readers read the served vCPU's. The request server's child slot gains a record per vCPU at words 910-973.
+- **What the word still covers after C2:** the run table; the services still of class `RuntimeWord` between their
+  requests (`files[]`, the module statics, `info[]`); the in-VM compiler; the exception entry; and on the host the
+  requests whose serve writes the run table or PEB.Ldr. The run's lock stays one host lock; the host design's locks per
+  part are its card H.
+- **The woken mark's window:** opened by card 10 at the six wait sites, between the check's answer and `w2m_block`'s
+  exchange; the wait arms the mark before its check. Plant: the mark out of `wake_from_another_process`
+  (`threads.rs` 691), judged by `two_process_pipe_pingpong` 20 runs on two vCPUs with a census count that shows the
+  window reached.
+- **The judges:** every run as held on one vCPU and two; `own_answers.c`; `Outcome::requests_under_word` by op, zero
+  after card 12; the mark's plant.
+- **The cards:** after Sprint 367 (the batch run's stop on two vCPUs on the wall clock) and 368 (G3's runnable part),
+  by the Decision made at this close on reviewer-4's thirty-seventh review: card M, Sprint 369, measures the game's
+  batch run on two vCPUs with lock timing (`W2M_TIME_LOCKS`), the runtime word's takings, holds and waits split by
+  host request class, the count of requests under the word by op, and `GuestLock`'s hold and wait. The prerequisites,
+  Sprints 370-372: the per-vCPU page, the request server's record per vCPU thread, the host's serve by class. Then
+  the release cards (the nothing-held sites with the release helper first; two of buffers; the file slots; the file
+  position the host's; objects referenced across; the waits; the exception area and the clock's base) and card H,
+  the host's locks per part (design-rust-host 262-272), in the order of the measured wait each removes, each built
+  only above Change 1's bound, 5% busy or a p99 wait above 10 µs (design-rust-host 136-139), weighed against the
+  goal's 37,600 calls a second over four to six threads; `w2m_host` itself last. Every card's judge 1 names G3's runs.
+- **Commands:**
+  - `target/release/design_check` exit 0: "design_check: 10 plans and designs state the goal and the systems".
+  - `target/release/signal_report --check` exit 0.
+- **Plant 1** "docs/design-host-requests-off-the-runtime-word-2026-11-26.md: no "## Against the goal" section", design_check exit 1; live 04:25:28-04:25:43 UTC:
+  - The design copied to the scratchpad.
+  - Its "## Against the goal" heading removed by Edit.
+  - `design_check` exit 1: `docs/design-host-requests-off-the-runtime-word-2026-11-26.md: no "## Against the goal" section`.
+  - Restored by `cp`, `cmp` equal, `design_check` exit 0 again.
