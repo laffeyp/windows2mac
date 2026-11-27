@@ -2599,5 +2599,14 @@
     "jump_table_entries": 294,
     "block_starts": 4070,
     "undecodable": 0
+  },
+  "4d655151ad84481958a92a383bcd98a646ecdb1ab80f9835c2e743c9fe20b950.exe": {
+    "reachable_instructions": 1566,
+    "walked": 1566,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 364,
+    "undecodable": 0
   }
 }
