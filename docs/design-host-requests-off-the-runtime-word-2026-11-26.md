@@ -13,8 +13,8 @@ request's own definition (`runtime.c` 26), two wrappers' bodies (`runtime.c` 22 
 and 64 direct calls. The grep counts neither the wrappers' 13 callers nor `runtime.h` 341's `w2m_stack_grow`, which two
 sites call. The class is 79 request sites: 39 hold guest state across the `hvc #8`, 40 hold none. After G3 (Sprints 367 and
 368) a measuring card, Sprint 369, times the game's waits by request class; three prerequisite cards follow, then the
-release cards in the order of the wait each removes, each built only above Change 1's bound, and a split of the host's
-run lock placed by the same measurement.
+release cards in the order of the wait each removes, every one of them built inside step 6 (the user's fix (b)), and a
+split of the host's run lock placed by the same measurement.
 
 ## The state, as it is
 
@@ -327,15 +327,18 @@ changes "in the order those waits name", waits measured on the game. So the card
 measuring card does, Sprint 369, and each build card after the prerequisites goes in the order of the measured wait it
 removes.
 
-**The bound.** A card is built when the class of requests its rows make, or for card H the run's lock, shows either
-of Change 1's bounds for a lock of step 6: "busy more than 5% of the time or a p99 wait above 10 µs"
+**Every card is built; the measurement sets the order.** The Decision "Step 6 restored to the user's fix (b)" states
+that step 6 builds C2, "no word held across a host request", "inside the step and regardless of G6", from the user's
+fix (b) of 2026-10-24. So every card below is built inside step 6, whatever card M measures; the measurement orders
+them, the largest measured wait first, and names which of them the game's two-vCPU runs show waiting at all. The
+weight of a wait is read against Change 1's bounds for a lock of step 6: "busy more than 5% of the time or a p99 wait above 10 µs"
 (`docs/design-rust-host-2026-10-24.md` 136-139). Here "busy" is the word held across that class's requests, as a share
 of the run's wall time, and the p99 is over the waits of other vCPUs' takings that overlap such a holding. The goal
 gives the two figures their weight: at 37,600 calls a second over four to six threads of play, a 10 µs wait at every
 call would be 376 ms of each second (derived: 37,600 × 10 µs), 6.3% to 9.4% of six or four threads' time; 5% of the
-word held is 50 ms of each second taken from every other vCPU's park, readying and switch. A card whose class shows
-neither is named as not built, and is built when a later measurement shows one. Its rows stay held meanwhile, and judge
-3 names their ops.
+word held is 50 ms of each second taken from every other vCPU's park, readying and switch. A class above either bound
+goes before every class below both; among each group, the larger measured wait goes first. Until a card is built its
+rows stay held, and judge 3 names their ops.
 
 Each card is one concept; where a card touches more than two files it names them, as the handles design's card 2 did.
 Each card's plant is run at that card. A plant whose race the word still serializes shows only once the word is let go
@@ -385,9 +388,8 @@ request server's record per vCPU thread are prerequisites of every release; card
    check or an answer fails.
 
 **The release cards, by measured wait.** Card 4 comes first of them, since it makes the release every later card
-uses and the source test that holds each row; it releases its 40 rows only if their classes show a wait above the
-bound, and otherwise builds the release and the test alone. Cards 5 to 11 and card H then go in the order of the wait
-card M measured on the class each removes, the largest first, each built only above the bound. Three orders are fixed
+uses and the source test that holds each row, and it releases its 40 rows. Cards 5 to 11 and card H then go in the
+order of the wait card M measured on the class each removes, in the order set above, every one built. Three orders are fixed
 whatever the measurement: row 9 is released with card 7, since CreateFileW holds its slot; row 48 with card 9's
 references; and rows 46 and 47, card 10's, need card 9's references to the pipe ends, so card 10 carries those two if
 card 9 is not yet built. Card 12 is last and is built only once every row is released. Each card's judge 1 includes
@@ -529,8 +531,8 @@ already reserved. Eight request records of 64 bytes in each child's slot of the 
 - Judge 3's count stays above zero after card 12 in any run: the op it names is a site the table missed.
 - The woken mark's window is not reached in 20 runs at card 10 (the census count 0): the judge is widened before the
   plant is believed.
-- Card M shows no class and no `GuestLock` wait above the bound on G3's runs: no release card and no card H is built,
-  and C5 follows the prerequisites; the measurement is taken again at G5's and G6's runs, whose four and six threads
-  G3's batch run does not reach.
+- Card M shows no class and no `GuestLock` wait above the bounds on G3's runs: the cards are still all built, in the
+  order of their measured waits, and the measurement is taken again at G5's and G6's runs, whose four and six threads
+  G3's batch run does not reach; the order of the cards not yet built is set again from those.
 - A release card's own measure, taken again at its gate, shows its class's wait not removed: the class's rows are read
   again for state the table missed.

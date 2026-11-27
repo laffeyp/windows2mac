@@ -49,7 +49,7 @@ the game's log reached the reference's 168 lines.
   `crates/w2m_vm/src/host_request.rs` (where a request's serve asks the stop).
 - `crates/w2m_vm/tests/batch_run.rs`, `crates/w2m_vm/tests/batch_record.rs`, `store/batch_run/first-stop-2026-10-28.tsv`,
   `store/batch_run/main-thread-calls-2026-10-29.tsv`, and `scripts/gates.sh` 155-200 (the batch run's steps).
-- The frozen host's `scripts/run_frontier.py` 60-80 and 284-310 (`REACH_AFTER_LOG`, `stop_when`), read as source.
+- The frozen host's `scripts/run_frontier.py` 60-80 and 284-310 (`REACH_AFTER_LOG`, `stop_when`), read as source from git: `git show 72e0bab6a^:scripts/run_frontier.py` (Sprint 226 took the Python out of the tree).
 - `grep -n "Step 6's order after G2, weighed again at Sprint 366\|The instruction clock on several vCPUs\|The child on the run's vCPUs" BLACKBOARD.md`:
   the Decisions.
 - `WORKING_AGREEMENT.md` lines 137-266, "Build and verification commands".
