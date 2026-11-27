@@ -87,17 +87,26 @@ pub const SLOTS_LOCK: [&str; 7] = [
 /// for a source that names no object, take the runtime word in the C with no other lock held (`w2m_take_runtime_word`,
 /// `runtime.c`); `w2m_unimplemented` and `w2m_logged` are called only with the table's lock let go. The waits and
 /// releases take it with no word too (`SYNC_LOCK`, Sprint 356); every other caller of the table, CloseHandle among them,
-/// stays on the runtime word and takes the table's lock inside it, a leaf.
-pub const HANDLES_LOCK: [&str; 10] = [
+/// stays on the runtime word and takes the table's lock inside it, a leaf. From Sprint 369 the named sync objects the
+/// game declares, CreateMutexW, OpenMutexW, OpenEventW, OpenEventA and OpenSemaphoreW (and CreateSemaphoreW's name):
+/// a named mutex's or semaphore's make or open takes the runtime word in the C with no other lock held, for the host's
+/// name request, and holds it to the handle's publication, the table's lock taken under it (`named`); a named event's
+/// open takes it for the request alone, as CreateEventW's.
+pub const HANDLES_LOCK: [&str; 15] = [
     "CreateEventA",
     "CreateEventExW",
     "CreateEventW",
     "CreateMutexA",
+    "CreateMutexW",
     "CreateSemaphoreExW",
     "CreateSemaphoreW",
     "DuplicateHandle",
     "GetProcessId",
     "GetThreadId",
+    "OpenEventA",
+    "OpenEventW",
+    "OpenMutexW",
+    "OpenSemaphoreW",
     "OpenThread",
 ];
 
@@ -112,12 +121,14 @@ pub const HANDLES_LOCK: [&str; 10] = [
 /// holds the word from its check to its park. Its other stores are the calling thread's TEB (its last error, its wait's
 /// deadline), ReleaseSemaphore's `*lpPreviousCount`, its run entry's woken mark (armed under the sync objects' lock), its
 /// vCPU's state block (`schedule`), and the call ring by atomic add (`w2m_logged`); `w2m_unimplemented` and `w2m_logged`
-/// are called only with both leaves let go.
-pub const SYNC_LOCK: [&str; 8] = [
+/// are called only with both leaves let go. From Sprint 369 SignalObjectAndWait, whose signal is a release's and whose
+/// wait is WaitForSingleObject's.
+pub const SYNC_LOCK: [&str; 9] = [
     "ReleaseMutex",
     "ReleaseSemaphore",
     "ResetEvent",
     "SetEvent",
+    "SignalObjectAndWait",
     "WaitForMultipleObjects",
     "WaitForMultipleObjectsEx",
     "WaitForSingleObject",
@@ -508,9 +519,10 @@ mod tests {
     /// KERNEL32's and defined in `sync_objects.c`, of class handles on every clock; the other callers of the handle
     /// table, which take its lock inside the runtime word, stay on the word: CloseHandle (its file path), the waits and
     /// releases (card 5's), Get/SetHandleInformation (the file table), the process, pipe and thread services (host
-    /// requests), the thread information calls, and ADVAPI32's token calls.
+    /// requests), the thread information calls, and ADVAPI32's token calls. Sprint 369: fifteen, with the named sync
+    /// objects' make and opens, CreateMutexW, OpenEventA, OpenEventW, OpenMutexW and OpenSemaphoreW.
     #[test]
-    fn the_ten_services_of_lock_class_handles_are_the_handle_tables() {
+    fn the_fifteen_services_of_lock_class_handles_are_the_handle_tables() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let texts = crate::texts(&root).unwrap();
         let all = services(&texts).unwrap();
@@ -527,11 +539,16 @@ mod tests {
                 "KERNEL32!CreateEventExW",
                 "KERNEL32!CreateEventW",
                 "KERNEL32!CreateMutexA",
+                "KERNEL32!CreateMutexW",
                 "KERNEL32!CreateSemaphoreExW",
                 "KERNEL32!CreateSemaphoreW",
                 "KERNEL32!DuplicateHandle",
                 "KERNEL32!GetProcessId",
                 "KERNEL32!GetThreadId",
+                "KERNEL32!OpenEventA",
+                "KERNEL32!OpenEventW",
+                "KERNEL32!OpenMutexW",
+                "KERNEL32!OpenSemaphoreW",
                 "KERNEL32!OpenThread",
             ],
             "the services of lock class handles"
@@ -577,9 +594,10 @@ mod tests {
     /// the guest's counter and the instruction clock, and the runtime word's on the host's clock, where a timed wait's
     /// counter read is a host request; the other services that reach these kinds' state or a wait stay where they were:
     /// CloseHandle and the pipe and process calls on the word, the creates, DuplicateHandle and the id lookups on the
-    /// handle table's lock, Sleep, the critical sections and the slim locks on the word.
+    /// handle table's lock, Sleep, the critical sections and the slim locks on the word. Sprint 369: nine, with
+    /// SignalObjectAndWait, a release's signal and WaitForSingleObject's wait.
     #[test]
-    fn the_eight_services_of_lock_class_sync_objects_are_the_waits_and_releases() {
+    fn the_nine_services_of_lock_class_sync_objects_are_the_waits_and_releases() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let texts = crate::texts(&root).unwrap();
         let all = services(&texts).unwrap();
@@ -596,6 +614,7 @@ mod tests {
                 "KERNEL32!ReleaseSemaphore",
                 "KERNEL32!ResetEvent",
                 "KERNEL32!SetEvent",
+                "KERNEL32!SignalObjectAndWait",
                 "KERNEL32!WaitForMultipleObjects",
                 "KERNEL32!WaitForMultipleObjectsEx",
                 "KERNEL32!WaitForSingleObject",
@@ -750,6 +769,9 @@ mod tests {
             (293, "WideCharToMultiByte"),
             (299, "timeGetTime"),
             (300, "SleepConditionVariableCS"),
+            // Sprint 369: the named sync objects, each the next id after the largest
+            (301, "CreateMutexW"),
+            (306, "SignalObjectAndWait"),
         ] {
             assert_eq!(head[id - 1], name, "the frozen id {id}");
         }

@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Peter Laffey
 //! The families judged on the Rust host as the gate counts them (census row 6; plan step 4, "68 of 68 families";
 //! Sprint 221). The population is every run `store/runs/family-runs.json` judged, 273 in 68 families, read from the
-//! lookup `store/family_runs/known-2026-10-29.tsv` (`family_known`): each run's binary, the contract and version its
+//! lookup `store/family_runs/known-2026-10-29.tsv` (`family_known`; from Sprint 369 after them the families that joined
+//! on the Rust host, `store/family_runs/joined-2026-11-27.tsv`): each run's binary, the contract and version its
 //! family record judged it by, its beside DLL, and its row rule. `scripts/gates.sh` runs each row in `w2m-vm` as
 //! probe.exe with its beside DLL and an instruction budget, writing build/family_runs/<family>-<run>.txt and .stop.
 //!
@@ -34,6 +35,10 @@ use serde_json::{Map, Value};
 
 const KNOWN: &str = "store/family_runs/known-2026-10-29.tsv";
 const HELD: &str = "store/family_runs/sweep-held-2026-10-29.tsv";
+/// The families that joined on the Rust host after the frozen index (Sprint 369), which `family_known` reads after its
+/// 273 runs.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const JOINED: &str = "store/family_runs/joined-2026-11-27.tsv";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1248,7 +1253,8 @@ fn the_extracts_family_rows_are_the_tags() {
 }
 
 /// The table of what each run of the family index will ask is the lookup's output, not a file that drifts from it
-/// (Sprint 221): `family_known` run over the tree gives the stored rows, comments left out.
+/// (Sprint 221): `family_known` run over the tree gives the stored rows, comments left out; from Sprint 369 the 273
+/// frozen runs and after them the joined families' runs, none a frozen family.
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 #[test]
 fn the_stored_lookup_is_family_knowns_output() {
@@ -1262,7 +1268,32 @@ fn the_stored_lookup_is_family_knowns_output() {
     let stored: Vec<&str> = stored.lines().filter(|l| !l.starts_with('#')).collect();
     let derived = String::from_utf8(out.stdout).unwrap();
     assert_eq!(stored, derived.lines().collect::<Vec<_>>());
-    assert_eq!(stored.len(), 273, "the runs the family index judged");
+    // the frozen index's runs, then the families that joined on the Rust host (Sprint 369), each once
+    let joined: Vec<String> = fs::read_to_string(root.join(JOINED))
+        .unwrap()
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+        .map(|l| l.split('\t').take(2).collect::<Vec<_>>().join("\t"))
+        .collect();
+    assert_eq!(
+        stored.len(),
+        273 + joined.len(),
+        "the runs the family index judged, and the joined"
+    );
+    let tail: Vec<String> = stored[273..]
+        .iter()
+        .map(|l| l.split('\t').take(2).collect::<Vec<_>>().join("\t"))
+        .collect();
+    assert_eq!(
+        tail, joined,
+        "the joined runs follow the frozen index's 273, in {JOINED}'s order"
+    );
+    for family in joined.iter().map(|r| r.split('\t').next().unwrap()) {
+        assert!(
+            !stored[..273].iter().any(|l| l.split('\t').next() == Some(family)),
+            "{family} joins on the Rust host and is a frozen family"
+        );
+    }
 }
 
 #[test]

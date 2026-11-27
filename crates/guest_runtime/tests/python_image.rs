@@ -118,7 +118,8 @@ const DEPARTURES: [(&str, &str); 14] = [
          guard's scope and W2M_LET_GO_BEFORE_STOP in a function its caller's guard holds the lock for; the runtime \
          word's guard (hold_runtime_word, runtime_word_guard_end), which lets it go only when its take took it, and \
          w2m_take_runtime_word and w2m_let_runtime_word_go declared here; Sprint 368: \
-         w2m_critical_section_leave_once and w2m_critical_section_enter declared",
+         w2m_critical_section_leave_once and w2m_critical_section_enter declared; Sprint 369: W2M_KERNEL_NAMED_OPEN, \
+         the host's named open by kind (kernel.rs), its kinds, create flag and answers",
     ),
     (
         "tools/guest_runtime/slim_locks.c",
@@ -148,7 +149,10 @@ const DEPARTURES: [(&str, &str); 14] = [
          of the handle table, the sync objects and the runtime word a scoped guard (W2M_HELD, runtime.h; \
          WORD_WHEN_NEEDED for a release that may take the word), each holding a block and let go at its end, the \
          counter's read and the park of a wait moved after its holding's end, and a release by hand only before \
-         w2m_unimplemented or w2m_logged, named",
+         w2m_unimplemented or w2m_logged, named; Sprint 369: the named sync objects the game declares, CreateMutexW, \
+         OpenMutexW, OpenEventW, OpenEventA, OpenSemaphoreW and SignalObjectAndWait, CreateSemaphoreW named, and a \
+         name of a mutex or semaphore refused to CreateEventW, held to probes/named_sync_objects' Windows rows; the \
+         three releases' state change one function, signal_object, which SignalObjectAndWait's signal shares",
     ),
     (
         "tools/guest_runtime/thread_storage.c",

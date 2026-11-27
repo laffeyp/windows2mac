@@ -308,7 +308,12 @@ enum { W2M_FILE_LOOKUP = 6, W2M_FILE_OPEN, W2M_FILE_CLOSE, W2M_FILE_READ, W2M_FI
 /* W2M_HOST_KERNEL's sub-operations (src/w2m/kernel.py): the objects processes share. */
 enum { W2M_KERNEL_EVENT_OPEN = 1, W2M_KERNEL_EVENT_STATE, W2M_KERNEL_EVENT_TAKE, W2M_KERNEL_EVENT_SET,
        W2M_KERNEL_EVENT_RESET, W2M_KERNEL_CLOSE, W2M_KERNEL_PIPE_CREATE, W2M_KERNEL_PIPE_READ, W2M_KERNEL_PIPE_WRITE,
-       W2M_KERNEL_PROCESS_CREATE, W2M_KERNEL_PROCESS_STATE, W2M_KERNEL_REF };
+       W2M_KERNEL_PROCESS_CREATE, W2M_KERNEL_PROCESS_STATE, W2M_KERNEL_REF,
+       W2M_KERNEL_NAMED_OPEN };                    /* 13: Sprint 369, a named object by name and kind (kernel.rs) */
+/* W2M_KERNEL_NAMED_OPEN's kinds and create flag, and its answers' second word, EVENT_OPEN's for a name of another kind */
+enum { W2M_NAMED_EVENT = 1, W2M_NAMED_MUTEX, W2M_NAMED_SEMAPHORE };
+#define W2M_NAMED_CREATE 0x100
+enum { W2M_NAME_CREATED, W2M_NAME_EXISTED, W2M_NAME_ABSENT, W2M_NAME_OTHER_KIND };
 /* sync_objects.c's object kinds for the host's objects (kernel.py KIND_*; PROCESS is 7) */
 #define W2M_OBJECT_SHARED_EVENT 9
 #define W2M_OBJECT_PIPE_READ 10

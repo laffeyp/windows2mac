@@ -15,7 +15,9 @@
 //! derivation or "raw", and its excluded rows' count), from Sprint 233 the excluded rows' names and the expected stop
 //! (`Family.excluded`, `Family.expected_stop`); lists space-separated or "-". An import is not a call: a run
 //! stops on one only if it calls it. `store/family_runs/known-2026-10-29.tsv`
-//! holds the output; `tests/family_runs.rs` holds the file to it.
+//! holds the output; `tests/family_runs.rs` holds the file to it. From Sprint 369 the families that joined on the Rust
+//! host follow the frozen index's 273 runs, from `store/family_runs/joined-2026-11-27.tsv` (`JOINED`), each run's binary
+//! and contract named there, since the frozen index and extract hold the frozen host's families alone.
 //!
 //! The extract was written by this binary's text reader from `family_run.py` at the tag frozen-python-2026-10-29, and the
 //! table it gives was held equal to the stored one before the Python went. A column of the imported services whose C body refuses some argument form was tried and
@@ -190,6 +192,23 @@ mod known {
         Err(format!("{record}: no COMPARISON_COMPLETED"))
     }
 
+    /// The families that joined the family runs on the Rust host, after the frozen index (Sprint 369): their runs, read
+    /// after `store/runs/family-runs.json`'s. The frozen extract and index hold the frozen host's families alone, and a
+    /// family judged first here is no frozen host's data. Rows: family, run, binary, contract@version, the beside DLL
+    /// as "<name>:<sha256>" or "-", the start options or "-"; no excluded rows and no expected stop.
+    const JOINED: &str = "store/family_runs/joined-2026-11-27.tsv";
+
+    /// A joined run as `run` prints it: (family, run, binary, contract, beside, start).
+    fn joined(text: &str) -> Result<Vec<[String; 6]>, String> {
+        text.lines()
+            .filter(|l| !l.starts_with('#') && !l.is_empty())
+            .map(|l| match l.split('\t').collect::<Vec<_>>()[..] {
+                [f, r, b, c, d, s] => Ok([f, r, b, c, d, s].map(str::to_string)),
+                _ => Err(format!("{JOINED}: a row of 6 columns, not {l:?}")),
+            })
+            .collect()
+    }
+
     /// An image's imports as "dll!name", delay imports included (`pe_image`'s `iat`).
     fn imports(path: &Path) -> Result<BTreeSet<String>, String> {
         let raw = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -217,6 +236,17 @@ mod known {
                 s.iter().cloned().collect::<Vec<_>>().join(" ")
             }
         };
+        // the imports no runtime service answers, the beside DLL's own left out
+        let unserved_of = |asked: &BTreeSet<String>, beside: Option<&str>| -> BTreeSet<String> {
+            asked
+                .iter()
+                .filter(|import| {
+                    let (dll, function) = import.split_once('!').unwrap_or((import, ""));
+                    beside != Some(dll.to_lowercase().as_str()) && service_for(&services, dll, function).is_none()
+                })
+                .cloned()
+                .collect()
+        };
         let index = index.as_object().ok_or("family-runs.json: not an object")?;
         for (family, entry) in index {
             let record = entry["record"].as_str().ok_or(format!("{family}: no record"))?;
@@ -243,15 +273,7 @@ mod known {
                     asked.extend(imports(&root.join(format!("store/binaries/{dll}.dll")))?);
                 }
                 let beside = dll_name.map(|n| n.to_lowercase());
-                let unserved: BTreeSet<String> = asked
-                    .iter()
-                    .filter(|import| {
-                        let (dll, function) = import.split_once('!').unwrap_or((import, ""));
-                        beside.as_deref() != Some(dll.to_lowercase().as_str())
-                            && service_for(&services, dll, function).is_none()
-                    })
-                    .cloned()
-                    .collect();
+                let unserved = unserved_of(&asked, beside.as_deref());
                 let beside_file = match (dll_name, &run.dll) {
                     (Some(name), Some(sha)) => format!("{name}:{sha}"),
                     (Some(name), None) => name.clone(),
@@ -263,6 +285,20 @@ mod known {
                     list(&unserved),
                 );
             }
+        }
+        // the families that joined on the Rust host (Sprint 369), after the frozen index's, in the list's order
+        for [family, run_id, binary, contract, beside, start] in joined(&read(JOINED)?)? {
+            let mut asked = imports(&root.join(format!("store/binaries/{binary}.exe")))?;
+            if let Some((_, sha)) = beside.split_once(':') {
+                asked.extend(imports(&root.join(format!("store/binaries/{sha}.dll")))?);
+            }
+            let name = (beside != "-").then(|| beside.split(':').next().unwrap_or("").to_lowercase());
+            let unserved = unserved_of(&asked, name.as_deref());
+            let rule = rule(&root, &contract)?;
+            println!(
+                "{family}\t{run_id}\t{binary}\t{contract}\t{beside}\t{}\t{start}\t{rule} excluded 0\t-\t-",
+                list(&unserved),
+            );
         }
         Ok(())
     }

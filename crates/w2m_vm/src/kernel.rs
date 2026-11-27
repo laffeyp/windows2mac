@@ -23,6 +23,22 @@ pub const PIPE_WRITE: u64 = 9;
 pub const PROCESS_CREATE: u64 = 10;
 pub const PROCESS_STATE: u64 = 11;
 pub const REF: u64 = 12;
+/// A named object by name and kind (Sprint 369), in the one namespace Windows' events, mutexes and semaphores share:
+/// "If lpName matches the name of an existing event, semaphore, waitable timer, job, or file-mapping object, the
+/// function fails and the GetLastError function returns ERROR_INVALID_HANDLE. This occurs because these objects share
+/// the same namespace" (Microsoft Learn, CreateMutexW). a3 is the kind (`NAMED_EVENT`, `NAMED_MUTEX`,
+/// `NAMED_SEMAPHORE`), with `NAMED_CREATE` to make a mutex or a semaphore absent by that name; the second word is
+/// `NAME_CREATED`, `NAME_EXISTED`, `NAME_ABSENT` or `NAME_OTHER_KIND`.
+pub const NAMED_OPEN: u64 = 13;
+pub const NAMED_EVENT: u64 = 1;
+pub const NAMED_MUTEX: u64 = 2;
+pub const NAMED_SEMAPHORE: u64 = 3;
+pub const NAMED_CREATE: u64 = 1 << 8;
+pub const NAME_CREATED: u64 = 0;
+pub const NAME_EXISTED: u64 = 1;
+pub const NAME_ABSENT: u64 = 2;
+/// also EVENT_OPEN's second word for a name a mutex or a semaphore holds (Sprint 369)
+pub const NAME_OTHER_KIND: u64 = 3;
 /// kernel.py 61, 70-71
 pub const STILL_ACTIVE: u64 = 259;
 pub const OBJECT_IDS: u64 = 1 << 32;
@@ -129,6 +145,14 @@ enum Object {
         readers: i64,
         writers: i64,
     },
+    /// A named mutex or semaphore (Sprint 369): its name and kind here, in the namespace the events share, its state
+    /// in the guest runtime of the process `pid` that made it, whose object names this id.
+    Named {
+        name: String,
+        kind: u64,
+        pid: u64,
+        handles: i64,
+    },
 }
 
 /// The objects a run's processes share (kernel.py's `Machine` tables).
@@ -234,8 +258,10 @@ impl Objects {
             EVENT_OPEN => {
                 let name = read_text(mem, a1, a2)?;
                 if let Some(&oid) = self.names.get(&name) {
-                    if let Some(Object::Event { handles, .. }) = self.objects.get_mut(&oid) {
-                        *handles += 1;
+                    match self.objects.get_mut(&oid) {
+                        Some(Object::Event { handles, .. }) => *handles += 1,
+                        // a mutex's or a semaphore's name (Sprint 369): CreateEventW fails, ERROR_INVALID_HANDLE
+                        _ => return Ok(answer(0, NAME_OTHER_KIND)),
                     }
                     *self.held(pid).entry(oid).or_default() += 1;
                     return Ok(answer(oid, 1));
@@ -281,6 +307,47 @@ impl Objects {
                 self.reference(a1)?;
                 *self.held(pid).entry(a1).or_default() += 1;
                 Ok(answer(0, 0))
+            }
+            NAMED_OPEN => {
+                let name = read_text(mem, a1, a2)?;
+                let (kind, create) = (a3 & 0xFF, a3 & NAMED_CREATE != 0);
+                if !(NAMED_EVENT..=NAMED_SEMAPHORE).contains(&kind) || (create && kind == NAMED_EVENT) {
+                    return Err(format!("a named open of kind {a3:#x}"));
+                }
+                let Some(&oid) = self.names.get(&name) else {
+                    if !create {
+                        return Ok(answer(0, NAME_ABSENT));
+                    }
+                    let oid = self.new_object(Object::Named {
+                        name: name.clone(),
+                        kind,
+                        pid,
+                        handles: 1,
+                    });
+                    self.names.insert(name, oid);
+                    *self.held(pid).entry(oid).or_default() += 1;
+                    return Ok(answer(oid, NAME_CREATED));
+                };
+                match self.objects.get_mut(&oid) {
+                    // an event's handle is a guest object of its own, closed on its own: one handle more
+                    Some(Object::Event { handles, .. }) if kind == NAMED_EVENT => *handles += 1,
+                    // a mutex's or a semaphore's handles all name the maker's one guest object, which holds the
+                    // name's one handle and closes it at its own last: no handle more
+                    Some(Object::Named {
+                        kind: k, pid: maker, ..
+                    }) if *k == kind => {
+                        if *maker != pid {
+                            return Err(format!(
+                                "process {pid} opens {name:?}, a named mutex or semaphore whose state is process \
+                                 {maker}'s: not in the rows"
+                            ));
+                        }
+                        return Ok(answer(oid, NAME_EXISTED));
+                    }
+                    _ => return Ok(answer(0, NAME_OTHER_KIND)),
+                }
+                *self.held(pid).entry(oid).or_default() += 1;
+                Ok(answer(oid, NAME_EXISTED))
             }
             PIPE_CREATE => {
                 let pipe = self.new_object(Object::Pipe {
@@ -384,7 +451,7 @@ impl Objects {
             return Ok(());
         }
         match self.objects.get_mut(&oid) {
-            Some(Object::Event { handles, .. }) => {
+            Some(Object::Event { handles, .. } | Object::Named { handles, .. }) => {
                 *handles += 1;
                 Ok(())
             }
@@ -409,7 +476,11 @@ impl Objects {
             p.handles -= 1;
             return false;
         }
-        if let Some(Object::Event { name, handles, .. }) = self.objects.get_mut(&oid) {
+        // an event, or a named mutex or semaphore (Sprint 369): the name goes with the last handle, "The mutex object is
+        // destroyed when its last handle has been closed" (Microsoft Learn, CreateMutexW)
+        if let Some(Object::Event { name, handles, .. } | Object::Named { name, handles, .. }) =
+            self.objects.get_mut(&oid)
+        {
             *handles -= 1;
             if *handles == 0 {
                 let name = name.clone();
@@ -469,6 +540,59 @@ mod tests {
                 .unwrap()
                 .result,
             0
+        );
+    }
+
+    /// Sprint 369: events, mutexes and semaphores share one namespace. A named mutex is made once and opened again by
+    /// its maker, the maker's one guest object holding the name's one handle; an open of an absent name answers absent
+    /// and makes nothing; a name of another kind answers so to a named open and to EVENT_OPEN, changing no count; the
+    /// close of that one handle frees the name; another process's open of a process's named mutex is refused by name.
+    #[test]
+    fn events_mutexes_and_semaphores_share_one_namespace() {
+        let (mut k, mut mem) = (Objects::new(), with_name("m"));
+        let open = |k: &mut Objects, mem: &mut Region, pid, a3| {
+            let a = k.request(pid, [NAMED_OPEN, 0x1000, 1, a3], mem).unwrap();
+            (a.result, a.second)
+        };
+        assert_eq!(open(&mut k, &mut mem, 4096, NAMED_MUTEX), (0, NAME_ABSENT));
+        let m = OBJECT_IDS;
+        assert_eq!(
+            open(&mut k, &mut mem, 4096, NAMED_MUTEX | NAMED_CREATE),
+            (m, NAME_CREATED)
+        );
+        assert_eq!(
+            open(&mut k, &mut mem, 4096, NAMED_MUTEX | NAMED_CREATE),
+            (m, NAME_EXISTED)
+        );
+        assert_eq!(open(&mut k, &mut mem, 4096, NAMED_MUTEX), (m, NAME_EXISTED));
+        assert_eq!(
+            k.processes[&4096].held[&m], 1,
+            "the maker's one guest object holds the name"
+        );
+        for kind in [NAMED_EVENT, NAMED_SEMAPHORE, NAMED_SEMAPHORE | NAMED_CREATE] {
+            assert_eq!(
+                open(&mut k, &mut mem, 4096, kind),
+                (0, NAME_OTHER_KIND),
+                "kind {kind:#x}"
+            );
+        }
+        let e = k.request(4096, [EVENT_OPEN, 0x1000, 1, 0], &mut mem).unwrap();
+        assert_eq!((e.result, e.second), (0, NAME_OTHER_KIND));
+        assert_eq!(k.processes[&4096].held[&m], 1, "a refused open holds nothing");
+        assert!(
+            k.request(4100, [NAMED_OPEN, 0x1000, 1, NAMED_MUTEX], &mut mem)
+                .unwrap_err()
+                .contains("whose state is process 4096's")
+        );
+        k.request(4096, [CLOSE, m, 0, 0], &mut mem).unwrap();
+        assert_eq!(open(&mut k, &mut mem, 4096, NAMED_MUTEX), (0, NAME_ABSENT));
+        // the event's name, opened by kind
+        let e = k.request(4096, [EVENT_OPEN, 0x1000, 1, 0], &mut mem).unwrap();
+        assert_eq!(e.second, NAME_CREATED);
+        assert_eq!(open(&mut k, &mut mem, 4096, NAMED_EVENT), (e.result, NAME_EXISTED));
+        assert_eq!(
+            open(&mut k, &mut mem, 4096, NAMED_MUTEX | NAMED_CREATE),
+            (0, NAME_OTHER_KIND)
         );
     }
 

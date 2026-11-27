@@ -302,3 +302,9 @@
 298 timeEndPeriod
 299 timeGetTime
 300 SleepConditionVariableCS
+301 CreateMutexW
+302 OpenEventA
+303 OpenEventW
+304 OpenMutexW
+305 OpenSemaphoreW
+306 SignalObjectAndWait

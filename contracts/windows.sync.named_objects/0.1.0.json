@@ -1,0 +1,189 @@
+{
+ "contract_id": "windows.sync.named_objects",
+ "version": "0.1.0",
+ "status": "accepted",
+ "summary": "The named sync objects the game declares and the Windows batch run never called (Sprint 369; docs/unserved-declared-imports-2026-11-27.md): mono-2.0-bdwgc.dll's CreateMutexW, OpenMutexW, OpenEventW, OpenSemaphoreW and SignalObjectAndWait, UnityPlayer.dll's OpenEventA and SignalObjectAndWait. A named mutex made owned, made again (ERROR_ALREADY_EXISTS) and opened by name, with SYNCHRONIZE alone and with MUTEX_ALL_ACCESS, four distinct handles to one mutex; a named event and a named semaphore opened by name with their access masks; an open of an absent name NULL and ERROR_FILE_NOT_FOUND (2) for each kind, and of every name once its last handle is closed; a name another kind holds NULL and ERROR_INVALID_HANDLE (6) to every make and open; SignalObjectAndWait, its alertable flag false, signaling an event, a semaphore and a mutex and waiting on an event, a semaphore, a mutex and an ended thread with a timeout of 0, a failed signal WAIT_FAILED with its release's error (298, 288), a closed handle to signal or to wait on WAIT_FAILED and 6 with the object to signal left unset, and Microsoft Learn's example, a worker's wait ended by the main thread (Windows run 46053401854, three runs alike). The rows were first written from Learn's pages (probes/named_sync_objects/expected.jsonl, null where they are silent); the run settled every silent cell, and every stated one agreed.",
+ "applicability": "runner (gha-windows-2025-x64-10.0.26100.33828-Server, AMD EPYC 9V45 96-Core Processor)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the runner's cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/named_sync_objects/named_sync_objects.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "mutex",
+    "created": 1,
+    "create_error": 0,
+    "again": 1,
+    "again_error": 183,
+    "opened": 1,
+    "open_error": 0,
+    "opened_all": 1,
+    "open_all_error": 0,
+    "distinct": 1,
+    "other_owned": 258,
+    "owner_wait": 0,
+    "released": 1,
+    "released_open": 1,
+    "released_extra": 0,
+    "release_error": 288,
+    "other_free": 0
+   },
+   {
+    "s": "mutex.absent",
+    "opened": 0,
+    "error": 2
+   },
+   {
+    "s": "event",
+    "created": 1,
+    "create_error": 0,
+    "opened": 1,
+    "open_error": 0,
+    "opened_ansi": 1,
+    "open_ansi_error": 0,
+    "distinct": 1,
+    "before": 258,
+    "set": 1,
+    "after_set": 0,
+    "reset": 1,
+    "after_reset": 258
+   },
+   {
+    "s": "event.absent",
+    "opened": 0,
+    "error": 2,
+    "opened_ansi": 0,
+    "ansi_error": 2
+   },
+   {
+    "s": "semaphore",
+    "created": 1,
+    "create_error": 0,
+    "again": 1,
+    "again_error": 183,
+    "opened": 1,
+    "open_error": 0,
+    "opened_modify": 1,
+    "open_modify_error": 0,
+    "distinct": 1,
+    "take": 0,
+    "empty": 258,
+    "released": 1,
+    "previous": 0,
+    "over": 0,
+    "over_error": 298
+   },
+   {
+    "s": "semaphore.absent",
+    "opened": 0,
+    "error": 2
+   },
+   {
+    "s": "kind",
+    "create_mutex_on_event": 0,
+    "create_mutex_on_event_error": 6,
+    "open_mutex_on_semaphore": 0,
+    "open_mutex_on_semaphore_error": 6,
+    "open_event_on_mutex": 0,
+    "open_event_on_mutex_error": 6,
+    "open_event_ansi_on_semaphore": 0,
+    "open_event_ansi_on_semaphore_error": 6,
+    "open_semaphore_on_event": 0,
+    "open_semaphore_on_event_error": 6,
+    "create_event_on_mutex": 0,
+    "create_event_on_mutex_error": 6,
+    "create_semaphore_on_mutex": 0,
+    "create_semaphore_on_mutex_error": 6
+   },
+   {
+    "s": "closed",
+    "mutex": 0,
+    "mutex_error": 2,
+    "event": 0,
+    "event_error": 2,
+    "semaphore": 0,
+    "semaphore_error": 2
+   },
+   {
+    "s": "saw.event",
+    "wait": 258,
+    "signaled": 0,
+    "wait_set": 0
+   },
+   {
+    "s": "saw.semaphore",
+    "wait": 0,
+    "after": 258,
+    "full": 4294967295,
+    "full_error": 298,
+    "after_full": 0
+   },
+   {
+    "s": "saw.mutex",
+    "wait": 0,
+    "other": 0,
+    "not_owner": 4294967295,
+    "not_owner_error": 288,
+    "wait_mutex": 0,
+    "other_owned": 258
+   },
+   {
+    "s": "saw.thread",
+    "wait": 0
+   },
+   {
+    "s": "saw.closed",
+    "signal": 4294967295,
+    "signal_error": 6,
+    "wait": 4294967295,
+    "wait_error": 6,
+    "signaled": 258
+   },
+   {
+    "s": "saw.handoff",
+    "ready": 0,
+    "ended": 0,
+    "worker_wait": 0,
+    "worker_error": 0,
+    "go_after": 258
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "runner-rows",
+   "category": "observed",
+   "source_ref": "run 46053401854: gha-windows-2025-x64-10.0.26100.33828-Server, AMD EPYC 9V45 96-Core Processor, probe sha256:446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f, store/probe-runs/46053401854/body-1.jsonl to body-3.jsonl, byte for byte alike",
+   "applicability": "the build and CPU observed",
+   "execution_ids": [
+    "369-named-sync-objects-20261127T185903Z-1",
+    "369-named-sync-objects-20261127T185903Z-2",
+    "369-named-sync-objects-20261127T185903Z-3"
+   ]
+  }
+ ],
+ "open_questions": [
+  "A handle opened with fewer rights than its kind's all-access is served with every right in w2m; no row shows a call refused for want of one (ERROR_ACCESS_DENIED).",
+  "A named mutex or semaphore another process made is not served (the host stops the run by name): no row has two processes.",
+  "The \"Global\" and \"Local\" prefixes are not rows: a name is compared whole."
+ ],
+ "sections": {
+  "probe": "probes/named_sync_objects (Sprint 369)",
+  "implementation": "tools/guest_runtime/sync_objects.c; crates/w2m_vm/src/kernel.rs NAMED_OPEN",
+  "rows": "the probe's standard output, raw",
+  "excluded": "none"
+ }
+}

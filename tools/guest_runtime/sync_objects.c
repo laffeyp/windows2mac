@@ -52,7 +52,9 @@ enum kind { FREE, SEMAPHORE, EVENT_MANUAL, EVENT_AUTO, MUTEX, TOKEN, THREAD, PRO
  * references ("Each routine that opens a handle increases both the object reference count and the object handle
  * count by one", the same page); the host's closes come when they reach 0, at CloseHandle of the last, as before Sprint
  * 350 (reviewer-4's nineteenth review, Medium 1), so another process sees a shared object close when it did. */
-static struct object { u32 kind; s64 count, max; u32 refs, handles, abandoned; } objects[OBJECTS];
+static struct object { u32 kind; s64 count, max; u32 refs, handles, abandoned; u64 name; } objects[OBJECTS];
+/* name (Sprint 369): a named mutex's or semaphore's id in the host's namespace (kernel.rs NAMED_OPEN), 0 when unnamed;
+ * written before the object's first handle is published and fixed after, as `kind` is. */
 /* abandoned (Sprint 356's amendment): a mutex whose owner thread ended holding it (`w2m_mutexes_abandoned`), cleared by
  * the first wait that takes it, which answers WAIT_ABANDONED (or WAIT_ABANDONED_0 + its index) once; Microsoft Learn,
  * WaitForSingleObject: "The specified object is a mutex object that was not released by the thread that owned the
@@ -248,6 +250,7 @@ int w2m_object_close(u64 h) {
     int last;
     u32 kind;
     s64 id;
+    u64 name;
     {
         W2M_HELD(handles);
         int i = slot_of(h);
@@ -257,6 +260,7 @@ int w2m_object_close(u64 h) {
         last = --o->handles == 0;
         kind = o->kind;
         id = changes(o) ? 0 : o->count;       /* a semaphore's, an event's, a mutex's: `sync_lock`'s, and unused here */
+        name = o->name;
         unref(o);
     }
     if (last) {
@@ -264,6 +268,8 @@ int w2m_object_close(u64 h) {
         if (kind == SHARED_EVENT || kind == PIPE_READ || kind == PIPE_WRITE ||
             (kind == PROCESS && (u32)id != (u32)w2m_teb()->client_process))
             w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_CLOSE, (u64)id, 0, 0, 0);   /* the host's handle count */
+        if (name)                         /* a named mutex's or semaphore's name goes with its last handle (Sprint 369) */
+            w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_CLOSE, name, 0, 0, 0);
     }
     return 1;
 }
@@ -276,7 +282,11 @@ u64 k32_CreateSemaphoreExW(u64 attributes, u64 initial, u64 maximum, u64 name, u
 }
 
 /* A named event is the host's, so other processes open it by name (rows event.create_*, child.event_*: a name
- * that exists answers a new handle to the same event and ERROR_ALREADY_EXISTS; a new one sets the last error 0). */
+ * that exists answers a new handle to the same event and ERROR_ALREADY_EXISTS; a new one sets the last error 0). A
+ * name a named mutex or semaphore holds answers NULL and ERROR_INVALID_HANDLE (Sprint 369): "If lpName matches the
+ * name of another kind of object in the same namespace (such as an existing semaphore, mutex, waitable timer, job, or
+ * file-mapping object), the function fails and the GetLastError function returns ERROR_INVALID_HANDLE" (Microsoft
+ * Learn, CreateEventW). */
 static u64 create_event(u64 api, u64 attributes, u64 manual, u64 initial, u64 name) {
     if (attributes) w2m_unimplemented(api, attributes);
     if (!name) return make(api, manual ? EVENT_MANUAL : EVENT_AUTO, initial ? 1 : 0, 1);
@@ -287,6 +297,10 @@ static u64 create_event(u64 api, u64 attributes, u64 manual, u64 initial, u64 na
     {
         W2M_HELD(runtime_word);                     /* the transport page is every vCPU's; no other lock held */
         id = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_OPEN, name, chars, (manual ? 1 : 0) | (initial ? 2 : 0), &existed);
+    }
+    if (existed == W2M_NAME_OTHER_KIND) {          /* a named mutex's or semaphore's (Sprint 369): CreateEventW's page */
+        set_error(ERROR_INVALID_HANDLE);
+        return w2m_logged(api, existed, 0);
     }
     u64 h = publish(api, SHARED_EVENT, (s64)id, 0, 0);
     set_error(existed ? ERROR_ALREADY_EXISTS : 0);
@@ -311,6 +325,136 @@ u64 k32_CreateEventExW(u64 attributes, u64 name, u64 flags, u64 access) {
 u64 k32_CreateMutexA(u64 attributes, u64 owned, u64 name) {
     if (attributes || name || (u32)owned) w2m_unimplemented(W2M_API_CreateMutexA, name);
     return make(W2M_API_CreateMutexA, MUTEX, 0, 0);
+}
+
+/* The named sync objects the game declares and the Windows batch run never called (Sprint 369;
+ * docs/unserved-declared-imports-2026-11-27.md): CreateMutexW, OpenMutexW, OpenEventW, OpenEventA and OpenSemaphoreW,
+ * held to probes/named_sync_objects' Windows rows (contracts/windows.sync.named_objects). A name is the host's, in the
+ * one namespace the named events share (kernel.rs NAMED_OPEN), since "these objects share the same namespace"
+ * (Microsoft Learn, CreateMutexW): a name of another kind answers NULL and ERROR_INVALID_HANDLE, and an open of a name
+ * nothing holds NULL and ERROR_FILE_NOT_FOUND ("If a named mutex does not exist, the function fails and GetLastError
+ * returns ERROR_FILE_NOT_FOUND", OpenMutexW). A named event's state is the host's, each handle an object of this file's
+ * naming the host's id, as CreateEventW's. A named mutex's or semaphore's state is this file's: its one entry of
+ * `objects` names the host's id (`name`), every handle made or opened by the name names that entry, and its last
+ * handle's close frees the name ("The mutex object is destroyed when its last handle has been closed"); another
+ * process's open of it stops the run by name (the host's). An opened handle has every right its kind has: the rows
+ * show no call refused for want of one, and no right narrower than the kind's all-access is kept. */
+#define ERROR_FILE_NOT_FOUND 2u
+#define NAME_CHARS 260                         /* "The name is limited to MAX_PATH characters" (CreateMutexW) */
+#define SYNCHRONIZE 0x00100000u
+#define MUTEX_ALL_ACCESS 0x1F0001u             /* Synchronization Object Security and Access Rights */
+#define EVENT_ALL_ACCESS 0x1F0003u
+#define SEMAPHORE_ALL_ACCESS 0x1F0003u
+
+/* A name's UTF-16 units before its terminator; a longer one than MAX_PATH stops the run. */
+static u64 name_chars(u64 api, const unsigned short *name) {
+    u64 chars = 0;
+    while (name[chars])
+        if (++chars > NAME_CHARS) w2m_unimplemented(api, chars);
+    return chars;
+}
+
+/* A named mutex or semaphore made (`create`), or found by its name: its handle; 0 with the last error set when the
+ * name is absent from an open or another kind's. A make sets the last error, ERROR_ALREADY_EXISTS when the name was
+ * the kind's already (its count, maximum and owner then the maker's: "the bInitialOwner parameter is ignored because
+ * it has already been set by the creating process", CreateMutexW; "the lInitialCount and lMaximumCount parameters are
+ * ignored", CreateSemaphoreW), else 0; an open that finds it leaves the last error. The runtime word is held from the
+ * host's request to the handle's publication, so no other vCPU's make, open or last close of the name, each the
+ * word's (CloseHandle's bridge holds it), falls between them; the table's lock taken under it, a leaf. */
+static u64 named(u64 api, u32 kind, u64 name, int create, s64 count, s64 max) {
+    u64 chars = name_chars(api, (const unsigned short *)name), second = 0, h = 0;
+    int found = 1;
+    W2M_HELD(runtime_word);
+    u64 id = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_NAMED_OPEN, name, chars,
+                      (kind == MUTEX ? W2M_NAMED_MUTEX : W2M_NAMED_SEMAPHORE) | (create ? W2M_NAMED_CREATE : 0), &second);
+    if (second == W2M_NAME_ABSENT || second == W2M_NAME_OTHER_KIND) {
+        set_error(second == W2M_NAME_ABSENT ? ERROR_FILE_NOT_FOUND : ERROR_INVALID_HANDLE);
+        return 0;
+    }
+    {
+        W2M_HELD(handles);
+        int o = -1;
+        if (second == W2M_NAME_CREATED) {
+            o = new_object(kind, count, max);
+            if (o >= 0) objects[o].name = id;           /* before its handle is published */
+        } else {
+            for (int i = 0; i < OBJECTS && o < 0; i++)
+                if (objects[i].kind == kind && objects[i].handles && objects[i].name == id) o = i;
+            found = o >= 0;
+        }
+        h = o < 0 ? 0 : handle_for(o);
+        if (!h && o >= 0 && second == W2M_NAME_CREATED) objects[o].kind = FREE;
+    }
+    if (!found) w2m_unimplemented(api, id);             /* the host's name and no object of this file's naming it */
+    if (!h) w2m_unimplemented(api, OBJECTS);
+    if (create) set_error(second == W2M_NAME_EXISTED ? ERROR_ALREADY_EXISTS : 0);
+    return h;
+}
+
+/* CreateMutexW(lpMutexAttributes, bInitialOwner, lpName): "If this value is TRUE and the caller created the mutex, the
+ * calling thread obtains initial ownership of the mutex object" (Microsoft Learn), a recursion of 1 and its owner. */
+u64 k32_CreateMutexW(u64 attributes, u64 owned, u64 name) {
+    if (attributes) w2m_unimplemented(W2M_API_CreateMutexW, attributes);
+    s64 count = (u32)owned ? 1 : 0, owner = (u32)owned ? current_tid() : 0;
+    if (!name) return make(W2M_API_CreateMutexW, MUTEX, count, owner);
+    return w2m_logged(W2M_API_CreateMutexW, MUTEX, named(W2M_API_CreateMutexW, MUTEX, name, 1, count, owner));
+}
+
+/* An open's access, inheritance and name as the rows hold them: a mask within the kind's all-access (one wider, or
+ * MAXIMUM_ALLOWED or a generic right, stops the run), no inheritance, a name. */
+static void open_form(u64 api, u64 access, u64 inherit, u64 name, u32 all) {
+    if ((u32)access & ~all) w2m_unimplemented(api, access);
+    if ((u32)inherit || !name) w2m_unimplemented(api, inherit);
+}
+
+/* OpenMutexW(dwDesiredAccess, bInheritHandle, lpName): "Only the SYNCHRONIZE access right is required to use a
+ * mutex" (Microsoft Learn). */
+u64 k32_OpenMutexW(u64 access, u64 inherit, u64 name) {
+    open_form(W2M_API_OpenMutexW, access, inherit, name, MUTEX_ALL_ACCESS);
+    return w2m_logged(W2M_API_OpenMutexW, access, named(W2M_API_OpenMutexW, MUTEX, name, 0, 0, 0));
+}
+
+/* OpenSemaphoreW(dwDesiredAccess, bInheritHandle, lpName): "The function succeeds only if some process has already
+ * created the semaphore by using the CreateSemaphore function" (Microsoft Learn). */
+u64 k32_OpenSemaphoreW(u64 access, u64 inherit, u64 name) {
+    open_form(W2M_API_OpenSemaphoreW, access, inherit, name, SEMAPHORE_ALL_ACCESS);
+    return w2m_logged(W2M_API_OpenSemaphoreW, access, named(W2M_API_OpenSemaphoreW, SEMAPHORE, name, 0, 0, 0));
+}
+
+/* A named event opened by its UTF-16 name: the host's event, a new object of this file's naming its id, as a
+ * CreateEventW that finds its name; absent or another kind's, NULL and the open's error. */
+static u64 open_event(u64 api, u64 access, const unsigned short *name) {
+    u64 chars = name_chars(api, name), second = 0, id;
+    {
+        W2M_HELD(runtime_word);                     /* the transport page is every vCPU's; no other lock held */
+        id = w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_NAMED_OPEN, (u64)name, chars, W2M_NAMED_EVENT, &second);
+    }
+    if (second != W2M_NAME_EXISTED) {
+        set_error(second == W2M_NAME_ABSENT ? ERROR_FILE_NOT_FOUND : ERROR_INVALID_HANDLE);
+        return w2m_logged(api, access, 0);
+    }
+    return w2m_logged(api, access, publish(api, SHARED_EVENT, (s64)id, 0, 0));
+}
+
+/* OpenEventW(dwDesiredAccess, bInheritHandle, lpName): "The function succeeds only if some process has already
+ * created the event by using the CreateEvent function" (Microsoft Learn). */
+u64 k32_OpenEventW(u64 access, u64 inherit, u64 name) {
+    open_form(W2M_API_OpenEventW, access, inherit, name, EVENT_ALL_ACCESS);
+    return open_event(W2M_API_OpenEventW, access, (const unsigned short *)name);
+}
+
+/* OpenEventA: the ANSI name widened, byte for unit; a byte past ASCII, which the code page would map, stops the run. */
+u64 k32_OpenEventA(u64 access, u64 inherit, u64 name) {
+    open_form(W2M_API_OpenEventA, access, inherit, name, EVENT_ALL_ACCESS);
+    unsigned short wide[NAME_CHARS + 1];
+    const unsigned char *a = (const unsigned char *)name;
+    u64 k = 0;
+    for (; a[k]; k++) {
+        if (k == NAME_CHARS || a[k] >= 0x80) w2m_unimplemented(W2M_API_OpenEventA, k);
+        wide[k] = a[k];
+    }
+    wide[k] = 0;
+    return open_event(W2M_API_OpenEventA, access, wide);
 }
 
 /* Threads blocked on one semaphore, auto-reset event or mutex, in the order they began to wait. A release grants the
@@ -649,31 +793,47 @@ static struct object *must(u64 api, u64 h, struct object *o, u32 kind1, u32 kind
  * under `sync_lock`; then, that let go, the granted readied and a manual-reset event's waiters signaled under the
  * runtime word, and the lookup's reference dropped under the table's lock. A shared event is the host's: its request,
  * and the signal of this process's waiters, under the word. */
+/* An event set, a semaphore released by `count` (`*previous` its count before) or a mutex released, as SetEvent,
+ * ReleaseSemaphore and ReleaseMutex do (Sprint 369: theirs, and SignalObjectAndWait's signal): 0, or the error the
+ * release fails with, the state then unchanged. `o` is a lookup's, the caller's to drop, of one of those kinds. */
+static u32 signal_object(struct object *o, s32 count, s32 *previous) {
+    struct readied r;                              /* its tids read only below n: not zeroed */
+    r.n = 0;
+    WORD_WHEN_NEEDED(word);
+    if (o->kind == SHARED_EVENT) {
+        take_word(&word);
+        w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_SET, (u64)o->count, 0, 0, 0);
+        w2m_signal(0);
+        return 0;
+    }
+    {
+        W2M_HELD(sync);
+        if (o->kind == SEMAPHORE) {
+            if (o->count + count > o->max) return ERROR_TOO_MANY_POSTS;
+            *previous = (s32)o->count;
+            o->count += count;
+        } else if (o->kind == MUTEX) {
+            if (o->count == 0 || (u32)o->max != current_tid()) return ERROR_NOT_OWNER;
+            if (--o->count) return 0;                  /* still owned, recursively */
+            o->max = 0;
+        } else {
+            o->count = 1;
+        }
+        grant(o, &r);
+        grant_all(o, &r);
+    }
+    ready_all(&r, &word);                        /* an auto-reset event's grants ready its waiters (095) */
+    if (o->kind == EVENT_MANUAL) {
+        take_word(&word);
+        w2m_signal((u64)o);                      /* a manual-reset event releases every waiter */
+    }
+    return 0;
+}
+
 u64 k32_SetEvent(u64 h) {
     struct object *o = object_of(h);
-    {
-        WORD_WHEN_NEEDED(word);
-        if (o && o->kind == SHARED_EVENT) {
-            take_word(&word);
-            w2m_host(W2M_HOST_KERNEL, W2M_KERNEL_EVENT_SET, (u64)o->count, 0, 0, 0);
-            w2m_signal(0);
-        } else {
-            must(W2M_API_SetEvent, h, o, EVENT_MANUAL, EVENT_AUTO);
-            struct readied r;                          /* its tids read only below n: not zeroed */
-            r.n = 0;
-            {
-                W2M_HELD(sync);
-                o->count = 1;
-                grant(o, &r);
-                grant_all(o, &r);
-            }
-            ready_all(&r, &word);                    /* an auto-reset event's grants ready its waiters (095) */
-            if (o->kind == EVENT_MANUAL) {
-                take_word(&word);
-                w2m_signal((u64)o);                  /* a manual-reset event releases every waiter */
-            }
-        }
-    }
+    if (!o || o->kind != SHARED_EVENT) must(W2M_API_SetEvent, h, o, EVENT_MANUAL, EVENT_AUTO);
+    signal_object(o, 0, 0);
     object_done(o);
     return w2m_logged(W2M_API_SetEvent, h, 1);
 }
@@ -694,55 +854,25 @@ u64 k32_ResetEvent(u64 h) {
 u64 k32_ReleaseSemaphore(u64 h, u64 count, u64 previous) {
     struct object *o = must(W2M_API_ReleaseSemaphore, h, object_of(h), SEMAPHORE, SEMAPHORE);
     if ((s32)count <= 0) w2m_unimplemented(W2M_API_ReleaseSemaphore, count);
-    struct readied r;                              /* its tids read only below n: not zeroed */
-    r.n = 0;
-    s32 before;
-    {
-        W2M_HELD(sync);
-        if (o->count + (s32)count > o->max) {
-            W2M_LET_GO_EARLY(sync);
-            object_done(o);
-            set_error(ERROR_TOO_MANY_POSTS);
-            return w2m_logged(W2M_API_ReleaseSemaphore, h, 0);
-        }
-        before = (s32)o->count;
-        o->count += (s32)count;
-        grant(o, &r);
-        grant_all(o, &r);
+    s32 before = 0;
+    u32 error = signal_object(o, (s32)count, &before);
+    object_done(o);
+    if (error) {
+        set_error(error);                              /* ERROR_TOO_MANY_POSTS, the previous count unwritten */
+        return w2m_logged(W2M_API_ReleaseSemaphore, h, 0);
     }
     if (previous) *(s32 *)previous = before;
-    {
-        WORD_WHEN_NEEDED(word);
-        ready_all(&r, &word);
-    }
-    object_done(o);
     return w2m_logged(W2M_API_ReleaseSemaphore, h, 1);
 }
 
 u64 k32_ReleaseMutex(u64 h) {
     struct object *o = must(W2M_API_ReleaseMutex, h, object_of(h), MUTEX, MUTEX);
-    u32 me = current_tid();
-    struct readied r;                              /* its tids read only below n: not zeroed */
-    r.n = 0;
-    {
-        W2M_HELD(sync);
-        if (o->count == 0 || (u32)o->max != me) {
-            W2M_LET_GO_EARLY(sync);
-            object_done(o);
-            set_error(ERROR_NOT_OWNER);
-            return w2m_logged(W2M_API_ReleaseMutex, h, 0);
-        }
-        if (--o->count == 0) {
-            o->max = 0;
-            grant(o, &r);
-            grant_all(o, &r);
-        }
-    }
-    {
-        WORD_WHEN_NEEDED(word);
-        ready_all(&r, &word);
-    }
+    u32 error = signal_object(o, 0, 0);
     object_done(o);
+    if (error) {
+        set_error(error);                              /* ERROR_NOT_OWNER */
+        return w2m_logged(W2M_API_ReleaseMutex, h, 0);
+    }
     return w2m_logged(W2M_API_ReleaseMutex, h, 1);
 }
 
@@ -901,6 +1031,49 @@ u64 k32_WaitForSingleObject(u64 h, u64 ms) { return wait_one(W2M_API_WaitForSing
 u64 k32_WaitForSingleObjectEx(u64 h, u64 ms, u64 alertable) {
     (void)alertable;                                           /* no APC is ever queued: one thread */
     return wait_one(W2M_API_WaitForSingleObjectEx, h, (u32)ms);
+}
+
+/* SignalObjectAndWait(hObjectToSignal, hObjectToWaitOn, dwMilliseconds, bAlertable) (Sprint 369): the object signaled
+ * as SetEvent, ReleaseSemaphore by one or ReleaseMutex signals it ("This object can be a semaphore, a mutex, or an
+ * event"; "If the handle is a mutex and the caller does not own the mutex, the function fails with ERROR_NOT_OWNER",
+ * Microsoft Learn), then the wait WaitForSingleObject makes. A failed signal answers WAIT_FAILED with its error, the
+ * wait not made; a handle that names no object WAIT_FAILED and ERROR_INVALID_HANDLE, both looked up before the signal.
+ * The wait parks as WaitForSingleObject's does and its call is made again when the thread runs: that retry, which finds
+ * this thread's waiter entry, signals nothing again. "Note that the "signal" and "wait" are not guaranteed to be
+ * performed as an atomic operation": they are two holdings here. bAlertable is read as WaitForSingleObjectEx reads it:
+ * no APC is ever queued (QueueUserAPC is not served). */
+u64 k32_SignalObjectAndWait(u64 signal, u64 wait, u64 ms, u64 alertable) {
+    (void)alertable;
+    int retry;
+    {
+        W2M_HELD(sync);
+        retry = waiter_of(current_tid()) >= 0;             /* a retry: only this thread drops its entry */
+    }
+    if (!retry) {
+        struct object *w = object_of(wait);
+        int waits = w != 0;
+        object_done(w);                                    /* wait_one looks it up again */
+        struct object *o = object_of(signal);
+        if (!o || !waits) {
+            if (signal < OBJECT_BASE || wait < OBJECT_BASE) w2m_unimplemented(W2M_API_SignalObjectAndWait, signal);
+            object_done(o);
+            w2m_thread_scratch()->wait_deadline = 0;
+            set_error(ERROR_INVALID_HANDLE);
+            return w2m_logged(W2M_API_SignalObjectAndWait, signal, WAIT_FAILED);
+        }
+        if (o->kind != SEMAPHORE && o->kind != MUTEX && o->kind != EVENT_MANUAL && o->kind != EVENT_AUTO &&
+            o->kind != SHARED_EVENT)
+            w2m_unimplemented(W2M_API_SignalObjectAndWait, signal);   /* a thread's, a process's: not in the rows */
+        s32 before;
+        u32 error = signal_object(o, 1, &before);
+        object_done(o);
+        if (error) {
+            w2m_thread_scratch()->wait_deadline = 0;
+            set_error(error);
+            return w2m_logged(W2M_API_SignalObjectAndWait, signal, WAIT_FAILED);
+        }
+    }
+    return wait_one(W2M_API_SignalObjectAndWait, wait, (u32)ms);
 }
 
 /* The objects of thread tid's blocked wait for any, by their index in its array, from its entries (Sprint 352); n. */
@@ -1395,12 +1568,16 @@ u64 k32_GetProcessId(u64 h) {
     return w2m_logged(W2M_API_GetProcessId, h, pid);
 }
 
+/* Named from Sprint 369 (probes/named_sync_objects, row semaphore): the name's object, made or found (`named`). */
 u64 k32_CreateSemaphoreW(u64 attributes, u64 initial, u64 maximum, u64 name) {
-    if (attributes || name || (s32)maximum <= 0 || (s32)initial < 0) w2m_unimplemented(W2M_API_CreateSemaphoreW, name);
+    if (attributes || (s32)maximum <= 0 || (s32)initial < 0) w2m_unimplemented(W2M_API_CreateSemaphoreW, attributes);
     if ((s32)initial > (s32)maximum) {
         set_error(ERROR_INVALID_PARAMETER);
         return w2m_logged(W2M_API_CreateSemaphoreW, initial, 0);
     }
+    if (name)
+        return w2m_logged(W2M_API_CreateSemaphoreW, SEMAPHORE,
+                          named(W2M_API_CreateSemaphoreW, SEMAPHORE, name, 1, (s32)initial, (s32)maximum));
     return make(W2M_API_CreateSemaphoreW, SEMAPHORE, (s32)initial, (s32)maximum);
 }
 

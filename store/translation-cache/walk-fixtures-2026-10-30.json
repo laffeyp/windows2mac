@@ -827,6 +827,15 @@
     "block_starts": 397,
     "undecodable": 0
   },
+  "446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f.exe": {
+    "reachable_instructions": 1300,
+    "walked": 1300,
+    "swept_only": 0,
+    "jump_tables": 0,
+    "jump_table_entries": 0,
+    "block_starts": 364,
+    "undecodable": 0
+  },
   "4571f790108785c15174f5fe7d2a97727996b6bf8c6be138cf6a23b2db4201e8.exe": {
     "reachable_instructions": 2077,
     "walked": 2077,

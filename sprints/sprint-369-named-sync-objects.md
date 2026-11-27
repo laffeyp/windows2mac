@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 369
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -103,4 +103,62 @@ every other run is unchanged.
 
 ## result
 
-GATES-LINE
+- **Windows' rows.** `probes/named_sync_objects` (card amendment 7adce5f00), its six Learn pages quoted with their URLs
+  in the source's header and its rows first written from them in `expected.jsonl`, null where a page is silent. Windows
+  run 46053401854 (gha-windows-2025-x64-10.0.26100.33828-Server, AMD EPYC 9V45 96-Core Processor, probe sha256
+  446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f), three runs byte for byte alike, kept flat in
+  `store/probe-runs/46053401854/` and the binary under `store/binaries/`. Every cell a page states agreed. The run
+  settled the silent cells: an open of an absent name gives NULL and 2 for every kind; a name another kind holds gives 6
+  to every open, as to every make; a failed signal gives WAIT_FAILED with 298 or 288; and a closed handle, to signal or
+  to wait on, gives WAIT_FAILED and 6, with the event to signal left unset.
+- **w2m against them.** w2m-vm ran the runner's probe.exe 3 of 3 times on one vCPU and 3 of 3 on two, and each run printed
+  `body-1.jsonl` byte for byte. In `contracts/windows.sync.named_objects/0.1.0.json`, exact_rows holds the 14 rows. The
+  family run joins as the 274th, `named_sync_objects 46053401854`, imports column "-". `family_runs.rs` under
+  `W2M_REQUIRE_CASE_RUNS=1` reports "274 of 274 family runs conform, 69 of 69 families in every run" and "on two vCPUs:
+  274 of 274 held as on one vCPU, 274 of them conforming".
+- **The services.** In `tools/guest_runtime/sync_objects.c`: CreateMutexW (named, owned or not), OpenMutexW,
+  OpenSemaphoreW, OpenEventW and OpenEventA, a named CreateSemaphoreW, and SignalObjectAndWait. CreateEventW now refuses
+  a mutex's or a semaphore's name. SetEvent, ReleaseSemaphore, ReleaseMutex and SignalObjectAndWait's signal share one
+  state change, `signal_object`. The names live in the host: `crates/w2m_vm/src/kernel.rs` NAMED_OPEN (13), with its
+  enum in `tools/guest_runtime/runtime.h`, and EVENT_OPEN answers NAME_OTHER_KIND for another kind's name. Ids 301-306 in
+  `api_ids.txt`. In `services.rs`, `HANDLES_LOCK` grows to 15 (the make and the four opens) and `SYNC_LOCK` to 9
+  (SignalObjectAndWait). Tests: `the_fifteen_services_of_lock_class_handles_are_the_handle_tables`,
+  `the_nine_services_of_lock_class_sync_objects_are_the_waits_and_releases`, the ids 301 and 306, and kernel.rs's
+  `events_mutexes_and_semaphores_share_one_namespace`.
+- **Files beyond the card, the class's** (reported to main when found): `crates/w2m_vm/src/kernel.rs` and `runtime.h`
+  (the shared namespace); `crates/w2m_vm/src/bin/family_known.rs`, `crates/w2m_vm/tests/family_runs.rs` and the new
+  `store/family_runs/joined-2026-11-27.tsv` (a family that joins on the Rust host, after the frozen index's 273);
+  `crates/guest_runtime/tests/python_image.rs` DEPARTURES; and `store/translation-cache/walk-fixtures-2026-10-30.json`
+  with `crates/image_walk/tests/fixtures.rs`, 289 images and 646,177 instructions.
+- **Plant 1** "named_sync_objects	46053401854	ended; row "event.absent": ansi_error reference 2, target 0
+  (windows.sync.named_objects@0.1.0)	(which store/family_runs/sweep-held-2026-10-29.tsv does not hold)",
+  `family_runs::every_family_run_conforms_or_is_held_by_what_it_waits_on` exit 100; live 19:14:32-19:16:01 UTC:
+  - backup `scratchpad/plants/369/sync_objects.c.bak`;
+  - `open_event`'s refusal narrowed by Edit to `second == W2M_NAME_OTHER_KIND`, so an absent name answered a handle;
+    the grep found the plant at line 432;
+  - every family run on one vCPU and two (the gates' `family_runs` step), then the judge under
+    `W2M_REQUIRE_CASE_RUNS=1`;
+  - restored by `cp`; `cmp` equal, and no "PLANT" left.
+- **Plant 2** "named_sync_objects	46053401854	ended; row "saw.semaphore": after reference 258, target 0
+  (windows.sync.named_objects@0.1.0)	(which store/family_runs/sweep-held-2026-10-29.tsv does not hold)", the same judge
+  exit 100; live 19:16:01-19:17:43 UTC:
+  - SignalObjectAndWait's wait moved by Edit ahead of its signal, the signal made only once the wait returned (lines
+    1048, 1051, 1078);
+  - the family runs, then the judge;
+  - the probe's handoff row also differed, `"ready":258` against Windows' 0, and the run ended rather than hanging, its
+    main thread's wait having a 5000 ms limit;
+  - restored by `cp`; `cmp` equal.
+  - After both plants the family runs and the judge ran again on the restored tree: 274 of 274 conform, on one vCPU and
+    two.
+- **Decisions** (agent-resolved; grounds on BLACKBOARD at the close):
+  - (a) The names of mutexes and semaphores are the host's, in the namespace of the named events, and the state of each
+    object stays in the guest's table. Another process's open of such a name stops the run by name.
+  - (b) An opened handle gets every right its kind has, and a mask wider than the kind's all-access stops the run.
+  - (c) The new family joins through `joined-2026-11-27.tsv`; the frozen extract and index stay untouched.
+  - (d) SignalObjectAndWait looks up both handles before it signals, and its retry, which finds the thread's waiter
+    entry, does not signal again.
+  - (e) OpenEventA's name is widened byte to UTF-16 unit, and a byte past ASCII stops the run.
+- **G3's two-vCPU batch run in these gates:** 142.85 s to the stop, `run_seconds` of
+  `build/batch_run/record-2-vcpus-1795807369000000000`, against the laptop's 90 to 102 s (BLACKBOARD 182) and Sprint
+  368's 175.2 to 233.4 s; its `load_at_start` "load averages 2.25 2.52 2.59; busy: mds_stores 93%; other w2m: none".
+- **Gates:** `exit 0 in 612 s	default	2026-11-27T19:31:07Z	sprint 369	7adce5f0079baea8017280eb50e7b2abf6d9198e	cff3aa5aea77fac591749e845c72517ce16dd322741a8a98fb70e9477b934617	root=31c33b26e229110e6cf31787e18eefde46462824	rust=all python=0 samples=0	base=52a3ad5466c7adf65b2a0c43281dee7566202974`
