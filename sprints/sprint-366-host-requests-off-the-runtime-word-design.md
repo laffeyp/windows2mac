@@ -59,7 +59,7 @@ that passes `design_check`.
 - `tools/guest_runtime/runtime.c`, `tools/guest_runtime/runtime.h`, and every file under `tools/guest_runtime/` with a
   `w2m_host(` call (`grep -c 'w2m_host(' tools/guest_runtime/*.c`).
 - `crates/w2m_vm/src/host_request.rs` (the transport's reader), `crates/w2m_vm/src/monitor_code.rs` (the word),
-  `crates/w2m_vm/src/run.rs` (`GuestLock::serve`, `KernelLock`), `crates/guest_runtime/src/layout.rs` (the pages).
+  `crates/w2m_vm/src/run.rs` (`GuestLock::serve`, `KernelLock`), `crates/guest_layout/src/lib.rs` (the pages, `guest_runtime::layout`).
 - `grep -n "Step 6's order weighed again at Sprint 360\|G2 met at Sprint 364\|The woken mark in .threads::wake_from_another_process." BLACKBOARD.md`:
   the Decisions.
 - `crates/design_check` (what a design must state to pass).
