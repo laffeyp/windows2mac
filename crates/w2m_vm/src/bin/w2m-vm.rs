@@ -793,9 +793,12 @@ mod run {
                 let path = std::path::PathBuf::from(format!("{base}.{pid}"));
                 guest.exit_ledger = Some(ledger_at(&root, &path)?);
             }
-            guest.served.link = Some(w2m_vm::turns::Link::Child(w2m_vm::turns::ChildLink::open(
-                page_fd, slot, pid,
-            )?));
+            // the link behind `kernel` (Sprint 362), made before the run, no vCPU yet
+            std::sync::Arc::get_mut(&mut guest.kernel)
+                .ok_or("a child's kernel lock shared before its run")?
+                .set_link(w2m_vm::turns::Link::Child(w2m_vm::turns::ChildLink::open(
+                    page_fd, slot, pid,
+                )?));
             // the child starts at the machine's clock, as `VM.steps` catches every process up at its start (Sprint 199;
             // reviewer-2's High 1 of its review of 196-198: tests/test_timed_waits.py 141-152's plant gives "clock behind")
             w2m_vm::threads::catch_up(&mut guest, link.machine(), 2);

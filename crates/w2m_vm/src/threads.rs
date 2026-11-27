@@ -1032,7 +1032,7 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
         write_u64(mem, RUN_TABLE + RT_WAITING, read_u64(mem, RUN_TABLE + RT_WAITING) + 1);
         return Ok(Switch::Parked);
     }
-    if next.is_none() && guest.served.link.is_some() {
+    if next.is_none() && guest.kernel.linked() {
         return Ok(Switch::Idle);
     }
     let next = match next {
@@ -1404,7 +1404,7 @@ pub fn create_thread(
 /// time slice.
 pub fn set_budget(guest: &mut Guest) {
     // a process of a machine shares the vCPU's time with the others too (Sprint 197)
-    let shared = guest.served.threads.len() > 1 || guest.served.link.is_some();
+    let shared = guest.served.threads.len() > 1 || guest.kernel.linked();
     let mem = crate::guest::memory_view(&guest.memory);
     let (executed, max_steps) = (
         read_u64(mem, guest.served.vcpu.monitor),
@@ -1424,13 +1424,13 @@ pub fn set_budget(guest: &mut Guest) {
 /// another clock); else ~0.
 pub fn slice_until(guest: &Guest) -> u64 {
     // another process ready or waiting with a deadline needs the host at each slice's end (`_other_process_due`,
-    // 2750-2754; Sprint 197)
-    if guest
-        .served
-        .link
-        .as_ref()
-        .is_some_and(|l| l.others_due(counter_now(guest)))
-    {
+    // 2750-2754; Sprint 197); the link read under `kernel`, a leaf under the word and the run's lock (Sprint 362)
+    if guest.kernel.linked() && {
+        let kernel = guest
+            .kernel
+            .take(crate::guest::memory_view(&guest.memory), guest.served.vcpu);
+        kernel.link.as_ref().is_some_and(|l| l.others_due(counter_now(guest)))
+    } {
         return 0;
     }
     let mem = crate::guest::memory_view(&guest.memory);

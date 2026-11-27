@@ -72,7 +72,9 @@ after a stop the fallback.
 Each of `Guest`'s 45 fields (`crates/w2m_vm/src/guest.rs`, `pub struct Guest`), by the writers found in the code after
 load. *Load*: written while the guest is built, read after, by any thread, no lock. *Served*: behind `served`, under
 the word. *View*: guest memory, through `ConcurrentGuestMemory`. *Diagnostic*: a one-vCPU tool; a run with it refuses
-a second vCPU.
+a second vCPU. *Kernel* (Sprint 362): behind `kernel`, the host design's Change 4 lock beside the run's, a leaf taken
+under the word and the run's lock (`run::KernelLock`; `docs/design-a-process-that-starts-another-2026-11-26.md`, card
+4f1).
 
 | Field | Part | Its writers after load |
 |---|---|---|
@@ -111,8 +113,8 @@ a second vCPU.
 | `trace_quiet` | Served | `guest.rs` `traced_proc` (GetProcAddress traced) |
 | `trace_dynamic` | Served | `guest.rs` `traced_proc` |
 | `trace_bound` | Served | `guest.rs` `trace_ranges`, from `load_dll` |
-| `kernel` | Served | `host_request.rs` and `run.rs`, a request to the supervisor and the turn |
-| `link` | Served | `host_request.rs` (a child started), `run.rs` (the turn) |
+| `kernel` | Kernel | `host_request.rs` and `run.rs`, a request to the supervisor and the turn (Served until Sprint 362) |
+| `link` | Kernel | `host_request.rs` (a child started), `run.rs` (the turn) (Served until Sprint 362) |
 | `start` | Load | none |
 | `random` | Served | `host_request.rs` (random bytes) |
 | `files` | Served | `host_request.rs` (a file request) |
@@ -125,8 +127,8 @@ a second vCPU.
 | `vcpu` | Served | `run.rs` `GuestLock::serve`, the served exit's vCPU's pages (Sprint 313) |
 | `sched` | View | `threads.rs` `set_status` and `host_request.rs` `THREAD_WAKE` notify it; a parked vCPU waits on it outside the lock (Sprint 319) |
 
-19 Load, 24 Served (`splits` from Sprint 304, `vcpu` from Sprint 313), 2 View (`sched` from Sprint 319), 3
-Diagnostic, counted from the table. `memory` stays one mapping; `Guest` becomes three values the run loop's threads hold: the load part, shared by reference; `served`, a host mutex over the 22; and the
+19 Load, 22 Served (`splits` from Sprint 304, `vcpu` from Sprint 313; `kernel` and `link` Kernel from Sprint 362),
+2 View (`sched` from Sprint 319), 2 Kernel, 3 Diagnostic, counted from the table. `memory` stays one mapping; `Guest` becomes three values the run loop's threads hold: the load part, shared by reference; `served`, a host mutex over the 22; and the
 mapping, from which each thread takes its view.
 
 **The run loop's own state** (`run.rs`, `run`): `HostCompiler`'s tables are Served, reached at `hvc #1` and `#13`

@@ -1012,7 +1012,7 @@ fn a_spawn_on_two_vcpus_is_refused_before_its_link() {
         Stop::HostRequest { why, .. } => assert_eq!(why, w2m_vm::host_request::MACHINE_ON_ONE),
         other => panic!("busychild on 2 vCPUs stopped as {other:?}"),
     }
-    assert!(guest.served.link.is_none(), "a link was made before the refusal");
+    assert!(!guest.kernel.linked(), "a link was made before the refusal");
 }
 
 /// Sprint 327 (the run-loop design's 4c3b2b): two vCPUs run one process and end it as one vCPU does, `qpc`'s clock

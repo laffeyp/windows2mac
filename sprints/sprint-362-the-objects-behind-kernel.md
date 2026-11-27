@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 362
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -99,4 +99,84 @@ The objects that cross processes live behind one leaf lock, `kernel`, taken unde
 
 ## result
 
-GATES-LINE
+- **The class, at e0e8fd619: every reader and writer of `Objects` (`served.kernel`) and of the link that holds the
+  `Supervisor` (`served.link`), and what each takes now.**
+  - `guest.rs` 776, 778, 1061-1062: the two `Served` fields, made at load (`Objects::new()`, `None`). Now one field on
+    `Guest`, `kernel: Arc<run::KernelLock>` (`guest.rs` 733), made at load with no vCPU and so no lock.
+  - `host_request.rs` 523-526: the supervisor's own KERNEL 33 moved the objects out, served, put them back. Now
+    `kernel_request` (256-307) takes `kernel` (259) under the guest's word and the run's lock for the one request.
+  - `host_request.rs` 537-545: the link made and the child spawned. Now under the same take: the children's table is
+    in it.
+  - `host_request.rs` 547, 551-552: `set_budget`, then `wake_children` under the wake. `wake_children` under the take;
+    `set_budget` and `wake_blocked` after `kernel` is let go (they read this process's own state, and `set_budget`
+    reads `linked`, below).
+  - `host_request.rs` 165: a child's request read `Link::Child` and waited for the turn back. Now under `kernel`
+    (167), held for the request and let go before the wake.
+  - `run.rs` 948-949, 960, 963-964, 971-972: `turn` moved the link and the objects out across the hand-over. Now
+    `turn` takes `kernel` (1020) under the word and the lock, lets go the lock and the word, runs the hand-over from
+    the guard, and lets `kernel` go (1040) before the word is taken again.
+  - `turns.rs` 486, 568, 592, 608-638: `hand_over`, `serve`, `objects.request` and `objects.end`, all on the objects
+    `turn` hands in; now the guard's, so they run under `kernel` with no change in `turns.rs`.
+  - `run.rs` 1524-1528 (now 1595) and 1937 (now 2010): `others_due` at a turn's start and `others_ready` at a slice's
+    end. Now under `kernel`, a leaf inside the word and the lock, when a link is made.
+  - `threads.rs` 1430-1432 (now 1428): `slice_until`'s `others_due`. Now under `kernel`, when a link is made.
+  - `run.rs` 1040 (now 1110), `threads.rs` 1035 and 1407: whether a link is made (the run's first budget, the
+    switch's `Switch::Idle`, `set_budget`'s slices). These read `KernelLock::linked`, an `AtomicBool`, and take no
+    lock: `set_budget` runs from `create_thread` at load and in tests, with no word. A link is installed once and kept
+    for the run, so `linked` is set once at the two installs and never cleared: `KernelLock::install` (`run.rs` 983),
+    the link put in under the spawn's take and true stored (Release) beside it (`host_request.rs` 278), and `set_link`
+    (989) for a child before its run. (It was first a copy of `link.is_some()` stored at every guard's
+    drop.)
+  - `bin/w2m-vm.rs` 796: the child's link installed before its run. Now `KernelLock::set_link` (799) through
+    `Arc::get_mut`, no vCPU yet.
+  - `tests/run_loop.rs` 1015: the refusal leaves no link. Now `!guest.kernel.linked()`.
+  - `kernel.rs`: the type itself; nothing outside it holds the objects. `exit_ledger.rs`: no reader of the objects;
+    the kernel's writes reach it through `KernelMemory` (`host_request.rs` 266) and `child_request` (176-184), both
+    unchanged.
+  - `tests/guest_parts.rs` 41 holds `Served` to the run-loop design's table: its `kernel` and `link` rows now read part
+    *Kernel* ("Served until Sprint 362"), the count 22 Served and 2 Kernel, and the test 22.
+- **The lock.** `run.rs` 930-993, beside `GuestLock`: `Kernel { objects, link }` in a `Mutex`, its guard the
+  `MutexGuard` (`KernelGuard`). The order: the runtime word, the run's lock, then `kernel`, a leaf. No site that holds
+  `kernel` takes a word or the run's lock: `turn` drops it before its retake (1040), `kernel_request` before
+  `set_budget` and `wake_blocked`, `child_request` before its wake. One vCPU takes it uncontended; no link exists on two
+  vCPUs, since a spawn there is still refused (`MACHINE_ON_ONE`, unchanged).
+- **The guard.** `KernelLock::take` (968-974) asserts, before the lock, with `assert!`, so in release builds too:
+  `"the kernel lock taken without a runtime word"`, from `runtime_word_held` of the taking vCPU's owner, as
+  `GuestLock::serve` asserts the word. Card 4f2's server, which holds no word, takes it its own way; none exists yet.
+- **The judges.** `host_request.rs` 769, `a_kernel_request_takes_kernel_only_under_the_runtime_word`: PIPE_CREATE under
+  vCPU 0's guest's word answers the two ends from `kernel`; with the word free the assertion's text; the lock left free.
+  `host_request.rs` 818, `a_spawn_installs_the_link_and_sets_linked_beside_it`: no link and `linked` false before;
+  after the supervisor's own PROCESS_CREATE, under one take of `kernel`, `linked` true and the link the supervisor's
+  (the child is this test binary started `--child`, which refuses the argument and ends, so the spawn answers the
+  child's id 4100 or its start line's write failure; the link is installed before either). Ten runs, all passed;
+  `pgrep` found no `--child` process left.
+  `run.rs` 2481, `a_turn_holds_kernel_across_its_hand_over`: `turn` gives the turn to a child (a `/bin/sleep 60`
+  adopted through the test seam `Supervisor::adopt`, `turns.rs` 660, `#[cfg(test)]`, its `w2m-vm` a `ChildLink` on the
+  page), and while it waits `kernel` is held (`TryLockError::WouldBlock`); the child's stop ends the turn with
+  "child process 4100: the test's child stops"; after, the link and the objects are back. Ten runs each, all passed;
+  `pgrep` found no `sleep 60` left.
+- **Plant 1** "the kernel lock taken without a runtime word", `a_kernel_request_takes_kernel_only_under_the_runtime_word`
+  exit 100; live 00:27:40-00:28:01 UTC:
+  - `host_request.rs` copied to the scratchpad; by the Edit tool, `release_guests_word` of the serving vCPU's owner
+    before `kernel_request`'s take, the guest's word let go; `grep -n "PLANT 1"` found it at 262.
+  - The judge panicked at `run.rs` 990:9 with the guard's text, its first `kernel_request` failing.
+  - Restored by `cp`; `cmp` silent; no `PLANT` left.
+- **Plant 2** "kernel free while the turn waits in its hand-over", `a_turn_holds_kernel_across_its_hand_over` exit 100;
+  live 00:28:09-00:28:31 UTC:
+  - `run.rs` copied to the scratchpad; by the Edit tool, `turn` took `kernel`, moved the objects and the link out into
+    a local, let it go, ran the hand-over on the local, and put them back after its retake; `grep -n "PLANT 2"` found
+    it at 1037 and 1066.
+  - The judge panicked at `run.rs` 2544:9 with its message. The `twoproc` guest's run would not differ: on one vCPU no
+    other thread takes `kernel` during a hand-over, which is why the judge looks at the lock itself.
+  - Restored by `cp`; `cmp` silent; no `PLANT` left.
+- **Every run as held.** The gates' row below, which holds the batch run conforming (`batch_run.rs`), the 273 family
+  runs on one vCPU and on two (`family_runs.rs` `every_family_run_conforms_or_is_held_by_what_it_waits_on`, the six
+  in `two-vcpus-refused-2026-11-26.tsv` still refused by name at `MACHINE_ON_ONE`), the `twoproc` guests (on the wall
+  clock and on the instruction clock) and the exit ledger. No plant was live while it ran.
+- **Files:** `crates/w2m_vm/src/run.rs`, `host_request.rs`, `guest.rs` (the card's three); `threads.rs`,
+  `bin/w2m-vm.rs`, `tests/run_loop.rs` (the link's readers the card's list missed, found by the class list);
+  `turns.rs` (the test seam only); `tests/guest_parts.rs` and `docs/design-run-loop-on-several-vcpus-2026-10-31.md`
+  (the Served table). The scope widened by the class list. No C changed, so the runtime image is
+  HEAD's. The plants ran before `linked` moved to its two installs; neither judge's code changed after.
+
+exit 0 in 420 s	default	2026-11-27T00:48:22Z	sprint 362	e0e8fd619071695b48e6b15530debd8ab5dc4dcc	e0d508aaf36470008556a2f83ad267ca6b018e914d6537dd747a0ca7fabb936f	root=72f6c7f42ad4b0f7de930fa271d0cba82a4fc6be	rust=crates python=0 samples=0	base=d06948a579feed427d6a8adf814acb4f1dab75ad

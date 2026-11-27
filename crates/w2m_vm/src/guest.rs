@@ -728,12 +728,16 @@ pub struct Guest {
     pub batch_stop: Option<crate::batch_stop::BatchStop>,
     /// what a parked vCPU waits on, outside the run's lock (Sprint 319): every thread readied notifies it
     pub sched: std::sync::Arc<crate::threads::Sched>,
+    /// the objects this process shares through KERNEL 33 (`kernel.py`; Sprint 193) and the process's place in the run's
+    /// machine (Sprint 197), behind their own lock beside the run's, `kernel` (Sprint 362; `run::KernelLock`)
+    pub kernel: std::sync::Arc<crate::run::KernelLock>,
     /// the part a served exit writes
     pub served: Served,
 }
 
-/// The part of a guest a served exit writes after load: the design's 24 Served fields (Sprints 302, 304 and 313),
-/// which the run loop's card 2b puts behind a lock taken only under the runtime word.
+/// The part of a guest a served exit writes after load: the design's 22 Served fields (Sprints 302, 304 and 313; the
+/// kernel objects and the link behind `kernel` from Sprint 362), which the run loop's card 2b puts behind a lock taken
+/// only under the runtime word.
 pub struct Served {
     pub process: ProcessArea,
     /// thunk address -> "DLL!Name": the loader's, then those the COM vtables made
@@ -772,10 +776,6 @@ pub struct Served {
     pub trace_dynamic: BTreeMap<String, u64>,
     /// the traced images whose import slots are already on their own thunks (`_trace_bound`)
     pub trace_bound: BTreeSet<String>,
-    /// the objects this process shares through KERNEL 33 (`kernel.py`; Sprint 193)
-    pub kernel: crate::kernel::Objects,
-    /// the process's place in the run's machine (Sprint 197): None alone and not yet a parent
-    pub link: Option<crate::turns::Link>,
     /// the host's random bytes on the instruction clock, `random.Random(0x5EED)` (vm_backend 2357; Sprint 203); None:
     /// the host's CSPRNG
     pub random: Option<crate::mt19937::Random>,
@@ -1035,6 +1035,7 @@ impl Guest {
             block_judge: None,
             batch_stop: None,
             sched: Default::default(),
+            kernel: Default::default(),
             served: Served {
                 process: process_area,
                 thunks,
@@ -1058,8 +1059,6 @@ impl Guest {
                 trace_quiet: BTreeMap::new(),
                 trace_dynamic: BTreeMap::new(),
                 trace_bound: BTreeSet::new(),
-                kernel: crate::kernel::Objects::new(),
-                link: None,
                 random: start.instruction_clock.map(|_| crate::mt19937::Random::new(0x5EED)),
                 files: None,
                 unimplemented: None,

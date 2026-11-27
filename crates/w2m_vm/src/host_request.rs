@@ -160,12 +160,16 @@ pub fn wake_blocked(guest: &mut Guest) {
 }
 
 /// A child's KERNEL 33 request, served by the supervisor in its turn (Sprint 197): the result, with the second word
-/// written and a pending wake applied; None in the supervisor's own process.
+/// written and a pending wake applied; None in the supervisor's own process. The link is read under `kernel`, held for
+/// the request and let go before the wake (Sprint 362).
 fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostError> {
-    let Some(crate::turns::Link::Child(link)) = &guest.served.link else {
+    let kernel = std::sync::Arc::clone(&guest.kernel);
+    let held = kernel.take(guest.memory_view(), guest.served.vcpu);
+    let Some(crate::turns::Link::Child(link)) = &held.link else {
         return Ok(None);
     };
     let (result, second, wake) = link.request(a, &guest.layout.maps).map_err(HostError::Failed)?;
+    drop(held);
     if wake {
         wake_blocked(guest);
     }
@@ -243,6 +247,56 @@ fn child_start(guest: &Guest, child: &crate::kernel::Spawn) -> Result<serde_json
         // the parent's exit ledger, which the child's rows sit beside (Sprint 206)
         "exit_ledger": guest.exit_ledger.as_ref().map(|l| l.path.to_string_lossy().to_string()),
     }))
+}
+
+/// The supervisor's own KERNEL 33 request (Sprint 193; the spawn Sprint 197): under `kernel`, taken under the guest's
+/// runtime word and the run's lock, a leaf held for the one request (Sprint 362; card 4f1), the objects' answer, and on
+/// a spawn the link made and the child started, since the children's table is under `kernel` too; then, `kernel` let
+/// go, the time slices and this process's own wake. The answer's result, its second word written.
+fn kernel_request(guest: &mut Guest, a: [u64; 4]) -> Result<u64, HostError> {
+    let pid = guest.served.process.process_id;
+    let kernel = std::sync::Arc::clone(&guest.kernel);
+    let mut held = kernel.take(guest.memory_view(), guest.served.vcpu);
+    held.objects.add(pid);
+    let answer = held
+        .objects
+        .request(pid, a, &mut KernelMemory(guest))
+        .map_err(HostError::Failed)?;
+    if let Some(child) = &answer.spawn {
+        // the Machine is driven from vCPU 0's turns, so a process that starts another runs on one vCPU until the
+        // Machine has its own thread (Decision "Architecture: a vCPU with no thread"; Sprint 325): refused before the
+        // child or the link is made
+        if guest.start.vcpus > 1 {
+            return Err(HostError::NotServed(MACHINE_ON_ONE.into()));
+        }
+        // `spawner` (kernel.py 437-468): a second `w2m-vm`, run in its turn (Sprint 197)
+        let start = child_start(guest, child).map_err(HostError::Failed)?;
+        if held.link.is_none() {
+            // the link installed once, `linked` set beside it (Sprint 362)
+            let supervisor = crate::turns::Supervisor::new(pid, guest.start.instruction_clock.is_some())
+                .map_err(HostError::Failed)?;
+            kernel.install(&mut held, crate::turns::Link::Supervisor(supervisor));
+        }
+        if let Some(crate::turns::Link::Supervisor(s)) = &mut held.link {
+            s.spawn(child, start).map_err(HostError::Failed)?;
+        }
+    }
+    if answer.wake
+        && let Some(crate::turns::Link::Supervisor(s)) = &held.link
+    {
+        s.wake_children();
+    }
+    drop(held); // `kernel` let go: the rest is this process's own, under the run's lock
+    if answer.spawn.is_some() {
+        // a parent shares the vCPU with its children from here: time slices (`_set_budget`)
+        crate::threads::set_budget(guest);
+    }
+    if answer.wake {
+        wake_blocked(guest);
+    }
+    let mem = crate::guest::memory_view(&guest.memory);
+    mem.write((TRANSPORT + 48) as u64, &answer.second.to_le_bytes());
+    Ok(answer.result)
 }
 
 /// Guest memory as `kernel.rs` reads and writes it, through the layout.
@@ -519,42 +573,7 @@ pub fn serve(guest: &mut Guest, vcpu: &Vcpu, counts: &crate::run::FlushCounts) -
             if let Some(result) = child_request(guest, [a0, a1, a2, a3])? {
                 result
             } else {
-                let pid = guest.served.process.process_id;
-                let mut objects = std::mem::take(&mut guest.served.kernel);
-                objects.add(pid);
-                let answered = objects.request(pid, [a0, a1, a2, a3], &mut KernelMemory(guest));
-                guest.served.kernel = objects;
-                let answer = answered.map_err(HostError::Failed)?;
-                if let Some(child) = &answer.spawn {
-                    // the Machine is driven from vCPU 0's turns, so a process that starts another runs on one vCPU
-                    // until the Machine has its own thread (Decision "Architecture: a vCPU with no thread"; Sprint
-                    // 325): refused before the child or the link is made
-                    if guest.start.vcpus > 1 {
-                        return Err(HostError::NotServed(MACHINE_ON_ONE.into()));
-                    }
-                    // `spawner` (kernel.py 437-468): a second `w2m-vm`, run in its turn (Sprint 197)
-                    let start = child_start(guest, child).map_err(HostError::Failed)?;
-                    if guest.served.link.is_none() {
-                        guest.served.link = Some(crate::turns::Link::Supervisor(
-                            crate::turns::Supervisor::new(pid, guest.start.instruction_clock.is_some())
-                                .map_err(HostError::Failed)?,
-                        ));
-                    }
-                    if let Some(crate::turns::Link::Supervisor(s)) = &mut guest.served.link {
-                        s.spawn(child, start).map_err(HostError::Failed)?;
-                    }
-                    // a parent shares the vCPU with its children from here: time slices (`_set_budget`)
-                    crate::threads::set_budget(guest);
-                }
-                if answer.wake {
-                    wake_blocked(guest);
-                    if let Some(crate::turns::Link::Supervisor(s)) = &guest.served.link {
-                        s.wake_children();
-                    }
-                }
-                let mem = crate::guest::memory_view(&guest.memory);
-                mem.write((TRANSPORT + 48) as u64, &answer.second.to_le_bytes());
-                answer.result
+                kernel_request(guest, [a0, a1, a2, a3])?
             }
         }
         // the file primitives (vm_backend 3811-3818; Sprint 204): the process's file bridge, the second word at the
@@ -739,6 +758,105 @@ mod tests {
         assert!(matches!(HostError::from(failure()), HostError::Failed(m) if m.contains("not open")));
         assert!(matches!(ModuleError::from(refusal()), ModuleError::NotServed(m) if m.contains("'..'")));
         assert!(matches!(ModuleError::from(failure()), ModuleError::Failed(m) if m.contains("not open")));
+    }
+
+    /// The supervisor's own KERNEL 33 takes `kernel` only under the runtime word (Sprint 362; card 4f1's guard): with
+    /// vCPU 0's guest holding the word, as at its `hvc #8`, PIPE_CREATE answers the pipe's two ends from `kernel`'s
+    /// objects, the write end the second word; with the word free, the take's assertion names it, before the lock is
+    /// taken, and the lock is left free.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_kernel_request_takes_kernel_only_under_the_runtime_word() {
+        use super::{TRANSPORT, kernel_request};
+        use crate::kernel::{OBJECT_IDS, PIPE_CREATE};
+        use crate::monitor_code::{RUNTIME_LOCK, host_release_runtime_word};
+        use guest_runtime::layout::{LOCK_OWNER, RUN_TABLE};
+        use std::sync::atomic::Ordering;
+
+        let (mut g, _) = crate::threads::tests::guest_with_a_thread();
+        let md = crate::VcpuPages::FIRST.monitor;
+        // vCPU 0's owner, as the run's set-up writes it, and its guest's hold of the word at the request
+        g.memory_view().write_u64(md + LOCK_OWNER, 1);
+        g.memory_view()
+            .atomic_u32(RUN_TABLE + RUNTIME_LOCK)
+            .store(1, Ordering::Relaxed);
+        let read = kernel_request(&mut g, [PIPE_CREATE, 0, 0, 0]).expect("PIPE_CREATE under the guest's word");
+        assert_eq!(read, OBJECT_IDS + 1, "the read end");
+        assert_eq!(
+            g.memory_view().read_u64((TRANSPORT + 48) as u64),
+            OBJECT_IDS + 2,
+            "the write end, the second word"
+        );
+        assert!(!g.kernel.linked(), "a link made by a pipe");
+        host_release_runtime_word(g.memory_view());
+        let free = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = kernel_request(&mut g, [PIPE_CREATE, 0, 0, 0]);
+        }));
+        let why = free.expect_err("a kernel request with the word free");
+        assert_eq!(
+            why.downcast_ref::<&str>(),
+            Some(&"the kernel lock taken without a runtime word")
+        );
+        g.memory_view()
+            .atomic_u32(RUN_TABLE + RUNTIME_LOCK)
+            .store(1, Ordering::Relaxed);
+        let again = kernel_request(&mut g, [PIPE_CREATE, 0, 0, 0]).expect("the lock left free by the refused take");
+        assert_eq!(
+            again,
+            OBJECT_IDS + 4,
+            "the next pipe's read end, after the first's three ids"
+        );
+    }
+
+    /// A spawn installs the link and sets `linked` beside it (Sprint 362): before it, no link and `linked` false; after
+    /// the supervisor's own PROCESS_CREATE, under one take of `kernel`, `linked` is true and the link is the
+    /// supervisor's, holding the child. The child here is this test binary started `--child`, which refuses the argument
+    /// and ends; its start line written before or after that end, the spawn answers the child's id or the write's
+    /// failure, and the link is installed before either.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_spawn_installs_the_link_and_sets_linked_beside_it() {
+        use super::{HostError, KernelMemory, kernel_request};
+        use crate::kernel::{KIND_DIRECTORY, Memory, PROCESS_CREATE};
+        use crate::monitor_code::RUNTIME_LOCK;
+        use guest_runtime::layout::{HEAP_VA, LOCK_OWNER, RUN_TABLE};
+        use std::sync::atomic::Ordering;
+
+        let (mut g, _) = crate::threads::tests::guest_with_a_thread();
+        let pid = g.served.process.process_id;
+        let md = crate::VcpuPages::FIRST.monitor;
+        g.memory_view().write_u64(md + LOCK_OWNER, 1);
+        g.memory_view()
+            .atomic_u32(RUN_TABLE + RUNTIME_LOCK)
+            .store(1, Ordering::Relaxed);
+        // the command line at HEAP_VA, the directory at +0x100, the list at +0x200: the directory alone (kind 102)
+        let text = |s: &str| -> Vec<u8> { s.encode_utf16().flat_map(u16::to_le_bytes).collect() };
+        let mut list = Vec::new();
+        for w in [10, KIND_DIRECTORY, HEAP_VA + 0x100] {
+            list.extend(u64::to_le_bytes(w));
+        }
+        let mut mem = KernelMemory(&mut g);
+        mem.write(HEAP_VA, &text("probe.exe")).unwrap();
+        mem.write(HEAP_VA + 0x100, &text("C:\\w2m\\app")).unwrap();
+        mem.write(HEAP_VA + 0x200, &list).unwrap();
+        assert!(!g.kernel.linked(), "linked before any spawn");
+        let spawned = kernel_request(&mut g, [PROCESS_CREATE, HEAP_VA, 9 | 1 << 32, HEAP_VA + 0x200]);
+        match &spawned {
+            Ok(child) => assert_eq!(*child, pid + 4, "the child's id"),
+            Err(HostError::Failed(why)) => assert!(why.starts_with("a child w2m-vm's start"), "{why}"),
+            Err(other) => panic!("the spawn: {other:?}"),
+        }
+        let kernel = std::sync::Arc::clone(&g.kernel);
+        let held = kernel.take(g.memory_view(), g.served.vcpu);
+        let supervisor = match &held.link {
+            Some(crate::turns::Link::Supervisor(s)) => Some(s.children.iter().map(|c| c.pid).collect::<Vec<_>>()),
+            _ => None,
+        };
+        assert!(
+            kernel.linked() && supervisor.is_some(),
+            "after a spawn, under one take: linked {}, the link {supervisor:?}",
+            kernel.linked()
+        );
     }
 
     /// `struct.pack("<QQIHHQIIIi", base, allocation_base, allocation_protect, 0, 0, region_size, state, protect, type,

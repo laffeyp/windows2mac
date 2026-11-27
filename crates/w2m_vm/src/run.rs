@@ -924,16 +924,86 @@ impl<'a> GuestLock<'a> {
     }
 }
 
+/// What a run's processes share, out of `Guest.served` (Sprint 362; card 4f1 of
+/// `docs/design-a-process-that-starts-another-2026-11-26.md`): `kernel.rs`' objects (named events, pipes, a record per
+/// process) and the turn form's link, the supervisor with its children's table or a child's side.
+pub struct Kernel {
+    pub objects: crate::kernel::Objects,
+    pub link: Option<crate::turns::Link>,
+}
+
+/// The host design's Change 4 `kernel` lock, "for processes, cross-process names, handles and pipes, one request at a
+/// time" (`docs/design-rust-host-2026-10-24.md` 289), beside `GuestLock` (Sprint 362). A leaf: a KERNEL 33 service and
+/// the turn take it under the runtime word and the run's lock, in that order (the runtime word, the run's lock, then
+/// `kernel`), and nothing holding it waits for a word or the run's lock. `Guest::kernel` holds it by `Arc`, so a service
+/// takes it beside its `&mut Guest`. Whether a link is made is kept beside it, for the readers that ask only that (the
+/// time slice, the switch's idle), which take no lock: a link is installed once and kept for the run, so `linked` is set
+/// once, at the install (`install` under `kernel` at the first spawn, `set_link` for a child before its run), and never
+/// cleared; a set-once fact, not a copy of the link that could drift from it.
+pub struct KernelLock {
+    kernel: std::sync::Mutex<Kernel>,
+    linked: std::sync::atomic::AtomicBool,
+}
+
+impl Default for KernelLock {
+    fn default() -> KernelLock {
+        KernelLock {
+            kernel: std::sync::Mutex::new(Kernel {
+                objects: crate::kernel::Objects::new(),
+                link: None,
+            }),
+            linked: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+}
+
+/// `kernel` held: the objects and the link.
+pub type KernelGuard<'k> = std::sync::MutexGuard<'k, Kernel>;
+
+impl KernelLock {
+    /// `kernel` for the vCPU whose pages are `pages`: the runtime word asserted held, by the host or by that vCPU,
+    /// before the lock is taken, in release builds too, as `GuestLock::serve` asserts it (card 4f1's guard). Card
+    /// 4f2's request server, which holds no word, takes it its own way; none exists before it. A lock its holder left
+    /// poisoned by a panic is taken as that holder left it.
+    pub fn take(&self, mem: ConcurrentGuestMemory<'_>, pages: VcpuPages) -> KernelGuard<'_> {
+        assert!(
+            crate::monitor_code::runtime_word_held(mem, crate::monitor_code::vcpu_owner(mem, pages.monitor)),
+            "the kernel lock taken without a runtime word"
+        );
+        self.kernel.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Whether a link is made: the process is one of a machine's.
+    pub fn linked(&self) -> bool {
+        self.linked.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// The link installed under `kernel`, `held` this lock's guard (the supervisor's, at its first spawn): the link in,
+    /// then `linked` stored true beside it, never cleared.
+    pub fn install(&self, held: &mut KernelGuard<'_>, link: crate::turns::Link) {
+        held.link = Some(link);
+        self.linked.store(true, std::sync::atomic::Ordering::Release);
+    }
+
+    /// The link made before the run, no other thread able to hold the lock (a child's, at its start).
+    pub fn set_link(&mut self, link: crate::turns::Link) {
+        self.kernel.get_mut().unwrap_or_else(|e| e.into_inner()).link = Some(link);
+        *self.linked.get_mut() = true;
+    }
+}
+
 /// The process's turn ends (Sprint 197: `VM.steps` yields "idle" or "slice", vm_backend 5066, 5082): the machine runs
 /// the others until this process's turn comes back; a pending wake readies its blocked threads, and on the instruction
 /// clock it is caught up to the machine's (`_catch_up`). Err: the run stops (a deadlock, a child's stop). The wait holds
 /// neither the lock nor the word (the guest-memory design's choice 6; Sprints 294 and 311): the lock's guard let go,
 /// then the word's, releasing it if the host took it; after, the word taken again, then the lock, and both guards
 /// handed back (Sprint 338: a guard that took nothing, the vCPU's guest holding the word, is kept across the wait, as
-/// the hold was). The link and the kernel objects are out of `Guest` across the wait.
+/// the hold was). `kernel`, the link and the objects, is taken under the word and the lock before they are let go, held
+/// across the hand-over, which serves the children's requests from it, and let go before the word is taken again
+/// (Sprint 362): nothing holding it waits for a word or the run's lock.
 fn turn<'l, 'a>(
     lock: &'l GuestLock<'a>,
-    mut held: std::sync::MutexGuard<'l, Shared<'a>>,
+    held: std::sync::MutexGuard<'l, Shared<'a>>,
     message: crate::turns::Message,
     word: RuntimeWordGuard<'a>,
     outside: &mut u64,
@@ -945,9 +1015,9 @@ fn turn<'l, 'a>(
     use crate::turns::{Back, Link};
     let mut state = crate::threads::turn_state(held.guest);
     state.clock = crate::threads::counter_now(held.guest);
-    let mut link = held.guest.served.link.take();
-    let mut objects = std::mem::take(&mut held.guest.served.kernel);
     let pages = held.guest.served.vcpu;
+    let kernel = std::sync::Arc::clone(&held.guest.kernel);
+    let mut shared = kernel.take(lock.view(), pages);
     drop(held);
     let kept = if word.took {
         drop(word); // the host's take let go for the wait
@@ -956,8 +1026,9 @@ fn turn<'l, 'a>(
         Some(word)
     };
     assert!(lock.shared.try_lock().is_ok(), "a turn's wait with the run's lock held");
-    let back = match &mut link {
-        Some(Link::Supervisor(s)) => s.hand_over(&mut objects, state).map(|back| match back {
+    let Kernel { objects, link } = &mut *shared;
+    let back = match link {
+        Some(Link::Supervisor(s)) => s.hand_over(objects, state).map(|back| match back {
             Back::Run { wake, machine } | Back::Timed { wake, machine } => (wake, machine, 1 + s.children.len()),
         }),
         Some(Link::Child(c)) => {
@@ -966,10 +1037,9 @@ fn turn<'l, 'a>(
         }
         None => Ok((false, 0, 1)),
     };
+    drop(shared); // `kernel` let go before the word is taken again
     let word = kept.unwrap_or_else(|| take_word_unchecked(lock.view(), pages.monitor, outside));
     let mut held = lock.serve(pages);
-    held.guest.served.kernel = objects;
-    held.guest.served.link = link;
     let handed = back.map(|(wake, machine, processes)| {
         if wake {
             crate::host_request::wake_blocked(held.guest);
@@ -1037,7 +1107,7 @@ fn run(
     }
     {
         // `_set_budget`: one thread, the run's limit; a child shares the vCPU from its first instruction (Sprint 197)
-        let budget = if guest.served.link.is_some() {
+        let budget = if guest.kernel.linked() {
             max_steps.min(guest_runtime::layout::TIME_SLICE)
         } else {
             max_steps
@@ -1520,12 +1590,15 @@ fn vcpu_loop(
             let (count, limit) = (mem.read_u64(md), mem.read_u64(md + 8));
             mem.write_u64(md + SLICE_UNTIL, slice_until);
             mem.write_u64(md + RUN_END, max_steps);
-            // the VM switches threads itself unless another process is due (Sprint 197)
-            let others_due = guest
-                .served
-                .link
-                .as_ref()
-                .is_some_and(|l| l.others_due(crate::threads::counter_now(guest)));
+            // the VM switches threads itself unless another process is due (Sprint 197); the link read under `kernel`,
+            // a leaf under the word and the lock (Sprint 362)
+            let others_due = guest.kernel.linked() && {
+                let kernel = guest.kernel.take(mem, pages);
+                kernel
+                    .link
+                    .as_ref()
+                    .is_some_and(|l| l.others_due(crate::threads::counter_now(guest)))
+            };
             mem.write_u64(RUN_TABLE + u64::from(RT_IN_VM), u64::from(!others_due));
             drop(held);
             drop(word); // let go inside the timed part, as before the guard
@@ -1934,7 +2007,10 @@ fn vcpu_loop(
                 crate::threads::set_budget(held.guest);
                 crate::threads::wake_expired(held.guest);
                 let now = crate::threads::counter_now(held.guest);
-                let others = held.guest.served.link.as_ref().is_some_and(|l| l.others_ready(now));
+                let others = held.guest.kernel.linked() && {
+                    let kernel = held.guest.kernel.take(lock.view(), pages);
+                    kernel.link.as_ref().is_some_and(|l| l.others_ready(now))
+                };
                 if !others && held.guest.served.threads.len() < 2 {
                     break 'slice Ok(None);
                 }
@@ -2394,5 +2470,60 @@ mod tests {
             "the guest's word back"
         );
         assert_eq!(mem.read_u64(answer_at), 7, "the kick's answer in the transport");
+    }
+
+    /// `turn` holds `kernel` across its hand-over (Sprint 362; card 4f1): the supervisor's turn ends idle and goes to its
+    /// child, whose `w2m-vm` a `ChildLink` here stands for; while the supervisor waits for the turn back, `kernel` is
+    /// held, the objects and the link in it, not moved out beside it. The child's stop ends the hand-over, the turn's
+    /// error names it, and after the turn `kernel` is free, the link and the objects there as before.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn a_turn_holds_kernel_across_its_hand_over() {
+        use crate::turns::{ChildLink, Link, Message, Supervisor};
+
+        let (mut g, _) = crate::threads::tests::guest_with_a_thread();
+        let pid = g.served.process.process_id;
+        let mut supervisor = Supervisor::new(pid, true).unwrap();
+        // the child's `w2m-vm`: a process alive until the supervisor's end kills it
+        let process = std::process::Command::new("/bin/sleep").arg("60").spawn().unwrap();
+        let page_fd = supervisor.adopt(pid + 4, process).unwrap();
+        {
+            let kernel = std::sync::Arc::get_mut(&mut g.kernel).unwrap();
+            kernel.set_link(Link::Supervisor(supervisor));
+            kernel.kernel.get_mut().unwrap().objects.add(pid);
+        }
+        let shared = std::sync::Arc::clone(&g.kernel);
+        let lock = super::GuestLock::new(&mut g, None);
+        let md = crate::VcpuPages::FIRST.monitor;
+        lock.view()
+            .write_u64(md + super::LOCK_OWNER, u64::from(super::owner_of(0)));
+        let (held_during, handed) = std::thread::scope(|scope| {
+            let turned = scope.spawn(|| {
+                let mut outside = 0;
+                let word = super::take_word_unchecked(lock.view(), md, &mut outside);
+                let held = lock.serve(crate::VcpuPages::FIRST);
+                let (held, word, handed) = super::turn(&lock, held, Message::Idle, word, &mut outside);
+                drop(held);
+                drop(word);
+                handed
+            });
+            // the child's turn, given by the supervisor's hand-over, which waits for it back
+            let child = ChildLink::open(page_fd, 1, pid + 4).unwrap();
+            child.first_turn();
+            let held_during = matches!(shared.kernel.try_lock(), Err(std::sync::TryLockError::WouldBlock));
+            child.stop("the test's child stops");
+            (held_during, turned.join().unwrap())
+        });
+        assert!(held_during, "kernel free while the turn waits in its hand-over");
+        assert_eq!(
+            handed,
+            Err(format!("child process {}: the test's child stops", pid + 4))
+        );
+        let after = shared.kernel.try_lock().expect("kernel let go after the turn");
+        assert!(
+            matches!(after.link, Some(Link::Supervisor(_))),
+            "the link after the turn"
+        );
+        assert!(after.objects.processes.contains_key(&pid), "the objects after the turn");
     }
 }

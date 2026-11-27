@@ -38,7 +38,8 @@ fn the_served_part_is_the_designs() {
         only_served.is_empty() && only_table.is_empty(),
         "in Served and not a Served row of the design: {only_served:?}; a Served row and not in Served: {only_table:?}"
     );
-    assert_eq!(table.len(), 24, "the design's table counts 24 Served");
+    // 24 until Sprint 362, which put `kernel` and `link` behind `kernel`, the lock beside the run's
+    assert_eq!(table.len(), 22, "the design's table counts 22 Served");
     let guest = fields(&source, "Guest");
     let both: Vec<&String> = guest.intersection(&table).collect();
     assert!(both.is_empty(), "Served fields still on Guest: {both:?}");

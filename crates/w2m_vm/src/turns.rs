@@ -652,3 +652,23 @@ impl Drop for Supervisor {
         self.end();
     }
 }
+
+#[cfg(test)]
+impl Supervisor {
+    /// A child held as `spawn` holds one, its process `process`, not yet started (Sprint 362): a test of `run`'s turn
+    /// stands for the child's `w2m-vm` through a `ChildLink` on the turn page's descriptor, which this returns.
+    pub(crate) fn adopt(&mut self, pid: u64, process: Child) -> Result<i32, String> {
+        let slot = 1 + self.children.len();
+        let memory_file = anonymous_file(0).map_err(|e| format!("a child's memory: {e}"))?;
+        self.page.store(word(slot, PID), pid);
+        self.children.push(ChildProcess {
+            pid,
+            slot,
+            process,
+            memory_file,
+            memory: None,
+            started: false,
+        });
+        Ok(self.page_file.as_raw_fd())
+    }
+}
