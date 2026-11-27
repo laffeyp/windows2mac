@@ -807,7 +807,8 @@ impl Drop for RuntimeWordGuard<'_> {
 /// `monitor`: its guard, which releases it if the host took it; a vCPU that holds it already (a miss inside the
 /// runtime) keeps it. A service found outside it after the take, the word held neither by the host nor by this vCPU, is
 /// counted in `outside`. With no run's stop to read: `turn`'s take after the Machine's wait, a process with a machine
-/// link running on one vCPU (`MACHINE_ON_ONE`, Sprint 325); every other take is `take_word`'s (Sprint 329).
+/// link running on one vCPU (Sprint 325; from Sprint 364 the turn form is one vCPU's alone, `KernelLock::turns`, and
+/// several vCPUs take no turns); every other take is `take_word`'s (Sprint 329).
 fn take_word_unchecked<'a>(mem: ConcurrentGuestMemory<'a>, monitor: u64, outside: &mut u64) -> RuntimeWordGuard<'a> {
     let own = crate::monitor_code::vcpu_owner(mem, monitor);
     let took = crate::monitor_code::host_take_runtime_word(mem, own);
@@ -939,10 +940,19 @@ pub struct Kernel {
 /// takes it beside its `&mut Guest`. Whether a link is made is kept beside it, for the readers that ask only that (the
 /// time slice, the switch's idle), which take no lock: a link is installed once and kept for the run, so `linked` is set
 /// once, at the install (`install` under `kernel` at the first spawn, `set_link` for a child before its run), and never
-/// cleared; a set-once fact, not a copy of the link that could drift from it.
+/// cleared; a set-once fact, not a copy of the link that could drift from it. From Sprint 364 (card 4f3) the link is of
+/// one of two forms, fixed by the run's vCPU count: the turn form's (`Link::Supervisor`, `Link::Child`) on one vCPU, and
+/// the request server's (`Link::Server`, `Link::Client`) on several, where no Machine runs and processes take no
+/// turns; `turns` is set beside `linked` for the first form, and the readers of turns (the switch's idle, the time
+/// slice, `others_due`, `others_ready`) read it. Beside them, outside the lock, what a process's link thread and its
+/// vCPUs' parks reach with no `kernel` held: the first process's side of the server (`first`), and a child's side of
+/// the page (`child`), set with its `Client`.
 pub struct KernelLock {
     kernel: std::sync::Mutex<Kernel>,
     linked: std::sync::atomic::AtomicBool,
+    turns: std::sync::atomic::AtomicBool,
+    pub first: crate::cross_process::FirstProcess,
+    child: std::sync::OnceLock<crate::cross_process::ChildSide>,
 }
 
 impl Default for KernelLock {
@@ -953,6 +963,9 @@ impl Default for KernelLock {
                 link: None,
             }),
             linked: std::sync::atomic::AtomicBool::new(false),
+            turns: std::sync::atomic::AtomicBool::new(false),
+            first: crate::cross_process::FirstProcess::default(),
+            child: std::sync::OnceLock::new(),
         }
     }
 }
@@ -982,22 +995,100 @@ impl KernelLock {
         self.kernel.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Whether a link is made: the process is one of a machine's.
+    /// Whether a link is made, of either form: the process is one of several.
     pub fn linked(&self) -> bool {
         self.linked.load(std::sync::atomic::Ordering::Acquire)
     }
 
-    /// The link installed under `kernel`, `held` this lock's guard (the supervisor's, at its first spawn): the link in,
-    /// then `linked` stored true beside it, never cleared.
+    /// Whether the link is the turn form's (Sprint 364): the process takes turns with the others on one vCPU, the
+    /// Machine's; false with no link and with the request server's.
+    pub fn turns(&self) -> bool {
+        self.turns.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Whether the link is the request server's (Sprint 364): the processes run at once, on several vCPUs.
+    pub fn served_by_the_request_server(&self) -> bool {
+        self.linked() && !self.turns()
+    }
+
+    /// The link installed under `kernel`, `held` this lock's guard (the first process's, at its first spawn): the link
+    /// in, then `turns` for the turn form's and `linked` stored true beside it, never cleared.
     pub fn install(&self, held: &mut KernelGuard<'_>, link: crate::turns::Link) {
+        let turns = matches!(link, crate::turns::Link::Supervisor(_) | crate::turns::Link::Child(_));
         held.link = Some(link);
+        self.turns.store(turns, std::sync::atomic::Ordering::Release);
         self.linked.store(true, std::sync::atomic::Ordering::Release);
     }
 
-    /// The link made before the run, no other thread able to hold the lock (a child's, at its start).
-    pub fn set_link(&mut self, link: crate::turns::Link) {
+    /// The link made before the run, no other thread able to hold the lock (a child's, at its start); a `Client`'s side
+    /// of the page mapped and kept beside the lock.
+    pub fn set_link(&mut self, link: crate::turns::Link) -> Result<(), String> {
+        if let crate::turns::Link::Client(c) = &link {
+            let side = c.side()?;
+            self.child = std::sync::OnceLock::from(side);
+        }
+        *self.turns.get_mut() = matches!(link, crate::turns::Link::Supervisor(_) | crate::turns::Link::Child(_));
         self.kernel.get_mut().unwrap_or_else(|e| e.into_inner()).link = Some(link);
         *self.linked.get_mut() = true;
+        Ok(())
+    }
+
+    /// This process's wake count, which its link thread applies (Sprint 364): a child's on the page, else the first
+    /// process's in-process one.
+    pub fn wakes(&self) -> u64 {
+        match self.child.get() {
+            Some(side) => side.wakes(),
+            None => self.first.wakes().now(),
+        }
+    }
+
+    /// Waits until this process's wake count moves from `seen`, `timeout` at most.
+    pub fn wait_for_wakes_past(&self, seen: u64, timeout: Duration) {
+        match self.child.get() {
+            Some(side) => side.wait_past(seen, timeout),
+            None => {
+                self.first.wakes().wait_past(seen, timeout);
+            }
+        }
+    }
+
+    /// This process's wake count raised by itself, at its run's end, so its link thread ends at once.
+    pub fn raise_own_wakes(&self) {
+        match self.child.get() {
+            Some(side) => side.raise(),
+            None => self.first.wakes().raise(),
+        }
+    }
+
+    /// This process's park post (Sprint 364; the design's "The deadlock rule"): every vCPU parked with no blocked
+    /// thread holding a deadline (`true`), or one taking a thread again (`false`), for the request server's verdict.
+    pub fn post_parked(&self, parked: bool) {
+        match self.child.get() {
+            Some(side) => side.post_parked(parked),
+            None => self.first.post_parked(parked),
+        }
+    }
+
+    /// The request server ended, at the run's end, by any path out of it (Sprint 364; the design's "The stop", the
+    /// user's Decision of 2026-10-18): taken out of the link under `kernel`, which no other thread holds once the run's
+    /// vCPUs have ended but the server's own, then ended with `kernel` let go, its thread joined and every child stopped
+    /// and waited for, one waiting on a slot the server never answered among them. The server holds this lock by `Arc`
+    /// and sits in its link, so its `Drop` would not run with the guest's; this ends it. No runtime word is asserted:
+    /// the run's vCPUs are gone.
+    pub fn end_request_server(&self) {
+        let server = {
+            let mut held = self.kernel.lock().unwrap_or_else(|e| e.into_inner());
+            match held.link.take() {
+                Some(crate::turns::Link::Server(s)) => Some(s),
+                other => {
+                    held.link = other;
+                    None
+                }
+            }
+        };
+        if let Some(mut server) = server {
+            server.end();
+        }
     }
 }
 
@@ -1044,7 +1135,8 @@ fn turn<'l, 'a>(
             let (wake, machine) = c.yield_turn(message, state);
             Ok((wake, machine, 2))
         }
-        None => Ok((false, 0, 1)),
+        // the request server's form takes no turns (Sprint 364): `turns()` is false there, and no caller comes here
+        Some(Link::Server(_) | Link::Client(_)) | None => Ok((false, 0, 1)),
     };
     drop(shared); // `kernel` let go before the word is taken again
     let word = kept.unwrap_or_else(|| take_word_unchecked(lock.view(), pages.monitor, outside));
@@ -1115,8 +1207,9 @@ fn run(
         }
     }
     {
-        // `_set_budget`: one thread, the run's limit; a child shares the vCPU from its first instruction (Sprint 197)
-        let budget = if guest.kernel.linked() {
+        // `_set_budget`: one thread, the run's limit; a child of the machine's turns shares the vCPU from its first
+        // instruction (Sprint 197); a child of the request server's form runs on its own (Sprint 364)
+        let budget = if guest.kernel.turns() {
             max_steps.min(guest_runtime::layout::TIME_SLICE)
         } else {
             max_steps
@@ -1154,12 +1247,24 @@ fn run(
         runtime: guest.entry_va,
     };
     let sched = std::sync::Arc::clone(&guest.sched);
+    // the processes of a run on several vCPUs (Sprint 364; card 4f3): this process's link thread applies the wakes
+    // another process sends, from the run's start in the first process (its request server starts at its first spawn)
+    // and in a child of the server's form; and the request server ends at the run's end by any path out of it, so no
+    // child is left past the run (the user's Decision of 2026-10-18)
+    let kernel = std::sync::Arc::clone(&guest.kernel);
+    let applies_wakes = guest.start.vcpus > 1 || kernel.served_by_the_request_server();
+    let _server_ends = EndRequestServerAtEnd(&kernel);
+    let link_ended = std::sync::atomic::AtomicBool::new(false);
     // the run's shared state behind one lock (Sprints 310 and 311), which each vCPU's loop holds by `&` alone (Sprint
     // 324); the vCPUs' threads end inside the scope, before the lock gives the borrows back
     let lock = GuestLock::new(&mut *guest, host.as_deref_mut());
     let stopping = RunStop::default();
     let (ended, end) = std::sync::mpsc::channel::<()>();
     let ran: Vec<Result<Outcome, HvError>> = std::thread::scope(|scope| {
+        let link = applies_wakes.then(|| {
+            let (lock, kernel, stopping, sched, ended) = (&lock, &*kernel, &stopping, &sched, &link_ended);
+            scope.spawn(move || apply_wakes(lock, kernel, stopping, sched, ended))
+        });
         let threads: Vec<_> = chains
             .iter()
             .enumerate()
@@ -1188,6 +1293,12 @@ fn run(
             .map(|t| t.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
             .collect();
         drop(ended); // the timer leaves
+        // the link thread leaves: its flag, then its wake count raised so its wait ends at once
+        if let Some(link) = link {
+            link_ended.store(true, std::sync::atomic::Ordering::Release);
+            kernel.raise_own_wakes();
+            link.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+        }
         ran
     });
     for mine in ran {
@@ -1407,6 +1518,61 @@ impl Drop for HaltAtEnd<'_> {
     }
 }
 
+/// The request server ended when `run` leaves, by its return, a `?` or a panic (Sprint 364): every child stopped and
+/// waited for, one waiting on a slot the server never answered among them (`KernelLock::end_request_server`).
+struct EndRequestServerAtEnd<'k>(&'k KernelLock);
+
+impl Drop for EndRequestServerAtEnd<'_> {
+    fn drop(&mut self) {
+        self.0.end_request_server();
+    }
+}
+
+/// This process's link thread (Sprint 364; card 4f3 of `docs/design-a-process-that-starts-another-2026-11-26.md`,
+/// "Which lock or request each crossing takes"): it waits on the process's wake count (`KernelLock::wakes`, a child's
+/// on the request page, the first process's in-process), and when it rises takes the process's runtime word, the host's
+/// take, then the run's lock, and applies the wake (`threads::wake_from_another_process`). It takes no `kernel`, chooses
+/// no turn and runs no other process. The word closes the window between a wait's check and its park: a guest checks
+/// the host's answer and blocks inside one holding of its word, so the wake lands before the check or after the block,
+/// and a thread past its check and not yet parked takes the woken mark and retries. In the first process it also hands
+/// the request server's stop, which raises its wake count, to the run's `RunStop`, as a time limit stops it (the
+/// design's "The stop"). It ends at the run's stop, or when `ended` is set at the vCPUs' end, looking every 100 ms.
+fn apply_wakes(
+    lock: &GuestLock<'_>,
+    kernel: &KernelLock,
+    stopping: &RunStop,
+    sched: &crate::threads::Sched,
+    ended: &std::sync::atomic::AtomicBool,
+) {
+    const LOOK_EVERY: Duration = Duration::from_millis(100);
+    let mem = lock.view();
+    let mut applied = kernel.wakes();
+    loop {
+        let seen = kernel.wakes();
+        if ended.load(std::sync::atomic::Ordering::Acquire) || stopping.stopped() {
+            return;
+        }
+        if let Some(why) = kernel.first.stop() {
+            stopping.stop(Stop::Handover { pc: 0, why }, sched);
+            return;
+        }
+        if seen != applied {
+            // the host's take of the word, waiting while a vCPU's guest holds it, given up at the run's stop
+            if !crate::monitor_code::take_word_for_guest(mem, crate::monitor_code::HOST_OWNER, &|| stopping.stopped()) {
+                return;
+            }
+            let word = RuntimeWordGuard { mem, took: true };
+            {
+                let mut held = lock.serve(VcpuPages::FIRST);
+                crate::threads::wake_from_another_process(held.guest);
+            }
+            drop(word); // the lock let go first, the word outermost
+            applied = seen;
+        }
+        kernel.wait_for_wakes_past(seen, LOOK_EVERY);
+    }
+}
+
 /// One vCPU's thread (Sprint 327): its vCPU made here, where it stays; its registers set, vCPU 0's at the program's
 /// entry, another's with no thread; its loop run; its stop, if it is the run's, given to the run; at its end, by any
 /// path, the run halted and its guest's hold of the runtime word let go (`HaltAtEnd`).
@@ -1600,8 +1766,8 @@ fn vcpu_loop(
             mem.write_u64(md + SLICE_UNTIL, slice_until);
             mem.write_u64(md + RUN_END, max_steps);
             // the VM switches threads itself unless another process is due (Sprint 197); the link read under `kernel`,
-            // a leaf under the word and the lock (Sprint 362)
-            let others_due = guest.kernel.linked() && {
+            // a leaf under the word and the lock (Sprint 362); never in the request server's form (Sprint 364)
+            let others_due = guest.kernel.turns() && {
                 let kernel = guest.kernel.take(mem, pages);
                 kernel
                     .link
@@ -2016,7 +2182,8 @@ fn vcpu_loop(
                 crate::threads::set_budget(held.guest);
                 crate::threads::wake_expired(held.guest);
                 let now = crate::threads::counter_now(held.guest);
-                let others = held.guest.kernel.linked() && {
+                // another process ready takes the turn in the machine's form only (Sprint 364)
+                let others = held.guest.kernel.turns() && {
                     let kernel = held.guest.kernel.take(lock.view(), pages);
                     kernel.link.as_ref().is_some_and(|l| l.others_ready(now))
                 };
@@ -2498,7 +2665,7 @@ mod tests {
         let page_fd = supervisor.adopt(pid + 4, process).unwrap();
         {
             let kernel = std::sync::Arc::get_mut(&mut g.kernel).unwrap();
-            kernel.set_link(Link::Supervisor(supervisor));
+            kernel.set_link(Link::Supervisor(supervisor)).unwrap();
             kernel.kernel.get_mut().unwrap().objects.add(pid);
         }
         let shared = std::sync::Arc::clone(&g.kernel);
@@ -2534,5 +2701,37 @@ mod tests {
             "the link after the turn"
         );
         assert!(after.objects.processes.contains_key(&pid), "the objects after the turn");
+    }
+
+    /// The request server's `Drop` is a working backstop (Sprint 364): the server holds `kernel` weakly, so sitting in
+    /// that lock's link makes no cycle, and the lock's last drop drops the server, which stops and waits for every
+    /// child. A child that would run 60 s, adopted, its server installed in the link, is gone once the lock is dropped:
+    /// `kill(pid, 0)` finds no such process.
+    #[test]
+    fn the_request_servers_drop_ends_its_children_with_the_lock() {
+        unsafe extern "C" {
+            /// `sys/signal.h` 401
+            fn kill(pid: i32, signal: i32) -> i32;
+        }
+        let kernel = std::sync::Arc::new(super::KernelLock::default());
+        let server = crate::cross_process::Server::start(&kernel).unwrap();
+        let child = std::process::Command::new("/bin/sleep").arg("60").spawn().unwrap();
+        let pid = child.id() as i32;
+        let memory = crate::shared::anonymous_file(64 * 1024).unwrap();
+        server.adopt(0, 4100, child, &memory).unwrap();
+        kernel.kernel.lock().unwrap().link = Some(crate::turns::Link::Server(server));
+        assert_eq!(unsafe { kill(pid, 0) }, 0, "the child before the lock's drop");
+        drop(kernel);
+        // the server's own pass may hold the lock's last strong count at the test's drop, so the drop, and the child's
+        // end, can come on the server's thread when that pass ends: looked at every 10 ms, 2 s at most
+        let mut gone = false;
+        for _ in 0..200 {
+            gone = unsafe { kill(pid, 0) } == -1;
+            if gone {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(gone, "the child {pid} after the lock's drop");
     }
 }

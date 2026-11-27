@@ -17,11 +17,13 @@
 //! From Sprint 351 (census G2) `scripts/gates.sh` runs each row again on two vCPUs, `w2m-vm --vcpus 2`, writing
 //! build/family_runs/<family>-<run>-two-vcpus.txt and .stop, and each is held to its one-vCPU run's contract rows or
 //! held entry; a run the host refuses on two vCPUs is held instead by name to the refusal, in
-//! store/family_runs/two-vcpus-refused-2026-11-26.tsv: one that starts a child process to `MACHINE_ON_ONE` until the
-//! run-loop design's card 4f. Until Sprint 360 a run whose family starts on the instruction clock was held to
-//! `vcpus_allowed`'s refusal of that clock; from Sprint 360 the clock stays on one vCPU and such a start runs on the wall
-//! clock above one (`w2m-vm`), and the two such runs, `processes`', start a child process too, so they are held to
-//! `MACHINE_ON_ONE`.
+//! store/family_runs/two-vcpus-refused-2026-11-26.tsv: one that started a child process, to the refusal of the
+//! run-loop design's card 4f, until Sprint 364. Until Sprint 360 a run whose family starts on the instruction clock was
+//! held to `vcpus_allowed`'s refusal of that clock; from Sprint 360 the clock stays on one vCPU and such a start runs on
+//! the wall clock above one (`w2m-vm`). From Sprint 364 (card 4f3 of
+//! `docs/design-a-process-that-starts-another-2026-11-26.md`) a process that starts another runs on two vCPUs, its child
+//! on one, what crosses between them answered by the request server, and the six runs the list held are held to their
+//! one-vCPU runs' rows; the list holds none.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -1349,31 +1351,20 @@ fn state_of(root: &Path, c: &[&str], base: &Path, stop: &str) -> Option<String> 
 
 /// The runs held on two vCPUs by name to the host's refusal (Sprint 351): of a child process until the run-loop
 /// design's card 4f (and of the instruction clock until Sprint 360, from which a family's start on it runs on the wall
-/// clock above one vCPU).
+/// clock above one vCPU). None from Sprint 364, card 4f3, which lifted the refusal of a child process.
 const REFUSED: &str = "store/family_runs/two-vcpus-refused-2026-11-26.tsv";
 
-/// The refusals a stop of `REFUSED` may be, as `w2m-vm --vcpus 2` writes them: one from Sprint 360, no family run
-/// reaching `vcpus_allowed`'s refusal of the instruction clock.
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-fn refusals() -> [String; 1] {
-    use w2m_vm::host_request::{HOST_KERNEL, MACHINE_ON_ONE};
-    // `Stop::HostRequest` of the kernel request (`HOST_KERNEL`) that would start a child
-    [format!("HostRequest op {HOST_KERNEL}: {MACHINE_ON_ONE}")]
-}
-
-/// Each stop `REFUSED` holds is one of the host's refusals on two vCPUs, as `w2m-vm` names it (Sprint 351).
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+/// `REFUSED` holds no run (Sprint 364): the host refuses no family run on two vCPUs, a process that starts another
+/// running there with its child on one vCPU, and each of the six it held is held to its one-vCPU run's rows.
 #[test]
-fn the_refused_runs_are_held_to_the_hosts_refusals() {
-    let refusals = refusals();
+fn the_refused_list_holds_none() {
     let refused = by_run(&root(), REFUSED);
-    assert!(!refused.is_empty(), "{REFUSED} holds no run");
-    for ((family, run), stop) in refused {
-        assert!(
-            refusals.contains(&stop),
-            "{REFUSED}: {family} run {run} holds {stop:?}, none of the host's refusals {refusals:?}"
-        );
-    }
+    assert!(
+        refused.is_empty(),
+        "{REFUSED} holds {} runs, where the host refuses none on two vCPUs: {:?}",
+        refused.len(),
+        refused.keys().collect::<Vec<_>>()
+    );
 }
 
 #[test]

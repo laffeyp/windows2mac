@@ -14,7 +14,7 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use cpu_cases::sha256;
 use guest_runtime::layout::{
@@ -995,24 +995,39 @@ fn monotonic_count() -> u64 {
     unsafe { clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 100 }
 }
 
-/// Sprint 325 (the Decision "Architecture: a vCPU with no thread"): a process that starts another runs on one vCPU until
-/// the Machine has its own thread; on a start of 2 vCPUs `busychild`'s CreateProcessW stops the run by name, before the
-/// child or the supervisor's link is made.
+/// Sprint 364 (card 4f3; until then Sprint 325's refusal of a spawn on several vCPUs): on a start of 2 vCPUs `twoproc`'s
+/// CreateProcessW makes the request server's link, not the turns', and its child's end is the server's to see. In
+/// process the child `w2m-vm` is this test binary, which refuses `--child` and ends without a word, while `twoproc`
+/// polls its handle with no end of its own: the server's look finds the child gone, and its stop reaches the run through
+/// the first process's link thread, naming the child, as the server's stops do.
 #[test]
-fn a_spawn_on_two_vcpus_is_refused_before_its_link() {
+fn a_spawn_on_two_vcpus_makes_the_request_servers_link() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
-    let data = fs::read(root.join("tests/data/timed_waits/busychild.exe")).unwrap();
+    let data = fs::read(root.join("tests/data/timed_waits/twoproc.exe")).unwrap();
     let loaded = load(&data, None, "probe.exe").unwrap();
     let mut start = Start::console("probe.exe");
     start.vcpus = 2;
     let mut guest = guest_with(&root, &loaded, &start);
-    let out = run(&mut guest, &loaded, &mut HostCompiler::default());
+    let out = run_limited(
+        &mut guest,
+        &loaded,
+        &mut HostCompiler::default(),
+        Some(Duration::from_secs(60)),
+    );
     match &out.stop {
-        Stop::HostRequest { why, .. } => assert_eq!(why, w2m_vm::host_request::MACHINE_ON_ONE),
-        other => panic!("busychild on 2 vCPUs stopped as {other:?}"),
+        Stop::Handover { why, .. } => assert!(
+            why.starts_with("child process ") && why.contains(": gone without a word"),
+            "twoproc on 2 vCPUs stopped as {why}"
+        ),
+        other => panic!("twoproc on 2 vCPUs stopped as {other:?}"),
     }
-    assert!(!guest.kernel.linked(), "a link was made before the refusal");
+    assert!(
+        guest.kernel.served_by_the_request_server() && !guest.kernel.turns(),
+        "the link made by a spawn on 2 vCPUs: request server's {}, turns {}",
+        guest.kernel.served_by_the_request_server(),
+        guest.kernel.turns()
+    );
 }
 
 /// Sprint 327 (the run-loop design's 4c3b2b): two vCPUs run one process and end it as one vCPU does, `qpc`'s clock
@@ -1172,17 +1187,126 @@ fn program_through_w2m_vm(name: &str, program: &Path, extra: &[String], vcpus: u
     )
 }
 
-/// Deferred (Sprint 325), met at Sprint 327: `w2m-vm --vcpus 2` carries the count to the guest's start, so `busychild`'s
-/// CreateProcessW stops the run by name (`MACHINE_ON_ONE`).
+/// A guest's run through `w2m-vm` started in a process group of its own, so every process it starts is in that group
+/// (Sprint 364): its stop, its output, its stderr, its time, and what `pgrep -g` finds of the group once it has ended.
+struct GroupRun {
+    stopped: String,
+    said: String,
+    stderr: String,
+    took: Duration,
+    left: String,
+}
+
+/// `tests/data/timed_waits/<name>.exe` run as `through_w2m_vm` runs it, with `extra` arguments, its process group its
+/// own; `tag` names its directory.
+fn guest_through_w2m_vm_in_a_group(name: &str, tag: &str, extra: &[&str], vcpus: u32) -> GroupRun {
+    use std::os::unix::process::CommandExt;
+    let root = root();
+    let dir = std::env::temp_dir().join(format!("w2m-{tag}-{vcpus}-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let (output, stop) = (dir.join(format!("{name}.txt")), dir.join(format!("{name}.stop")));
+    let started = Instant::now();
+    let mut child = std::process::Command::new(root.join("scripts/sign_and_run.sh"))
+        .arg(env!("CARGO_BIN_EXE_w2m-vm"))
+        .arg(root.join(format!("tests/data/timed_waits/{name}.exe")))
+        .args(extra)
+        .args(["--vcpus", &vcpus.to_string(), "--output"])
+        .arg(&output)
+        .arg("--stop")
+        .arg(&stop)
+        .current_dir(&root)
+        .process_group(0)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let group = child.id();
+    {
+        use std::io::Write;
+        child.stdin.take().unwrap().write_all(b"{}\n").unwrap();
+    }
+    let ran = child.wait_with_output().unwrap();
+    let took = started.elapsed();
+    let left = std::process::Command::new("/usr/bin/pgrep")
+        .args(["-l", "-g", &group.to_string()])
+        .output()
+        .unwrap();
+    let stopped = fs::read_to_string(&stop).unwrap_or_default();
+    let said = fs::read_to_string(&output).unwrap_or_default();
+    let _ = fs::remove_dir_all(&dir);
+    GroupRun {
+        stopped: stopped.trim_end().to_string(),
+        said,
+        stderr: String::from_utf8_lossy(&ran.stderr).into(),
+        took,
+        left: String::from_utf8_lossy(&left.stdout).trim().to_string(),
+    }
+}
+
+/// Sprint 364 (card 4f3; until then Sprint 327's refusal by name): `busychild` through `w2m-vm --vcpus 2` runs its
+/// parent on two vCPUs and its child on one at once, no turns between them: the child spins for ever in its own process
+/// while the parent's two threads take their 20 rounds and end the run, which ends the child; none of the group is left.
 #[test]
-fn busychild_through_w2m_vm_on_two_vcpus_is_refused_by_name() {
+fn busychild_through_w2m_vm_on_two_vcpus_runs_its_child_at_once() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
-    let (stopped, _, stderr) = through_w2m_vm("busychild", 2);
+    let r = guest_through_w2m_vm_in_a_group("busychild", "busychild", &[], 2);
     assert_eq!(
-        stopped,
-        format!("HostRequest op 33: {}", w2m_vm::host_request::MACHINE_ON_ONE),
-        "busychild through w2m-vm --vcpus 2; stderr {stderr}"
+        (r.stopped.as_str(), r.said.as_str()),
+        ("ExitProcess { code: 0 }", "done\n"),
+        "busychild through w2m-vm --vcpus 2; stderr {}",
+        r.stderr
     );
+    assert_eq!(r.left, "", "processes of the run's group left after its end");
+}
+
+/// Sprint 364 (card 4f3's gate, the design's "The deadlock rule"): `two_process_deadlock` on two vCPUs, a parent and its
+/// child each waiting INFINITE on a named event only the other sets, stops as a deadlock by `threads::DEADLOCK`'s words,
+/// the request server's verdict across processes; none of the group is left. Without the verdict each process parks
+/// with none of its own and the run goes on to its time limit, GUEST_SECONDS (60 s), whose stop is "the run's time
+/// limit". The verdict comes 1 to 1.1 s after both processes park (`cross_process::QUIET`, the server's 100 ms look),
+/// and the whole run, the two `w2m-vm`s' loads included, took 1.19 s alone on this Mac (2026-11-26) and 2.18 s beside
+/// 43 other tests. The time is printed, not held: no correctness test holds a wall-clock bound, which fails on the
+/// machine's load (`crates/hypervisor/tests/no_wall_clock_bound.rs`, Sprint 224); the stop's words tell the verdict from
+/// the time limit.
+#[test]
+fn a_deadlock_across_two_processes_on_two_vcpus_stops_as_one() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let r = guest_through_w2m_vm_in_a_group("two_process_deadlock", "two-process-deadlock", &[], 2);
+    println!("two_process_deadlock on 2 vCPUs: {:?} in {:?}", r.stopped, r.took);
+    assert_eq!(
+        r.stopped,
+        format!("Handover: {}", w2m_vm::threads::DEADLOCK),
+        "two_process_deadlock through w2m-vm --vcpus 2 in {:?}; stderr {}",
+        r.took,
+        r.stderr
+    );
+    assert_eq!(r.left, "", "processes of the run's group left after its end");
+}
+
+/// Sprint 364 (card 4f3, the design's "The stop"; the user's Decision of 2026-10-18): a run that stops ends every child,
+/// one waiting on a slot the server never answered among them. `two_process_deadlock`'s child, started with "-g", asks
+/// CreateProcessW for a third process, which the request server refuses: it leaves the child's slot unanswered, the
+/// child waiting on it, and stops the run naming the child; the run's end ends the child, and none of the group is left.
+#[test]
+fn a_stopped_run_ends_a_child_waiting_on_an_unanswered_slot() {
+    let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
+    let r = guest_through_w2m_vm_in_a_group(
+        "two_process_deadlock",
+        "unanswered-slot",
+        &["--start", r#"{"arguments":"grandchild"}"#],
+        2,
+    );
+    println!(
+        "two_process_deadlock grandchild on 2 vCPUs: {:?} in {:?}",
+        r.stopped, r.took
+    );
+    assert_eq!(
+        r.stopped, "Handover: child process 4100: a grandchild process: not served yet",
+        "stderr {}",
+        r.stderr
+    );
+    assert_eq!(r.left, "", "processes of the run's group left after its end");
 }
 
 /// Deferred (Sprint 327, partial), met at Sprint 328: `statsize`'s worker, on vCPU 1 while the main thread spins on

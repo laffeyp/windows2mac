@@ -75,9 +75,6 @@ pub enum Served {
     Kick { owner: u32, entry: u64, answer: u64 },
 }
 
-/// Why a spawn is refused on a run of more than one vCPU (Sprint 325): the run stops as `Stop::HostRequest` naming it.
-pub const MACHINE_ON_ONE: &str = "a process that starts another runs on one vCPU until the Machine has its own thread (the run-loop design's card 4f)";
-
 /// A request the host does not serve, or could not (reviewer-3's High 1 of its review of Sprint 211: one variant had
 /// carried both, so a failure read as a service not implemented).
 #[derive(Debug)]
@@ -159,16 +156,19 @@ pub fn wake_blocked(guest: &mut Guest) {
     crate::threads::mark_woken(guest);
 }
 
-/// A child's KERNEL 33 request, served by the supervisor in its turn (Sprint 197): the result, with the second word
-/// written and a pending wake applied; None in the supervisor's own process. The link is read under `kernel`, held for
-/// the request and let go before the wake (Sprint 362).
+/// A child's KERNEL 33 request, served by the supervisor in its turn (Sprint 197) or, on several vCPUs, by the request
+/// server in one round trip, the child's runtime word held across it as for every host request (Sprint 364; the
+/// design's "A child's KERNEL 33"): the result, with the second word written and a wake applied; None in the first
+/// process's own. The link is read under `kernel`, held for the request and let go before the wake (Sprint 362).
 fn child_request(guest: &mut Guest, a: [u64; 4]) -> Result<Option<u64>, HostError> {
     let kernel = std::sync::Arc::clone(&guest.kernel);
     let held = kernel.take(guest.memory_view(), guest.served.vcpu);
-    let Some(crate::turns::Link::Child(link)) = &held.link else {
-        return Ok(None);
+    let (result, second, wake) = match &held.link {
+        Some(crate::turns::Link::Child(link)) => link.request(a, &guest.layout.maps).map_err(HostError::Failed)?,
+        // the maps were posted once at the child's start (`w2m-vm --child`)
+        Some(crate::turns::Link::Client(client)) => client.request(a),
+        _ => return Ok(None),
     };
-    let (result, second, wake) = link.request(a, &guest.layout.maps).map_err(HostError::Failed)?;
     drop(held);
     if wake {
         wake_blocked(guest);
@@ -252,8 +252,11 @@ fn child_start(guest: &Guest, child: &crate::kernel::Spawn) -> Result<serde_json
 /// The supervisor's own KERNEL 33 request (Sprint 193; the spawn Sprint 197): under `kernel`, taken under the guest's
 /// runtime word and the run's lock, a leaf held for the one request (Sprint 362; card 4f1), the objects' answer, and on
 /// a spawn the link made and the child started, since the children's table is under `kernel` too; then, `kernel` let
-/// go, the time slices and this process's own wake. The answer's result, its second word written.
+/// go, the time slices and this process's own wake. The answer's result, its second word written. On several vCPUs
+/// (Sprint 364; card 4f3) the link is the request server's, started at the first spawn, which adopts the child, and
+/// this process's parks post to its verdict from then on; a waking answer raises every live child's wake count.
 fn kernel_request(guest: &mut Guest, a: [u64; 4]) -> Result<u64, HostError> {
+    use crate::turns::Link;
     let pid = guest.served.process.process_id;
     let kernel = std::sync::Arc::clone(&guest.kernel);
     let mut held = kernel.take(guest.memory_view(), guest.served.vcpu);
@@ -263,32 +266,47 @@ fn kernel_request(guest: &mut Guest, a: [u64; 4]) -> Result<u64, HostError> {
         .request(pid, a, &mut KernelMemory(guest))
         .map_err(HostError::Failed)?;
     if let Some(child) = &answer.spawn {
-        // the Machine is driven from vCPU 0's turns, so a process that starts another runs on one vCPU until the
-        // Machine has its own thread (Decision "Architecture: a vCPU with no thread"; Sprint 325): refused before the
-        // child or the link is made
-        if guest.start.vcpus > 1 {
-            return Err(HostError::NotServed(MACHINE_ON_ONE.into()));
-        }
-        // `spawner` (kernel.py 437-468): a second `w2m-vm`, run in its turn (Sprint 197)
+        // `spawner` (kernel.py 437-468): a second `w2m-vm`, run in its turn on one vCPU (Sprint 197), at once on several
+        // (Sprint 364)
         let start = child_start(guest, child).map_err(HostError::Failed)?;
         if held.link.is_none() {
-            // the link installed once, `linked` set beside it (Sprint 362)
-            let supervisor = crate::turns::Supervisor::new(pid, guest.start.instruction_clock.is_some())
-                .map_err(HostError::Failed)?;
-            kernel.install(&mut held, crate::turns::Link::Supervisor(supervisor));
+            // the link installed once, `linked` (and the turn form's `turns`) set beside it (Sprints 362, 364): the run's
+            // vCPU count, fixed before the run, picks the form
+            let link = if guest.start.vcpus > 1 {
+                Link::Server(crate::cross_process::Server::start(&kernel).map_err(HostError::Failed)?)
+            } else {
+                Link::Supervisor(
+                    crate::turns::Supervisor::new(pid, guest.start.instruction_clock.is_some())
+                        .map_err(HostError::Failed)?,
+                )
+            };
+            let served = matches!(link, Link::Server(_));
+            kernel.install(&mut held, link);
+            if served {
+                // a wake can come from another process now: no verdict of this process's own (the design's "The
+                // deadlock rule")
+                guest
+                    .sched
+                    .link(crate::threads::ParkPost(std::sync::Arc::clone(&kernel)));
+            }
         }
-        if let Some(crate::turns::Link::Supervisor(s)) = &mut held.link {
-            s.spawn(child, start).map_err(HostError::Failed)?;
+        match &mut held.link {
+            Some(Link::Supervisor(s)) => s.spawn(child, start).map_err(HostError::Failed)?,
+            Some(Link::Server(s)) => s.spawn(child, start).map_err(HostError::Failed)?,
+            _ => {}
         }
     }
-    if answer.wake
-        && let Some(crate::turns::Link::Supervisor(s)) = &held.link
-    {
-        s.wake_children();
+    if answer.wake {
+        match &held.link {
+            Some(Link::Supervisor(s)) => s.wake_children(),
+            Some(Link::Server(s)) => s.wake_children(),
+            _ => {}
+        }
     }
     drop(held); // `kernel` let go: the rest is this process's own, under the run's lock
-    if answer.spawn.is_some() {
-        // a parent shares the vCPU with its children from here: time slices (`_set_budget`)
+    if answer.spawn.is_some() && guest.kernel.turns() {
+        // a parent shares the vCPU with its children from here: time slices (`_set_budget`); in the request server's
+        // form each process runs on its own vCPUs (Sprint 364)
         crate::threads::set_budget(guest);
     }
     if answer.wake {

@@ -14,19 +14,30 @@
 //! store after the answer's words, and wakes the slot. Words two processes wait on are waited on with
 //! `os_sync_wait_on_address` and OS_SYNC_WAIT_ON_ADDRESS_SHARED, as `shared.rs` waits; the doorbell wait times out
 //! every 100 ms, and the server then looks whether each child is still there, as `shared::Page::wait_until_alive`
-//! looks. No run reaches the server yet: card 4f3 (Sprint 364) makes it at a spawn on several vCPUs.
+//! looks.
+//!
+//! From Sprint 364 (card 4f3, "Which lock or request each crossing takes", "The deadlock rule", "The stop") a run
+//! reaches it: a spawn on several vCPUs starts the server under `kernel` and adopts the child (`Server::spawn`), which
+//! runs on one vCPU with the `Client` link. After a waking answer the server raises every live process's wake count:
+//! a child's on the page (`WAKES`), the first process's in-process (`FirstProcess`, since the header says SHARED "should
+//! not be used when synchronizing among multiple threads of a single process"); each process's link thread applies it
+//! (`run.rs`). Each process posts whether every one of its vCPUs is parked with no blocked thread holding a deadline
+//! (`PARKED`, `FirstProcess::post_parked`), and the server stops the run as a deadlock, by `threads::DEADLOCK`'s words,
+//! when every live process has posted and a whole second passes with no request, no wake count raised and no post
+//! cleared. Its stops (a child's stop, a refused request, a child gone, the deadlock) are the first process's to read
+//! (`FirstProcess::stop`), and its link thread stops the run with them.
 
 use std::ffi::c_void;
 use std::fs::File;
 use std::os::fd::AsRawFd;
-use std::process::Child;
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::kernel::MappedMemoryView;
 use crate::run::KernelLock;
-use crate::shared::{anonymous_file, inheritable};
+use crate::shared::{MACH_ABSOLUTE_TIME, SHARED, anonymous_file, inheritable};
 
 unsafe extern "C" {
     /// `os/os_sync_wait_on_address.h` 153-157: blocks while `addr` holds `value`, until a wake
@@ -46,14 +57,14 @@ unsafe extern "C" {
     fn os_sync_wake_by_address_all(addr: *mut c_void, size: usize, flags: u32) -> i32;
 }
 
-/// OS_SYNC_WAIT_ON_ADDRESS_SHARED and OS_SYNC_WAKE_BY_ADDRESS_SHARED (the same header 61-66, 295-300)
-const SHARED: u32 = 1;
-/// `OS_CLOCK_MACH_ABSOLUTE_TIME` (os/clock.h 15)
-const MACH_ABSOLUTE_TIME: u32 = 32;
 /// `sys/errno.h` 177
 const ETIMEDOUT: i32 = 60;
 /// how often the server looks whether each child is still there (`shared.rs`' ALIVE_CHECK_NS)
 const LOOK_EVERY: Duration = Duration::from_millis(100);
+/// The quiet that makes the deadlock verdict across processes: every live process posted parked with no deadline, and
+/// no request, no wake count raised and no post cleared for this long, the one-process rule's second (`threads::Sched`
+/// `park`, the run-loop design 197-200) taken over all processes (Sprint 364)
+const QUIET: Duration = Duration::from_secs(1);
 /// How long a client looks at its state before it blocks on it: spin, then park, as parking_lot's `SpinWait::spin`
 /// ("Spins until the sleep threshold has been reached ... at which point further spinning has diminishing returns and
 /// the thread should be parked instead", `core/src/spinwait.rs` 32-52 at 85827ffa2) and std's futex mutex ("Spin first
@@ -88,7 +99,14 @@ const STOP_WORDS: usize = 128;
 const MAPS_LEN: usize = STOP_TEXT + STOP_WORDS;
 const MAPS: usize = MAPS_LEN + 1;
 const MAPS_MAX: usize = 256;
-const _: () = assert!(MAPS + 3 * MAPS_MAX <= SLOT);
+/// the child's park post, written by the child alone (Sprint 364): a count raised at each change, odd while every one of
+/// its vCPUs is parked with no blocked thread holding a deadline, even otherwise, so a post cleared and made again
+/// between two of the server's looks still reads as a change
+const PARKED: usize = MAPS + 3 * MAPS_MAX;
+/// whether a REQUEST's answer woke (`Answer::wake`), written with RESULT and SECOND before the state: the requester
+/// readies its own blocked threads in its own service, as `host_request::wake_blocked` does (Sprint 364)
+const WOKE: usize = PARKED + 1;
+const _: () = assert!(WOKE < SLOT);
 
 /// A slot's states.
 const IDLE: u64 = 0;
@@ -108,6 +126,12 @@ fn word(slot: usize, w: usize) -> usize {
 struct Words {
     memory: hypervisor::GuestMemory,
 }
+
+// SAFETY: through `&Words` the mapping is reached only by `at`, an atomic of `memory_view` (`ConcurrentGuestMemory`,
+// which is `Sync` and makes no reference into the mapping), and never by `as_slice`; `as_mut_slice` needs `&mut`, which
+// no shared `Words` gives. So two threads that share one `Words` touch its words only by atomics, as two processes do
+// (Sprint 364: a child's link thread and its vCPUs' parks share its side of the page, `ChildSide`).
+unsafe impl Sync for Words {}
 
 impl Words {
     fn map(fd: i32) -> Result<Words, String> {
@@ -150,7 +174,8 @@ impl Words {
 
 /// The first process's own wake count (the design's "an in-process count and condition the server and its own
 /// requests raise", since the header says SHARED "should not be used when synchronizing among multiple threads of a
-/// single process"): raised after every waking answer; card 4f3's link thread waits on it.
+/// single process"): raised after every waking answer, and at a stop of the server's; the first process's link thread
+/// waits on it (`run.rs`, Sprint 364).
 #[derive(Default)]
 pub struct WakeCount {
     count: Mutex<u64>,
@@ -178,6 +203,58 @@ impl WakeCount {
     }
 }
 
+/// What the first process shares with the request server outside `kernel` (Sprint 364), held beside it in
+/// `run::KernelLock` from the run's start, before any server, so the first process's link thread and its vCPUs' parks
+/// reach it with no lock of the server's: its wake count, the run's stop the server makes, and its park post. Its link
+/// thread takes no `kernel` (the design's lock order, "In a link thread: the runtime word, then the run's lock; never
+/// `kernel`").
+#[derive(Default)]
+pub struct FirstProcess {
+    wakes: WakeCount,
+    stop: Mutex<Option<String>>,
+    stopped: Condvar,
+    /// the park post, as a child's `PARKED`: odd while every vCPU is parked with no blocked thread holding a deadline
+    parked: AtomicU64,
+}
+
+impl FirstProcess {
+    /// The first process's wake count.
+    pub fn wakes(&self) -> &WakeCount {
+        &self.wakes
+    }
+
+    /// The run's stop, if the server has made one: a child's stop, a refused request, a child gone without a word, a
+    /// deadlock across processes.
+    pub fn stop(&self) -> Option<String> {
+        self.stop.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    /// The run's stop, the first one kept, and the wake count raised, so the link thread, which hands it to the run's
+    /// `RunStop`, looks at once.
+    fn set_stop(&self, why: String) {
+        self.stop.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert(why);
+        self.stopped.notify_all();
+        self.wakes.raise();
+    }
+
+    /// Waits for the run's stop, `timeout` at most.
+    fn wait_for_stop(&self, timeout: Duration) -> Option<String> {
+        let held = self.stop.lock().unwrap_or_else(|e| e.into_inner());
+        self.stopped
+            .wait_timeout_while(held, timeout, |s| s.is_none())
+            .unwrap_or_else(|e| e.into_inner())
+            .0
+            .clone()
+    }
+
+    /// Every vCPU of the first process parked with no blocked thread holding a deadline (`true`), or one taking a thread
+    /// again (`false`): its `Sched` posts each change once, so each raises the count by one.
+    pub fn post_parked(&self, parked: bool) {
+        let now = self.parked.fetch_add(1, Ordering::AcqRel) + 1;
+        debug_assert_eq!(now % 2 == 1, parked, "the first process's park post out of step");
+    }
+}
+
 /// A value only the request server's thread makes: `KernelLock::take_for_request_server` asks for it, so no other
 /// taker of `kernel` passes `take`'s assertion of a runtime word.
 pub struct RequestServerThread(());
@@ -187,7 +264,10 @@ struct ServedChild {
     slot: usize,
     pid: u64,
     process: Child,
-    memory: hypervisor::GuestMemory,
+    /// its memory's shared file, mapped at its first request (Sprint 364): at a spawn the file is empty, the child
+    /// sizing it when it builds its guest, as the turn form maps it (`turns::Supervisor::serve`)
+    memory_file: File,
+    memory: Option<hypervisor::GuestMemory>,
     /// its maps as offsets in `memory`, (VA, offset, size), read at its first request
     maps: Option<Vec<(u64, u64, u64)>>,
     /// its end or stop answered: its exit is no stop of the run
@@ -200,21 +280,24 @@ struct ServedChild {
 
 /// What the server's thread and its owner share.
 struct Served {
-    kernel: Arc<KernelLock>,
+    /// `kernel`, held weakly (Sprint 364): the server sits in that lock's link, so a strong hold would be a cycle and
+    /// the server's `Drop`, which ends every child, would never run; each pass of the server upgrades it, and the
+    /// thread ends when it cannot, the lock gone with its run's guest
+    kernel: std::sync::Weak<KernelLock>,
     children: Mutex<Vec<ServedChild>>,
     ending: AtomicBool,
-    wakes: WakeCount,
-    stop: Mutex<Option<String>>,
-    stopped: Condvar,
+    /// the slots served, every message counted: the deadlock verdict's "no request"
+    requests: AtomicU64,
     #[cfg(test)]
     answer_pause: AnswerPause,
 }
 
 impl Served {
-    /// The run's stop, the first one kept (card 4f3 hands it to the run's `RunStop`).
+    /// The run's stop, the first one kept, for the first process's link thread to hand to the run's `RunStop`.
     fn stop(&self, why: String) {
-        self.stop.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert(why);
-        self.stopped.notify_all();
+        if let Some(kernel) = self.kernel.upgrade() {
+            kernel.first.set_stop(why);
+        }
     }
 }
 
@@ -227,18 +310,17 @@ pub struct Server {
 }
 
 impl Server {
-    /// The page made and the server's thread started, taking `kernel` for each request.
-    pub fn start(kernel: Arc<KernelLock>) -> Result<Server, String> {
+    /// The page made and the server's thread started, taking `kernel` for each request; `kernel` is held weakly, so
+    /// the server's place in its link makes no cycle.
+    pub fn start(kernel: &Arc<KernelLock>) -> Result<Server, String> {
         let page_file = anonymous_file(PAGE_SIZE as u64).map_err(|e| format!("the request page: {e}"))?;
         let page = Words::map(page_file.as_raw_fd())?;
         let thread_page = Words::map(page_file.as_raw_fd())?;
         let served = Arc::new(Served {
-            kernel,
+            kernel: Arc::downgrade(kernel),
             children: Mutex::new(Vec::new()),
             ending: AtomicBool::new(false),
-            wakes: WakeCount::default(),
-            stop: Mutex::new(None),
-            stopped: Condvar::new(),
+            requests: AtomicU64::new(0),
             #[cfg(test)]
             answer_pause: AnswerPause::default(),
         });
@@ -260,14 +342,14 @@ impl Server {
         inheritable(&self.page_file).map_err(|e| format!("the request page: {e}"))
     }
 
-    /// Child `pid`, in `slot`, its process `process`, its memory the shared file `memory`: answered from now on, and
-    /// looked at every 100 ms. The doorbell is raised, since the child may have posted before it was adopted.
+    /// Child `pid`, in `slot`, its process `process`, its memory the shared file `memory`, mapped at its first request:
+    /// answered from now on, and looked at every 100 ms. The doorbell is raised, since the child may have posted before
+    /// it was adopted.
     pub fn adopt(&self, slot: usize, pid: u64, process: Child, memory: &File) -> Result<(), String> {
         if slot >= SLOTS {
             return Err(format!("slot {slot} of a page of {SLOTS}"));
         }
-        let len = memory.metadata().map_err(|e| e.to_string())?.len() as usize;
-        let memory = hypervisor::GuestMemory::shared(memory.as_raw_fd(), len).map_err(|e| e.to_string())?;
+        let memory_file = memory.try_clone().map_err(|e| format!("a child's memory: {e}"))?;
         self.served
             .children
             .lock()
@@ -276,7 +358,8 @@ impl Server {
                 slot,
                 pid,
                 process,
-                memory,
+                memory_file,
+                memory: None,
                 maps: None,
                 ended: false,
                 gone: false,
@@ -286,41 +369,89 @@ impl Server {
         Ok(())
     }
 
+    /// `spawner` on several vCPUs (Sprint 364; kernel.py 437-468, as `turns::Supervisor::spawn` makes it on one): a
+    /// child `w2m-vm` started `--child` with the page's and its memory's descriptors and its slot, the next free one,
+    /// its start one JSON line on its standard input, which carries `request_server`, so the child opens a `Client`
+    /// and runs at once; then adopted. Made by the spawning vCPU under `kernel`, which the children's table is under.
+    pub fn spawn(&self, child: &crate::kernel::Spawn, start: serde_json::Value) -> Result<(), String> {
+        let slot = self.served.children.lock().unwrap_or_else(|e| e.into_inner()).len();
+        if slot >= SLOTS {
+            return Err(format!("a process past the request page's {SLOTS} slots"));
+        }
+        let mut start = start;
+        start["request_server"] = serde_json::Value::Bool(true);
+        let memory_file = anonymous_file(0).map_err(|e| format!("a child's memory: {e}"))?;
+        let (page_fd, memory_fd) = (
+            self.page_descriptor()?,
+            inheritable(&memory_file).map_err(|e| format!("a child's memory: {e}"))?,
+        );
+        let exe = std::env::current_exe().map_err(|e| format!("w2m-vm's own path: {e}"))?;
+        let mut process = Command::new(exe)
+            .args([
+                "--child".to_string(),
+                page_fd.to_string(),
+                memory_fd.to_string(),
+                slot.to_string(),
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("a child w2m-vm: {e}"))?;
+        let mut line = start.to_string();
+        line.push('\n');
+        let written = process
+            .stdin
+            .take()
+            .ok_or_else(|| "a child w2m-vm's standard input".to_string())
+            .and_then(|mut input| {
+                std::io::Write::write_all(&mut input, line.as_bytes())
+                    .map_err(|e| format!("a child w2m-vm's start: {e}"))
+            });
+        // adopted whether its start was written or not, so the run's end stops it either way
+        self.adopt(slot, child.pid, process, &memory_file)?;
+        written
+    }
+
+    /// Every live child's wake count raised (Sprint 364): the first process's own waking answer (a pipe written or
+    /// read, an event set, a close that broke a pipe), served by its vCPU under `kernel`, which the table is under.
+    pub fn wake_children(&self) {
+        let children = self.served.children.lock().unwrap_or_else(|e| e.into_inner());
+        for c in children.iter().filter(|c| !c.gone && !c.ended) {
+            self.page.at(word(c.slot, WAKES)).fetch_add(1, Ordering::Release);
+            self.page.wake_every(word(c.slot, WAKES));
+        }
+    }
+
     /// A test's pause, 1 ms before every `every`th answer's words; 0 turns it off.
     #[cfg(test)]
     fn pause_before_answers(&self, every: u64) {
         self.served.answer_pause.every.store(every, Ordering::Relaxed);
     }
 
-    /// The first process's wake count.
-    pub fn wakes(&self) -> &WakeCount {
-        &self.served.wakes
-    }
-
-    /// The run's stop, if the server has made one: a child's stop, a refused request, a child gone without a word.
+    /// The run's stop, if the server has made one: a child's stop, a refused request, a child gone without a word, a
+    /// deadlock across processes. None too once `kernel` is gone.
     pub fn stopped(&self) -> Option<String> {
-        self.served.stop.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.served.kernel.upgrade()?.first.stop()
     }
 
     /// Waits for the run's stop, `timeout` at most.
     pub fn wait_for_stop(&self, timeout: Duration) -> Option<String> {
-        let held = self.served.stop.lock().unwrap_or_else(|e| e.into_inner());
-        self.served
-            .stopped
-            .wait_timeout_while(held, timeout, |s| s.is_none())
-            .unwrap_or_else(|e| e.into_inner())
-            .0
-            .clone()
+        self.served.kernel.upgrade()?.first.wait_for_stop(timeout)
     }
 
-    /// The run ended: the thread stopped and joined, every child process stopped and waited for.
+    /// The run ended: the thread stopped and joined, every child process stopped and waited for. The run's end calls
+    /// it (`run::KernelLock::end_request_server`), and `Drop` calls it too, a backstop. When the lock's last strong
+    /// count was the server thread's own pass, the lock's drop drops the server on that thread, which is ending and is
+    /// not joined by itself.
     pub fn end(&mut self) {
         let Some(thread) = self.thread.take() else {
             return;
         };
         self.served.ending.store(true, Ordering::Release);
         ring(&self.page);
-        let _ = thread.join();
+        if thread.thread().id() != std::thread::current().id() {
+            let _ = thread.join();
+        }
         for c in self
             .served
             .children
@@ -347,51 +478,113 @@ fn ring(page: &Words) {
 }
 
 /// The server's thread: every posted slot served, then a wait on the doorbell from the count read before the slots
-/// were looked at, so a request posted meanwhile ends the wait at once; every 100 ms a look at each child.
+/// were looked at, so a request posted meanwhile ends the wait at once; every 100 ms a look at each child; at each
+/// wake the deadlock verdict across processes weighed (Sprint 364).
 fn serve_until_ended(served: &Served, page: &Words) {
     let me = RequestServerThread(());
     let mut looked = Instant::now();
+    let mut quiet = None;
     loop {
         let rung = page.at(DOORBELL).load(Ordering::Acquire);
         if served.ending.load(Ordering::Acquire) {
             return;
         }
-        serve_posted(served, page, &me);
+        // `kernel` held strongly for this pass alone, let go before the doorbell's wait; gone, the run is gone
+        let Some(kernel) = served.kernel.upgrade() else {
+            return;
+        };
+        serve_posted(served, &kernel, page, &me);
         if looked.elapsed() >= LOOK_EVERY {
             look_at_children(served);
             looked = Instant::now();
         }
+        weigh_deadlock(served, &kernel, page, &mut quiet);
+        drop(kernel);
         page.wait_for(DOORBELL, rung, LOOK_EVERY.saturating_sub(looked.elapsed()));
+    }
+}
+
+/// Since when every live process has posted parked, and what the verdict's counts read then.
+struct Quiet {
+    since: Instant,
+    counts: Vec<u64>,
+}
+
+/// The deadlock rule across processes (the design's "The deadlock rule", Sprint 364): every live process, the first and
+/// each child not ended, gone or refused, has posted that every one of its vCPUs is parked with no blocked thread
+/// holding a deadline (its post's count odd); then the counts the verdict watches, the requests served, every wake count
+/// and every post, are read, and when they read the same for a whole second (`QUIET`) the run stops as a deadlock, by
+/// `threads::DEADLOCK`'s words. A request, a wake raised or a post cleared and made again moves a count and starts the
+/// second again. The server looks at least every 100 ms, so the stop comes 1 to 1.1 s after the last change.
+fn weigh_deadlock(served: &Served, kernel: &KernelLock, page: &Words, quiet: &mut Option<Quiet>) {
+    let live: Vec<usize> = served
+        .children
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .filter(|c| !c.gone && !c.ended && !c.refused)
+        .map(|c| c.slot)
+        .collect();
+    let first = &kernel.first;
+    let first_parked = first.parked.load(Ordering::Acquire);
+    let posted = |count: u64| count % 2 == 1;
+    let children_parked: Vec<u64> = live
+        .iter()
+        .map(|&s| page.at(word(s, PARKED)).load(Ordering::Acquire))
+        .collect();
+    if !posted(first_parked) || !children_parked.iter().all(|&p| posted(p)) {
+        *quiet = None;
+        return;
+    }
+    let counts: Vec<u64> = [served.requests.load(Ordering::Acquire), first.wakes.now(), first_parked]
+        .into_iter()
+        .chain(children_parked)
+        .chain(live.iter().map(|&s| page.at(word(s, WAKES)).load(Ordering::Acquire)))
+        .collect();
+    match quiet {
+        Some(q) if q.counts == counts => {
+            if q.since.elapsed() >= QUIET {
+                served.stop(crate::threads::DEADLOCK.into());
+            }
+        }
+        _ => {
+            *quiet = Some(Quiet {
+                since: Instant::now(),
+                counts,
+            })
+        }
     }
 }
 
 /// Every posted slot of a child not refused, served and answered. `kernel` is taken first, then the children's table,
 /// which is under it as the design puts it ("the children's table is under it too"): a spawn made under `kernel` adopts
 /// its child with no other order to meet, and the look at the children takes the table alone.
-fn serve_posted(served: &Served, page: &Words, me: &RequestServerThread) {
+fn serve_posted(served: &Served, kernel_lock: &KernelLock, page: &Words, me: &RequestServerThread) {
     let posted: Vec<usize> = (0..SLOTS)
         .filter(|&s| page.at(word(s, STATE)).load(Ordering::Acquire) == POSTED)
         .collect();
     if posted.is_empty() {
         return;
     }
-    let mut kernel = served.kernel.take_for_request_server(me);
+    let mut kernel = kernel_lock.take_for_request_server(me);
     let mut children = served.children.lock().unwrap_or_else(|e| e.into_inner());
     let mut wake = false;
     for c in children.iter_mut().filter(|c| !c.refused && posted.contains(&c.slot)) {
         let s = c.slot;
+        served.requests.fetch_add(1, Ordering::AcqRel);
         let message = page.at(word(s, MESSAGE)).load(Ordering::Relaxed);
         let a = std::array::from_fn(|k| page.at(word(s, ARGS + k)).load(Ordering::Relaxed));
         let answer = match message {
-            REQUEST => {
+            REQUEST => map_memory(c).and_then(|()| {
                 let maps = c.maps.get_or_insert_with(|| read_maps(page, s));
-                let mut memory = MappedMemoryView::new(crate::guest::memory_view(&c.memory), maps);
+                let mapped = c.memory.as_ref().expect("mapped above");
+                let mut memory = MappedMemoryView::new(crate::guest::memory_view(mapped), maps);
                 match kernel.objects.request(c.pid, a, &mut memory) {
                     Ok(answer) if answer.spawn.is_some() => Err("a grandchild process: not served yet".into()),
                     Ok(answer) => Ok((answer.result, answer.second, answer.wake)),
                     Err(e) => Err(e),
                 }
-            }
+            }),
             ENDED => {
                 c.ended = true;
                 let code = page.at(word(s, EXIT_CODE)).load(Ordering::Relaxed);
@@ -417,6 +610,7 @@ fn serve_posted(served: &Served, page: &Words, me: &RequestServerThread) {
         served.answer_pause.before_the_answers_words();
         page.at(word(s, RESULT)).store(result, Ordering::Relaxed);
         page.at(word(s, SECOND)).store(second, Ordering::Relaxed);
+        page.at(word(s, WOKE)).store(u64::from(waking), Ordering::Relaxed);
         page.at(word(s, STATE)).store(ANSWERED, Ordering::Release);
         page.wake_every(word(s, STATE));
         wake |= waking;
@@ -435,7 +629,7 @@ fn serve_posted(served: &Served, page: &Words, me: &RequestServerThread) {
             page.at(word(s, WAKES)).fetch_add(1, Ordering::Release);
             page.wake_every(word(s, WAKES));
         }
-        served.wakes.raise();
+        kernel_lock.first.wakes.raise();
     }
 }
 
@@ -471,6 +665,26 @@ fn read_maps(page: &Words, s: usize) -> Vec<(u64, u64, u64)> {
         .collect()
 }
 
+/// Child `c`'s memory mapped from its shared file, once, at its first request, when the child has sized it.
+fn map_memory(c: &mut ServedChild) -> Result<(), String> {
+    if c.memory.is_none() {
+        let len = c
+            .memory_file
+            .metadata()
+            .map_err(|e| format!("a child's memory: {e}"))?
+            .len() as usize;
+        if len == 0 || !len.is_multiple_of(16 * 1024) {
+            return Err(format!(
+                "a request with the child's memory {len} bytes, not whole 16 KB pages"
+            ));
+        }
+        let mapped = hypervisor::GuestMemory::shared(c.memory_file.as_raw_fd(), len)
+            .map_err(|e| format!("a child's memory: {e}"))?;
+        c.memory = Some(mapped);
+    }
+    Ok(())
+}
+
 /// The stop text slot `s` posted.
 fn read_stop_text(page: &Words, s: usize) -> String {
     let len = (page.at(word(s, STOP_LEN)).load(Ordering::Relaxed) as usize).min(8 * STOP_WORDS);
@@ -501,6 +715,7 @@ fn look_at_children(served: &Served) {
 /// A child's side of the page: its slot, posted and waited on.
 pub struct Client {
     page: Words,
+    page_fd: i32,
     slot: usize,
 }
 
@@ -512,7 +727,17 @@ impl Client {
         }
         Ok(Client {
             page: Words::map(page_fd)?,
+            page_fd,
             slot,
+        })
+    }
+
+    /// The slot's wake count and park post, a mapping of its own (Sprint 364): what the child's link thread waits on
+    /// and its vCPUs' parks post, beside `kernel`, which holds this `Client`.
+    pub fn side(&self) -> Result<ChildSide, String> {
+        Ok(ChildSide {
+            page: Words::map(self.page_fd)?,
+            slot: self.slot,
         })
     }
 
@@ -535,12 +760,20 @@ impl Client {
         Ok(())
     }
 
-    /// A KERNEL 33 request, (sub-operation, a1, a2, a3): its result and second word.
-    pub fn request(&self, a: [u64; 4]) -> (u64, u64) {
+    /// A KERNEL 33 request, (sub-operation, a1, a2, a3): its result, its second word, and whether it woke (a pipe
+    /// written or read, an event set, a close that broke a pipe), so the child readies its own blocked threads in its
+    /// own service (Sprint 364).
+    pub fn request(&self, a: [u64; 4]) -> (u64, u64, bool) {
         for (k, w) in a.into_iter().enumerate() {
             self.page.at(word(self.slot, ARGS + k)).store(w, Ordering::Relaxed);
         }
-        self.round_trip(REQUEST)
+        let (result, second) = self.round_trip(REQUEST);
+        // read after the state's acquire in `round_trip`, which the server's release store follows
+        (
+            result,
+            second,
+            self.page.at(word(self.slot, WOKE)).load(Ordering::Relaxed) != 0,
+        )
     }
 
     /// The child's end, with its exit code: the server closes what it held and wakes every process.
@@ -595,6 +828,42 @@ impl Client {
         );
         self.page.at(word(s, STATE)).store(IDLE, Ordering::Relaxed);
         answer
+    }
+}
+
+/// A child's wake count and park post on the page, a mapping of its own (Sprint 364), held beside `kernel` in its
+/// `run::KernelLock`: the server raises `WAKES` after a waking answer and the child's link thread waits on it, with
+/// SHARED, since the server is another process; the child's vCPUs' parks post `PARKED`.
+pub struct ChildSide {
+    page: Words,
+    slot: usize,
+}
+
+impl ChildSide {
+    /// The wake count now.
+    pub fn wakes(&self) -> u64 {
+        self.page.at(word(self.slot, WAKES)).load(Ordering::Acquire)
+    }
+
+    /// Waits until the wake count moves from `seen`, `timeout` at most (or at a signal or a spurious return, which the
+    /// caller looks at again).
+    pub fn wait_past(&self, seen: u64, timeout: Duration) {
+        if self.wakes() == seen {
+            self.page.wait_for(word(self.slot, WAKES), seen, timeout);
+        }
+    }
+
+    /// The wake count raised by the child itself, at its run's end, so its link thread ends at once.
+    pub fn raise(&self) {
+        self.page.at(word(self.slot, WAKES)).fetch_add(1, Ordering::Release);
+        self.page.wake_every(word(self.slot, WAKES));
+    }
+
+    /// Every vCPU of the child parked with no blocked thread holding a deadline (`true`), or one taking a thread again
+    /// (`false`): each change raises the post's count by one, odd while parked.
+    pub fn post_parked(&self, parked: bool) {
+        let now = self.page.at(word(self.slot, PARKED)).fetch_add(1, Ordering::AcqRel) + 1;
+        debug_assert_eq!(now % 2 == 1, parked, "a child's park post out of step");
     }
 }
 
@@ -700,7 +969,7 @@ mod tests {
             own_request(PARENT, [CLOSE, p.second, 0, 0]);
             (p.result, p.second)
         };
-        let mut server = Server::start(kernel.clone()).unwrap();
+        let mut server = Server::start(&kernel).unwrap();
         server.pause_before_answers(pause_every);
         let memory = anonymous_file(CHILD_MEMORY as u64).unwrap();
         let memory_fd = inheritable(&memory).unwrap();
@@ -716,7 +985,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(600);
         let mut read = Vec::new();
         loop {
-            let seen = server.wakes().now();
+            let seen = kernel.first.wakes().now();
             let a = own_request(PARENT, [PIPE_READ, read_end, BUFFER_VA, 4096]);
             if a.result > 0 {
                 let at = read.len();
@@ -731,7 +1000,7 @@ mod tests {
                 panic!("the server stopped the run: {stop}");
             }
             assert!(Instant::now() < deadline, "the pipe not broken after 600 s");
-            server.wakes().wait_past(seen, Duration::from_secs(1));
+            kernel.first.wakes().wait_past(seen, Duration::from_secs(1));
         }
         let mut printed = String::new();
         std::io::Read::read_to_string(&mut out, &mut printed).unwrap();
@@ -800,7 +1069,7 @@ mod tests {
             }
             view.write(0, &chunk[..n]);
             let t = Instant::now();
-            let (taken, _) = client.request([PIPE_WRITE, write_end, BUFFER_VA, n as u64]);
+            let (taken, _, _) = client.request([PIPE_WRITE, write_end, BUFFER_VA, n as u64]);
             let elapsed = t.elapsed().as_nanos() as u64;
             ns.push(elapsed);
             written += taken;
@@ -824,7 +1093,9 @@ mod tests {
     /// and stops the run naming it.
     #[test]
     fn a_child_gone_without_a_word_stops_the_run_by_name() {
-        let server = Server::start(Arc::new(KernelLock::default())).unwrap();
+        // held here: the server holds it weakly (Sprint 364), and its stops are this lock's to keep
+        let kernel = Arc::new(KernelLock::default());
+        let server = Server::start(&kernel).unwrap();
         let memory = anonymous_file(CHILD_MEMORY as u64).unwrap();
         let gone = std::process::Command::new("/usr/bin/true").spawn().unwrap();
         server.adopt(0, CHILD, gone, &memory).unwrap();

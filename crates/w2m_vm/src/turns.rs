@@ -315,26 +315,36 @@ fn read_text(page: &Page, slot: usize) -> String {
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
-/// A process's place in the machine: the supervisor (the first `w2m-vm`, alone until a PROCESS_CREATE) or a child.
+/// A process's place among a run's processes: on one vCPU, the machine's, the supervisor (the first `w2m-vm`, alone
+/// until a PROCESS_CREATE) or a child; on several (Sprint 364, card 4f3 of
+/// `docs/design-a-process-that-starts-another-2026-11-26.md`), where no Machine runs and processes take no turns, the
+/// request server (the first `w2m-vm`'s, from its first spawn) or a child's client of it.
 pub enum Link {
     Supervisor(Supervisor),
     Child(ChildLink),
+    Server(crate::cross_process::Server),
+    Client(crate::cross_process::Client),
 }
 
 impl Link {
-    /// The page and this process's slot; true too when a child has not yet started, which is ready (`not threads`).
-    fn page_and_slot(&self) -> (&Page, usize, bool) {
+    /// The turn page and this process's slot; true too when a child has not yet started, which is ready (`not
+    /// threads`). None for the request server's form, which has no turns.
+    fn page_and_slot(&self) -> Option<(&Page, usize, bool)> {
         match self {
-            Link::Supervisor(s) => (&s.page, 0, s.children.iter().any(|c| !c.started)),
-            Link::Child(c) => (&c.page, c.slot, false),
+            Link::Supervisor(s) => Some((&s.page, 0, s.children.iter().any(|c| !c.started))),
+            Link::Child(c) => Some((&c.page, c.slot, false)),
+            Link::Server(_) | Link::Client(_) => None,
         }
     }
 
     /// `Machine.others_ready` (kernel.py 326-327): another process has a thread to run now, `VM.ready` computed from
     /// what each posted against the machine's clock with this process's own `clock` (Sprint 199: before, the posted
-    /// bit alone, so a child's passed deadline waited for its parent to idle).
+    /// bit alone, so a child's passed deadline waited for its parent to idle). False in the request server's form,
+    /// where each process runs on its own vCPUs (Sprint 364).
     pub fn others_ready(&self, clock: u64) -> bool {
-        let (page, me, unstarted) = self.page_and_slot();
+        let Some((page, me, unstarted)) = self.page_and_slot() else {
+            return false;
+        };
         let now = machine_clock(page, clock);
         unstarted
             || (0..SLOTS)
@@ -342,9 +352,12 @@ impl Link {
                 .any(|s| slot_ready(page, s, now))
     }
 
-    /// `_other_process_due` (vm_backend 2750-2754): another process is ready or waits with a deadline.
+    /// `_other_process_due` (vm_backend 2750-2754): another process is ready or waits with a deadline. False in the
+    /// request server's form (Sprint 364).
     pub fn others_due(&self, clock: u64) -> bool {
-        let (page, me, unstarted) = self.page_and_slot();
+        let Some((page, me, unstarted)) = self.page_and_slot() else {
+            return false;
+        };
         let now = machine_clock(page, clock);
         unstarted
             || (0..SLOTS)

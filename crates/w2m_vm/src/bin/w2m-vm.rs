@@ -713,92 +713,29 @@ mod run {
     /// for a PROCESS_CREATE (`spawner`, kernel.py 437-468), its start one JSON line on standard input. Its program is
     /// the command line's first token, quoted or not, found in C:\w2m\app on the host or, for a run with no program
     /// directory, the parent's own program when the name is its name; its DLLs from the program's directory. It runs
-    /// in its turns and tells the supervisor its end or its stop.
+    /// in its turns and tells the supervisor its end or its stop. A start that carries `request_server` (Sprint 364; card
+    /// 4f3) is a several-vCPU run's: the child opens a `Client` of the request page instead, posts its maps once, and
+    /// runs at once on one vCPU with no turns, its KERNEL 33 requests answered by the first process's request server.
     fn child(page_fd: i32, memory_fd: i32, slot: usize) -> Result<(), String> {
         let mut line = String::new();
         io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
         let s: serde_json::Value = serde_json::from_str(&line).map_err(|e| format!("a child's start: {e}"))?;
-        let text = |k: &str| s[k].as_str().map(str::to_string);
         let number = |k: &str| s[k].as_u64().ok_or_else(|| format!("a child's start lacks {k}"));
         let pid = number("pid")?;
+        if s["request_server"].as_bool() == Some(true) {
+            return child_of_the_request_server(&s, page_fd, memory_fd, slot);
+        }
         let link = w2m_vm::turns::ChildLink::open(page_fd, slot, pid)?;
         w2m_vm::turns::end_with_parent()?;
         link.first_turn();
         let run = || -> Result<Outcome, String> {
-            let command_line = text("command_line").ok_or("a child's start lacks its command line")?;
-            let first = if let Some(rest) = command_line.strip_prefix('"') {
-                rest.split('"').next().unwrap_or("").to_string()
-            } else {
-                command_line.split(' ').next().unwrap_or("").to_string()
-            };
-            let leaf = first.rsplit(['\\', '/']).next().unwrap_or("").to_string();
-            let path = match (text("app_root"), text("program_path"), text("parent_image")) {
-                (Some(root), _, _) => w2m_vm::modules::host_file(&PathBuf::from(root), &first)?,
-                (None, Some(program), Some(parent)) if leaf.eq_ignore_ascii_case(&parent) => {
-                    Some(PathBuf::from(program))
-                }
-                _ => None,
-            }
-            .ok_or_else(|| {
-                format!("CreateProcessW of {first:?}: no such file (ERROR_FILE_NOT_FOUND is not in the rows)")
-            })?;
-            let name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
-            let data = fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-            let here = path.parent().map(Path::to_path_buf).unwrap_or_default();
-            let supply = |dll: &str| fs::read(here.join(dll)).ok();
-            let loaded = pe_loader::load(&data, Some(&supply), &name).map_err(|e| format!("{name}: {e:?}"))?;
-            let mut start = Start::console(&name);
-            start.gui = loaded.image.as_ref().is_some_and(|i| i.subsystem == 2);
-            start.command_line = Some(command_line.clone());
-            start.environment = s["environment"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|e| e.as_str().map(str::to_string))
-                .collect();
-            start.process_id = pid;
-            start.tid = number("tid")?;
-            start.inherited = Some(
-                s["inherited"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|e| Some((e[0].as_u64()?, e[1].as_u64()?, e[2].as_u64()?)))
-                    .collect(),
-            );
-            start.directory = text("directory");
-            start.process_group = number("process_group")? as u32;
-            start.instruction_clock = s["instruction_clock"]
-                .as_array()
-                .and_then(|c| Some((c.first()?.as_u64()?, c.get(1)?.as_u64()?)));
-            start.app_root = text("app_root").map(PathBuf::from);
-            start.program_path = Some(path.clone());
-            start.memory_fd = Some(memory_fd);
-            let root = root();
-            let mut guest = guest_of(&root, &loaded, &start)?;
-            // a child's bridge: the parent's root, read-only setting and drive (kernel.py 460; Sprint 204)
-            if let (Some(app), Some(drive)) = (&start.app_root, text("drive")) {
-                let read_only = s["read_only"].as_bool().unwrap_or(false);
-                guest.served.files = Some(w2m_vm::file_bridge::FileBridge::new(
-                    app,
-                    read_only,
-                    Some(Path::new(&drive)),
-                )?);
-            }
-            // the parent's exit ledger, this process's rows beside it (Sprint 206)
-            if let Some(base) = text("exit_ledger") {
-                let path = std::path::PathBuf::from(format!("{base}.{pid}"));
-                guest.exit_ledger = Some(ledger_at(&root, &path)?);
-            }
+            let (mut guest, loaded) = child_guest(&s, memory_fd)?;
             // the link behind `kernel` (Sprint 362), made before the run, no vCPU yet
             std::sync::Arc::get_mut(&mut guest.kernel)
                 .ok_or("a child's kernel lock shared before its run")?
                 .set_link(w2m_vm::turns::Link::Child(w2m_vm::turns::ChildLink::open(
                     page_fd, slot, pid,
-                )?));
+                )?))?;
             // the child starts at the machine's clock, as `VM.steps` catches every process up at its start (Sprint 199;
             // reviewer-2's High 1 of its review of 196-198: tests/test_timed_waits.py 141-152's plant gives "clock behind")
             w2m_vm::threads::catch_up(&mut guest, link.machine(), 2);
@@ -814,6 +751,120 @@ mod run {
             Err(why) => link.stop(&why),
         }
         Ok(())
+    }
+
+    /// `w2m-vm --child` of a several-vCPU run (Sprint 364; card 4f3 of
+    /// `docs/design-a-process-that-starts-another-2026-11-26.md`): the child opens its slot of the request page, ends
+    /// with its parent as the turn form's does, builds its guest as `child_guest` builds it, posts its maps once (the
+    /// layout is fixed after load), and runs at once on one vCPU, on the wall clock, its `Client` behind `kernel` and its
+    /// parks posting to the server's verdict; its end or its stop then posted to the server.
+    fn child_of_the_request_server(
+        s: &serde_json::Value,
+        page_fd: i32,
+        memory_fd: i32,
+        slot: usize,
+    ) -> Result<(), String> {
+        let told = w2m_vm::cross_process::Client::open(page_fd, slot)?;
+        w2m_vm::turns::end_with_parent()?;
+        let run = || -> Result<Outcome, String> {
+            let (mut guest, loaded) = child_guest(s, memory_fd)?;
+            let client = w2m_vm::cross_process::Client::open(page_fd, slot)?;
+            client.post_maps(&guest.layout.maps)?;
+            std::sync::Arc::get_mut(&mut guest.kernel)
+                .ok_or("a child's kernel lock shared before its run")?
+                .set_link(w2m_vm::turns::Link::Client(client))?;
+            guest
+                .sched
+                .link(w2m_vm::threads::ParkPost(std::sync::Arc::clone(&guest.kernel)));
+            guest.limited = s["limited"].as_bool().unwrap_or(true);
+            let seconds = guest.limited.then_some(GUEST_SECONDS);
+            on_one_vcpu(&mut guest, &loaded, seconds, MAX_STEPS, &mut HostCompiler::default())
+        };
+        match run() {
+            Ok(out) => match out.stop {
+                Stop::ExitProcess { code } => told.end(u64::from(code)),
+                other => told.stop(&stop_name(&other)),
+            },
+            Err(why) => told.stop(&why),
+        }
+        Ok(())
+    }
+
+    /// A child's guest from its start line `s` (Sprint 197; one function for both forms from Sprint 364): its program,
+    /// the command line's first token, found in C:\w2m\app on the host or, for a run with no program directory, the
+    /// parent's own program when the name is its name; its DLLs from the program's directory; its memory the shared file
+    /// `memory_fd`; its bridge and exit ledger the parent's.
+    fn child_guest(s: &serde_json::Value, memory_fd: i32) -> Result<(Guest, pe_loader::Loaded), String> {
+        let text = |k: &str| s[k].as_str().map(str::to_string);
+        let number = |k: &str| s[k].as_u64().ok_or_else(|| format!("a child's start lacks {k}"));
+        let pid = number("pid")?;
+        let command_line = text("command_line").ok_or("a child's start lacks its command line")?;
+        let first = if let Some(rest) = command_line.strip_prefix('"') {
+            rest.split('"').next().unwrap_or("").to_string()
+        } else {
+            command_line.split(' ').next().unwrap_or("").to_string()
+        };
+        let leaf = first.rsplit(['\\', '/']).next().unwrap_or("").to_string();
+        let path = match (text("app_root"), text("program_path"), text("parent_image")) {
+            (Some(root), _, _) => w2m_vm::modules::host_file(&PathBuf::from(root), &first)?,
+            (None, Some(program), Some(parent)) if leaf.eq_ignore_ascii_case(&parent) => Some(PathBuf::from(program)),
+            _ => None,
+        }
+        .ok_or_else(|| {
+            format!("CreateProcessW of {first:?}: no such file (ERROR_FILE_NOT_FOUND is not in the rows)")
+        })?;
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let data = fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let here = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let supply = |dll: &str| fs::read(here.join(dll)).ok();
+        let loaded = pe_loader::load(&data, Some(&supply), &name).map_err(|e| format!("{name}: {e:?}"))?;
+        let mut start = Start::console(&name);
+        start.gui = loaded.image.as_ref().is_some_and(|i| i.subsystem == 2);
+        start.command_line = Some(command_line.clone());
+        start.environment = s["environment"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.as_str().map(str::to_string))
+            .collect();
+        start.process_id = pid;
+        start.tid = number("tid")?;
+        start.inherited = Some(
+            s["inherited"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|e| Some((e[0].as_u64()?, e[1].as_u64()?, e[2].as_u64()?)))
+                .collect(),
+        );
+        start.directory = text("directory");
+        start.process_group = number("process_group")? as u32;
+        start.instruction_clock = s["instruction_clock"]
+            .as_array()
+            .and_then(|c| Some((c.first()?.as_u64()?, c.get(1)?.as_u64()?)));
+        start.app_root = text("app_root").map(PathBuf::from);
+        start.program_path = Some(path.clone());
+        start.memory_fd = Some(memory_fd);
+        let root = root();
+        let mut guest = guest_of(&root, &loaded, &start)?;
+        // a child's bridge: the parent's root, read-only setting and drive (kernel.py 460; Sprint 204)
+        if let (Some(app), Some(drive)) = (&start.app_root, text("drive")) {
+            let read_only = s["read_only"].as_bool().unwrap_or(false);
+            guest.served.files = Some(w2m_vm::file_bridge::FileBridge::new(
+                app,
+                read_only,
+                Some(Path::new(&drive)),
+            )?);
+        }
+        // the parent's exit ledger, this process's rows beside it (Sprint 206)
+        if let Some(base) = text("exit_ledger") {
+            let path = std::path::PathBuf::from(format!("{base}.{pid}"));
+            guest.exit_ledger = Some(ledger_at(&root, &path)?);
+        }
+        Ok((guest, loaded))
     }
 
     /// `--make-cache <directory>` (Sprint 254; the translation cache's design, card 3): UnityPlayer.dll's cache file

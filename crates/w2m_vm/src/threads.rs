@@ -222,9 +222,18 @@ pub fn monitor_of(owner: u64) -> Option<u64> {
 /// looks at each TIME_SLICE. The host sees each readying it makes, so here only a readying no waiting vCPU will take
 /// ends another's slice; the two rules differ for that reason alone.
 fn readied(guest: &Guest) {
+    let own = read_u64(
+        crate::guest::memory_view(&guest.memory),
+        guest.served.vcpu.monitor + LOCK_OWNER,
+    );
+    readied_for(guest, own);
+}
+
+/// `readied` with the served vCPU's owner `own`: 0 for no vCPU, the link thread's readying (Sprint 364), each vCPU that
+/// holds a thread then another's.
+fn readied_for(guest: &Guest, own: u64) {
     guest.sched.notify();
     let mem = crate::guest::memory_view(&guest.memory);
-    let own = read_u64(mem, guest.served.vcpu.monitor + LOCK_OWNER);
     let mut free = 0u64;
     let mut holders = Vec::new();
     for t in guest.served.threads.values() {
@@ -611,6 +620,15 @@ pub fn thread_context(guest: &mut Guest, tid: u32, buffer: u64) -> Result<u64, S
 /// `GuestThread.status`'s setter (scheduler.py 83-89): the entry's status, and the header's count of blocked threads,
 /// which threads.c `w2m_signal` reads.
 pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
+    let own = read_u64(
+        crate::guest::memory_view(&guest.memory),
+        guest.served.vcpu.monitor + LOCK_OWNER,
+    );
+    set_status_for(guest, index, status, own);
+}
+
+/// `set_status` with the served vCPU's owner `own`, 0 for none (Sprint 364: the link thread's).
+fn set_status_for(guest: &mut Guest, index: u64, status: u64, own: u64) {
     let mem = crate::guest::memory_view(&guest.memory);
     let at = entry(index);
     let was = read_u64(mem, at + E_STATUS);
@@ -623,7 +641,7 @@ pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
     // a thread readied in the host: a parked vCPU may take it (the run-loop design's "A vCPU with no thread", the host's
     // one writer of a thread's status; Sprint 319), and another vCPU's slice may end for it (Sprint 353)
     if status == READY && was != READY {
-        readied(guest);
+        readied_for(guest, own);
     }
 }
 
@@ -634,8 +652,16 @@ pub fn set_status(guest: &mut Guest, index: u64, status: u64) {
 /// readying left once it parks, and waits on with no deadline. Its `w2m_block` finds the mark and leaves it READY. The
 /// served vCPU's own thread is the one served; a thread no vCPU holds is in no such window, and its `load` clears it.
 pub fn mark_woken(guest: &Guest) {
+    let own = read_u64(
+        crate::guest::memory_view(&guest.memory),
+        guest.served.vcpu.monitor + LOCK_OWNER,
+    );
+    mark_woken_for(guest, own);
+}
+
+/// `mark_woken` with the served vCPU's owner `own`, 0 for none: then every thread a vCPU holds and not BLOCKED.
+fn mark_woken_for(guest: &Guest, own: u64) {
     let mem = crate::guest::memory_view(&guest.memory);
-    let own = read_u64(mem, guest.served.vcpu.monitor + LOCK_OWNER);
     for t in guest.served.threads.values() {
         let at = entry(t.index);
         let holder = read_u64(mem, at + E_VCPU);
@@ -645,8 +671,29 @@ pub fn mark_woken(guest: &Guest) {
     }
 }
 
+/// A wake from another process, applied by this process's link thread under the runtime word and the run's lock
+/// (Sprint 364; the design's "Which lock or request each crossing takes"), as `host_request::wake_blocked` applies a
+/// kernel answer's wake in a vCPU's service: every BLOCKED thread READY (`set_status`, which notifies `Sched`), then the
+/// woken mark on every thread a vCPU holds and not BLOCKED. No vCPU is served, so none is passed by as the served one,
+/// in the readying's slice rule or in the mark: each vCPU that holds a thread is another's.
+pub fn wake_from_another_process(guest: &mut Guest) {
+    let mem = crate::guest::memory_view(&guest.memory);
+    let blocked: Vec<u64> = guest
+        .served
+        .threads
+        .values()
+        .map(|t| t.index)
+        .filter(|&i| read_u64(mem, entry(i) + E_STATUS) == BLOCKED)
+        .collect();
+    for i in blocked {
+        set_status_for(guest, i, READY, 0);
+    }
+    mark_woken_for(guest, 0);
+}
+
 /// Why a run stops when no thread can run again: on one vCPU at a switch, on several when every vCPU parks with no
-/// deadline and a second passes with no change (Sprint 327 names it for both).
+/// deadline and a second passes with no change (Sprint 327 names it for both); across processes, on several vCPUs, when
+/// the request server's verdict finds every live process so for a second (Sprint 364).
 pub const DEADLOCK: &str = "every thread waits with no timeout and nothing can wake one (a deadlock)";
 
 /// What a parked vCPU waits on (the run-loop design's "A vCPU with no thread"; Sprint 319): a count of changes that may
@@ -656,6 +703,19 @@ pub const DEADLOCK: &str = "every thread waits with no timeout and nothing can w
 pub struct Sched {
     counts: std::sync::Mutex<Counts>,
     changed: std::sync::Condvar,
+    /// a process with the request server's link (Sprint 364; the design's "The deadlock rule"): it parks with no
+    /// deadlock verdict of its own, since a wake can come from another process, and posts to the server instead
+    linked: std::sync::OnceLock<ParkPost>,
+}
+
+/// Where a linked process's parks post (Sprint 364): its `run::KernelLock`, which posts to the request server's
+/// verdict, the first process in-process and a child on its page.
+pub struct ParkPost(pub std::sync::Arc<crate::run::KernelLock>);
+
+impl std::fmt::Debug for ParkPost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ParkPost")
+    }
 }
 
 #[derive(Default, Debug)]
@@ -667,6 +727,8 @@ struct Counts {
     timed: u64,
     /// a deadlock declared by the vCPU whose quiet second ran out, which every parked vCPU then ends on
     deadlock: bool,
+    /// a linked process's post made: every vCPU parked, none with a deadline (Sprint 364)
+    posted: bool,
 }
 
 /// How a parked vCPU's wait ended (Sprint 320; the Python host's Sprint 120, `docs/design-several-vcpus-2026-10-17.md`
@@ -694,9 +756,18 @@ impl Sched {
         self.counts.lock().unwrap_or_else(|e| e.into_inner()).changes
     }
 
+    /// The process's link made the request server's (Sprint 364): from now on its parks give no deadlock verdict and
+    /// post to `post` instead, once at each change. Set once, at the first spawn's link or a child's start.
+    pub fn link(&self, post: ParkPost) {
+        let _ = self.linked.set(post);
+    }
+
     /// Parks one of the run's `vcpus` vCPUs until a change past `seen`, until `deadline`, or, when every vCPU is
     /// parked and none has a deadline, for one second with no change. A wait with neither has no timeout of its own:
     /// the run's stop notifies (the design's card 4c3b2b), as the Python host's waiter waited for its run's timeout.
+    /// A process with the request server's link (`link`) waits there with no verdict of its own: when every vCPU is
+    /// parked and none has a deadline it posts so, and clears the post when a vCPU leaves its park, and the server gives
+    /// the verdict across processes (Sprint 364; the design's "The deadlock rule").
     pub fn park(&self, seen: u64, deadline: Option<std::time::Instant>, vcpus: u64) -> Woken {
         const QUIET: std::time::Duration = std::time::Duration::from_secs(1);
         let mut counts = self.counts.lock().unwrap_or_else(|e| e.into_inner());
@@ -716,10 +787,19 @@ impl Sched {
                 break Woken::Deadline;
             }
             let all = counts.timed == 0 && counts.parked == vcpus;
-            if !all {
+            // a linked process posts, under the counts' lock, so a post and its clearing alternate
+            let linked = self.linked.get();
+            if let Some(post) = linked
+                && all
+                && !counts.posted
+            {
+                counts.posted = true;
+                post.0.post_parked(true);
+            }
+            if !all || linked.is_some() {
                 quiet_since = None;
             }
-            let since = all.then(|| *quiet_since.get_or_insert(now));
+            let since = (all && linked.is_none()).then(|| *quiet_since.get_or_insert(now));
             if since.is_some_and(|s| now >= s + QUIET) {
                 // the whole run's deadlock: every parked vCPU, some waiting with no timeout, ends on it
                 counts.deadlock = true;
@@ -739,6 +819,13 @@ impl Sched {
         };
         counts.parked -= 1;
         counts.timed -= u64::from(deadline.is_some());
+        // a vCPU leaving its park: not every vCPU parked now, so a linked process's post is cleared
+        if counts.posted
+            && let Some(post) = self.linked.get()
+        {
+            counts.posted = false;
+            post.0.post_parked(false);
+        }
         woken
     }
 }
@@ -1026,13 +1113,17 @@ fn switch(guest: &mut Guest, x: &mut [u64; 31], cur: &Thread, bits: u32) -> Resu
         .find(|t| word(t, E_STATUS) == READY && word(t, E_SUSPEND) == 0 && here(t))
         .map(|t| (*t).clone());
     // none here ready while another vCPU holds a thread, which can ready one: this vCPU parks, its thread put down and
-    // itself counted in `waiting` (the run-loop design's "A vCPU with no thread"; Sprint 319); one vCPU never parks
-    if next.is_none() && order.iter().any(|t| !here(t)) {
+    // itself counted in `waiting` (the run-loop design's "A vCPU with no thread"; Sprint 319); one vCPU of a process
+    // alone never parks. A process with the request server's link parks whether or not another of its vCPUs holds a
+    // thread, one vCPU too, since another process can ready one; its park's wait ends at the earliest deadline of a
+    // blocked thread, and it takes no deadlock verdict of its own (Sprint 364; the design's "The form on several vCPUs")
+    if next.is_none() && (order.iter().any(|t| !here(t)) || guest.kernel.served_by_the_request_server()) {
         save(guest, x, cur);
         write_u64(mem, RUN_TABLE + RT_WAITING, read_u64(mem, RUN_TABLE + RT_WAITING) + 1);
         return Ok(Switch::Parked);
     }
-    if next.is_none() && guest.kernel.linked() {
+    // the machine's turns (one vCPU): the turn goes to the others
+    if next.is_none() && guest.kernel.turns() {
         return Ok(Switch::Idle);
     }
     let next = match next {
@@ -1403,8 +1494,9 @@ pub fn create_thread(
 /// `_set_budget` (3284-3289): the step budget the block entries check: the run's limit, or with more than one thread a
 /// time slice.
 pub fn set_budget(guest: &mut Guest) {
-    // a process of a machine shares the vCPU's time with the others too (Sprint 197)
-    let shared = guest.served.threads.len() > 1 || guest.kernel.linked();
+    // a process of a machine shares the vCPU's time with the others too (Sprint 197); in the request server's form each
+    // process runs on its own vCPUs (Sprint 364)
+    let shared = guest.served.threads.len() > 1 || guest.kernel.turns();
     let mem = crate::guest::memory_view(&guest.memory);
     let (executed, max_steps) = (
         read_u64(mem, guest.served.vcpu.monitor),
@@ -1424,8 +1516,9 @@ pub fn set_budget(guest: &mut Guest) {
 /// another clock); else ~0.
 pub fn slice_until(guest: &Guest) -> u64 {
     // another process ready or waiting with a deadline needs the host at each slice's end (`_other_process_due`,
-    // 2750-2754; Sprint 197); the link read under `kernel`, a leaf under the word and the run's lock (Sprint 362)
-    if guest.kernel.linked() && {
+    // 2750-2754; Sprint 197); the link read under `kernel`, a leaf under the word and the run's lock (Sprint 362); in the
+    // machine's turns alone (Sprint 364)
+    if guest.kernel.turns() && {
         let kernel = guest
             .kernel
             .take(crate::guest::memory_view(&guest.memory), guest.served.vcpu);

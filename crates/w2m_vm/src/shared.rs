@@ -29,15 +29,15 @@ unsafe extern "C" {
     ) -> i32;
 }
 
-/// `OS_CLOCK_MACH_ABSOLUTE_TIME` (os/clock.h 15)
-const MACH_ABSOLUTE_TIME: u32 = 32;
+/// `OS_CLOCK_MACH_ABSOLUTE_TIME` (os/clock.h 15); `cross_process.rs` takes it from here (Sprint 364)
+pub(crate) const MACH_ABSOLUTE_TIME: u32 = 32;
 /// how often a waiter looks whether the process it waits for is still there
 const ALIVE_CHECK_NS: u64 = 100_000_000;
 
 /// `sys/fcntl.h` 235, 354
 const F_SETFD: i32 = 2;
-/// OS_SYNC_WAIT_ON_ADDRESS_SHARED and OS_SYNC_WAKE_BY_ADDRESS_SHARED
-const SHARED: u32 = 1;
+/// OS_SYNC_WAIT_ON_ADDRESS_SHARED and OS_SYNC_WAKE_BY_ADDRESS_SHARED; `cross_process.rs` takes it from here (Sprint 364)
+pub(crate) const SHARED: u32 = 1;
 
 /// The number in the next anonymous file's name.
 static NEXT: AtomicU64 = AtomicU64::new(0);
