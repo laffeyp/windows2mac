@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 361
-status: active
+status: done
 phase: 6
 pass_kind: docs
 ---
@@ -114,4 +114,36 @@ vCPUs and its judges, and orders the cards that take the six held runs off `MACH
 
 ## result
 
-GATES-LINE
+The gates, run by the Supervisor at the close on the finished tree, the design included (`docs/design-*` is gated):
+exit 0 in 235 s	default	2026-11-27T00:10:51Z	sprint 361	ae82b92baa669d78fe3cd87d0b57a67658743f7e	afe675528428dad6ce85aa6b3678b112b7eb32e4acf4b4895bfbcb711067b331	root=1e705dafeaa788ddbba6c28e4f7eab11f100295f	rust=crates python=0 samples=0	base=a2f898a5d7c179835340150b6de17da2122f3f33
+
+- **The design:** `docs/design-a-process-that-starts-another-2026-11-26.md`, 389 lines. Its finding: on several
+  vCPUs no Machine runs. Processes run at once, each a `w2m-vm` on the run's vCPUs, and a request server thread in the
+  first `w2m-vm` answers what crosses processes under one lock, `kernel` (Change 4's). Each process's link thread
+  applies a wake from another process under its own runtime word. One vCPU keeps the Machine and its turns unchanged,
+  for the instruction clock. The Python host's Machine thread is not carried: a Machine on its own thread still runs
+  processes in turns, which Change 4 and Windows' scheduling do not.
+- **Card 4f does not need C2 or C3 first.** KERNEL 33 was the one host request that waited, for the supervisor's turn,
+  with the child's word held (run-loop design 49-57). The server runs no guest code and waits for none, so the wait is
+  gone and the word is held across a bounded round trip, as for every host request today. The revisit clause of the
+  Decision "Step 6's order weighed again at Sprint 360" is not met.
+- **The pipe.capacity row** is held at Windows' 4,096 exactly, with no range. Measured 2026-11-26 on the Rust host,
+  wall clock, one vCPU (two are refused): 50 of 50 runs read 4,096. These were 2 quiet runs whose every row equals the
+  contract's after its derivation, 36 runs at once, and 12 runs at once beside 54 busy loops on 18 cores, at
+  23:39:40-23:39:43 UTC. The 1,816 and 3,634 were the Python host's (commit 9a7515bb9).
+- **The cards:**
+  - 4f1, Sprint 362: the objects behind `kernel`.
+  - 4f2, Sprint 363: the request server, `cross_process.rs`, judged by a two-process test.
+  - 4f3, Sprint 364: processes at once, the child on one vCPU, and the server's deadlock verdict across processes;
+    the six runs on two vCPUs, a two-process INFINITE-wait guest stopped as a deadlock, two plants.
+  - 4f4, Sprint 365: the child on the run's vCPUs, 20 runs of each of the six, and a cross-process ping-pong guest
+    with its plant.
+  - G2's judge, Sprint 366.
+- **Commands:**
+  - `target/release/design_check` exit 0: "design_check: 9 plans and designs state the goal and the systems".
+  - `target/release/signal_report --check` exit 0.
+- **Plant 1** "docs/design-a-process-that-starts-another-2026-11-26.md: no "## Against the goal" section", `design_check` exit 1; live 23:58:49-23:59:01 UTC:
+  - The design copied to the scratchpad, `cmp` equal.
+  - Its "## Against the goal" section removed by Edit.
+  - `design_check` exit 1: `docs/design-a-process-that-starts-another-2026-11-26.md: no "## Against the goal" section`.
+  - Restored by `cp`, `cmp` equal, `design_check` exit 0 again.

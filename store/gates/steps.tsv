@@ -1061,3 +1061,44 @@
 2026-11-26T23:17:56Z	sprint 360	planted-samples	1
 2026-11-26T23:17:56Z	sprint 360	records-check	3
 2026-11-26T23:17:56Z	sprint 360	unplaced	5
+2026-11-27T00:02:34Z	sprint 	cargo-fmt	1
+2026-11-27T00:02:34Z	sprint 	cargo-clippy	1
+2026-11-27T00:02:34Z	sprint 	linux-check	0
+2026-11-27T00:02:34Z	sprint 	runner-binaries-build	4
+2026-11-27T00:02:34Z	sprint 	batch-run	97
+2026-11-27T00:02:34Z	sprint 	batch-run-records-check	0
+2026-11-27T00:02:34Z	sprint 	batch-run-replay	0
+2026-11-27T00:02:34Z	sprint 	guests	4
+2026-11-27T00:02:34Z	sprint 	twoproc-instruction-clock-guest	1
+2026-11-27T00:02:34Z	sprint 	family-runs	27
+2026-11-27T00:02:34Z	sprint 	family-runs-two-vcpus	35
+2026-11-27T00:02:34Z	sprint 	nextest	9
+2026-11-27T00:02:34Z	sprint 	doc-tests	0
+2026-11-27T00:02:34Z	sprint 	timing-stage	0
+2026-11-27T00:02:34Z	sprint 	release-build	1
+2026-11-27T00:02:34Z	sprint 	case-runs-ledger-check	2
+2026-11-27T00:02:34Z	sprint 	planted-chain	44
+2026-11-27T00:02:34Z	sprint 	planted-chain-records-check	0
+2026-11-27T00:02:34Z	sprint 	vocabulary-generator-check	0
+2026-11-27T00:06:56Z	sprint 361	cargo-fmt	0
+2026-11-27T00:06:56Z	sprint 361	cargo-clippy	0
+2026-11-27T00:06:56Z	sprint 361	linux-check	0
+2026-11-27T00:06:56Z	sprint 361	runner-binaries-build	0
+2026-11-27T00:06:56Z	sprint 361	batch-run	98
+2026-11-27T00:06:56Z	sprint 361	batch-run-records-check	0
+2026-11-27T00:06:56Z	sprint 361	batch-run-replay	1
+2026-11-27T00:06:56Z	sprint 361	guests	4
+2026-11-27T00:06:56Z	sprint 361	twoproc-instruction-clock-guest	0
+2026-11-27T00:06:56Z	sprint 361	family-runs	27
+2026-11-27T00:06:56Z	sprint 361	family-runs-two-vcpus	35
+2026-11-27T00:06:56Z	sprint 361	nextest	6
+2026-11-27T00:06:56Z	sprint 361	doc-tests	0
+2026-11-27T00:06:56Z	sprint 361	timing-stage	1
+2026-11-27T00:06:56Z	sprint 361	release-build	0
+2026-11-27T00:06:56Z	sprint 361	case-runs-ledger-check	2
+2026-11-27T00:06:56Z	sprint 361	planted-chain	43
+2026-11-27T00:06:56Z	sprint 361	planted-chain-records-check	1
+2026-11-27T00:06:56Z	sprint 361	vocabulary-generator-check	0
+2026-11-27T00:06:56Z	sprint 361	signal-report-check	9
+2026-11-27T00:06:56Z	sprint 361	design-check	0
+2026-11-27T00:06:56Z	sprint 361	unplaced	8
