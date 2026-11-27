@@ -31,14 +31,25 @@ laptop, never a GitHub runner"):
   refused: their summaries ran Python on the laptop (`pmc_summary.py`, `pmc_images.py`).
 - **The runs this card makes on the laptop**, its observation:
   - A batch of the nine families whose rows were made on GitHub's runner (`docs/postmortem-windows-runs-off-the-laptop-2026-11-27.md`,
-    "What the wrong machine reached"): `locked_race`, `thread_values_race`, `thread_slots_race`, `tls_free_reach`,
-    `tls_expansion_first`, `wait_closed_handle`, `wait_closed_kinds`, `mutex_abandoned`, `named_sync_objects`, each
-    binary run twice, stored. Comparing them with the runner's rows is the next card's.
-  - One game job, batch mode, 180 s, three executions, stored: each execution's `unity.log` and call trace beside the
-    reference set's laptop runs (`lap-20261014T032442034Z-c8814547-01` to `-10`), its build recorded.
-- **Not here:** the comparison of the laptop's rows with the runner's, the check in code that every evidence run is
-  the laptop's, the reference set's membership rules, a game run's execution on the record (`record_game_run.py`'s
-  EXECUTION_STARTED and EXECUTION_COMPLETED).
+    "What the wrong machine reached"), each taken by its runner run, since eight of them have no row in either family
+    table (amendment, reviewer-4's forty-sixth review, High 1): `family@run` naming the binary in
+    `store/probe-runs/<run>/probe.sha256` for 41326239822, 45760720489, 45763850660, 45780352907, 45783238565,
+    45797800625, 45813040124, 45871497648 and 46053401854; a test holds that the batch's list is exactly those nine
+    sha256s. Each binary run twice, stored. Comparing them with the runner's rows is card 374's.
+  - A control in the same batch with an October laptop run, so the batch's split and store meet a known answer
+    (Medium 2): `sync_objects`, its October laptop runs `lap-20261013T231059422Z-136bec80-154` and `-155`, by `cmp`.
+  - One game job under the reference set's own conditions (Medium 1): batch mode, 150 s, audio off, three executions,
+    stored, as `lap-20261014T032442034Z-c8814547-01` to `-10` ran (their `exec.json` reads `"seconds": 150`); each
+    execution's `unity.log` and call trace beside those ten, the build in `profile.json`. The ten ran on build
+    26200.7840 and these run on 26200.9974: the difference in the game's log and trace lines is reported as the first
+    measure of what the build change does (Medium 3).
+- **Not here, and where each goes** (Decision 369's order, carried by this amendment and recorded as a Decision at this
+  card's close; reviewer-4's forty-sixth review, High 2): card 373, the check in code that every evidence run's
+  `profile.txt` is the laptop's, with its listed exceptions, which lands before any card compares or relies on a
+  row; card 374, the nine families' laptop rows against their runner rows, with the Decision on which Windows w2m
+  answers as, widened to say whether the laptop's build is held fixed or each comparison names both builds; card 375,
+  the reference set's membership rules ported, so the laptop game runs of 2026-11-27 can join G3's comparison; a game
+  run's execution on the record (`record_game_run.py`'s EXECUTION_STARTED and EXECUTION_COMPLETED) with card 375.
 
 ## prerequisites
 
@@ -82,16 +93,16 @@ laptop, never a GitHub runner"):
 - `scripts/gates.sh` returns 0
 - `target/release/signal_report --check` returns 0 on the tree
 - `target/release/windows_machine batch <the nine families>` returns 0
-- `target/release/windows_machine game --executions 3 --seconds 180 --mode batch` returns 0
+- `target/release/windows_machine game --executions 3 --seconds 150 --mode batch --audio off` returns 0
 
 ## observation contract
 
 - **Expected values:**
   - The Python's steps for both kinds, quoted from the frozen tag, beside the Rust that does each.
-  - The batch: one run per distinct binary, each with two executions exiting 0 and `profile.txt`
-    `laptop-x64-10.0.26200.*-Client`; one binary's rows equal by `cmp` to an October laptop run of the same binary.
+  - The batch: one run per binary, each with two executions exiting 0 and `profile.txt`
+    `laptop-x64-10.0.26200.*-Client`; the control `sync_objects`'s rows equal by `cmp` to its October laptop runs.
   - The game: three executions, each `unity.log` and its line count, the capture's trace line count, against the ten
-    laptop runs of 2026-10-14; the build in `profile.json`.
+    laptop runs of 2026-10-14 (build 7840); the build in `profile.json` (9974) and the difference reported.
 - **Planted faults:**
   - (1) A batch whose split drops the last binary: the program exits non-zero, naming the binary with no executions.
   - (2) A game job's limit in minutes below one execution's seconds: the desktop task stops the job and the program
