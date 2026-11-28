@@ -272,4 +272,4 @@ windows	38210803867	2fe586f116a1fb28b546e1009d605675be018d6001503aca11660d6985bb
 windows	38210806334	6e75412ca9f139bdf500185bbe5fc8c996dbe1e339fb173a25cba5f3fbc591e7	windows.windows.windows@0.3.0	-	-	{"environment":["TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp","TMP=C:\\Users\\w2m\\AppData\\Local\\Temp"]}	windows_rows excluded 0	-	-
 winrt	38178400798	3795d70ec166716f65d011203027e0e8a6896a71e1a8687e34a50998559ec6f5	windows.winrt.winrt@0.1.0	-	-	-	raw excluded 0	-	-
 winrt	38178402576	11bb048fbe6f9acbc7a0fd308aab24598dbb3d59210024a9a9c35de7f201456d	windows.winrt.winrt@0.1.0	-	-	-	raw excluded 0	-	-
-named_sync_objects	46053401854	446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f	windows.sync.named_objects@0.1.0	-	-	-	raw excluded 0	-	-
+named_sync_objects	lap-20261127T221622950Z-62b931c2-009	446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f	windows.sync.named_objects@0.2.0	-	-	-	raw excluded 0	-	-

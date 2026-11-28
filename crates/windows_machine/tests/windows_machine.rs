@@ -31,7 +31,7 @@ const RUNNER_FAMILIES: [(&str, &str); 9] = [
 ];
 
 /// Sprint 372's batch is exactly the nine runner runs' binaries, each its run's probe.sha256, then the control's two;
-/// named_sync_objects by its table row is the same item as by its run.
+/// named_sync_objects by its table row is the same binary as by its run, the row naming its laptop run from Sprint 374.
 #[test]
 fn the_batch_is_the_nine_runner_binaries_and_the_control() {
     let mut names: Vec<String> = RUNNER_FAMILIES.iter().map(|(f, r)| format!("{f}@{r}")).collect();
@@ -60,7 +60,13 @@ fn the_batch_is_the_nine_runner_binaries_and_the_control() {
         ]
     );
     let by_table = batch_items(&root(), &["named_sync_objects".to_string()]).unwrap();
-    assert_eq!(by_table, items[8..9]);
+    assert_eq!(
+        by_table,
+        [BatchItem {
+            runs: "lap-20261127T221622950Z-62b931c2-009".into(),
+            ..items[8].clone()
+        }]
+    );
 }
 
 const HAND_SENT: &str = "lap-20261127T210820791Z-b5a7cf3d";
@@ -392,7 +398,7 @@ fn batch_items_as_the_october_batchs() {
     assert_eq!(got, want);
     let joined = batch_items(&root(), &["named_sync_objects".to_string()]).unwrap();
     assert_eq!(joined.len(), 1);
-    assert_eq!(joined[0].runs, "46053401854");
+    assert_eq!(joined[0].runs, "lap-20261127T221622950Z-62b931c2-009");
     assert_eq!(
         joined[0].binary,
         "446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f"

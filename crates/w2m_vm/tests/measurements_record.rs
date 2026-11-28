@@ -49,20 +49,22 @@ fn one_measurement(measurements: &[Value], metric: &str) -> Value {
     rows[0].clone()
 }
 
-/// The record's two-vCPU rows: `locked_model_steps` is thread A's adds on Windows run 41326239822, each a locked model
-/// step; the turn's start has a median above 0 and no above its 99th percentile; each carries `vcpus` 2, and every
-/// other measurement carries none, the one-vCPU form.
+/// The record's two-vCPU rows: `locked_model_steps` is thread A's adds on Windows run
+/// lap-20261127T221622950Z-62b931c2-001 (the laptop's; until Sprint 374 the runner's run 41326239822, equal to it by
+/// `cmp`), each a locked model step; the turn's start has a median above 0 and no above its 99th percentile; each
+/// carries `vcpus` 2, and every other measurement carries none, the one-vCPU form.
 #[test]
 fn the_two_vcpu_run_is_on_the_record() {
+    const LOCKED_RACE_RUN: &str = "store/probe-runs/lap-20261127T221622950Z-62b931c2-001";
     let record = record();
     let events = w2m_events(&record);
     let measurements = of_kind(&events, "MEASUREMENT_RECORDED");
-    let windows = fs::read_to_string(root().join("store/probe-runs/41326239822/body-1.jsonl")).unwrap();
+    let windows = fs::read_to_string(root().join(LOCKED_RACE_RUN).join("body-1.jsonl")).unwrap();
     let adds = windows
         .lines()
         .map(|l| serde_json::from_str::<Value>(l).unwrap())
         .find(|r| r["s"] == "a")
-        .expect("Windows run 41326239822's row of thread A")["sum"]
+        .unwrap_or_else(|| panic!("Windows run {LOCKED_RACE_RUN}'s row of thread A"))["sum"]
         .as_f64()
         .unwrap();
     let locked = one_measurement(&measurements, "locked_model_steps");

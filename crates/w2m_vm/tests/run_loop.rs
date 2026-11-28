@@ -1583,13 +1583,14 @@ fn a_thread_suspended_on_another_vcpu_stops_before_suspend_returns() {
 
 /// Sprint 331 (the run-loop design's 4d1): `probes/locked_race`, a misaligned `lock xadd` stepped in the model
 /// (`hvc #11`) on one vCPU against an aligned one, an exclusive pair in the VM, on another, the two sharing a byte. Its
-/// rows on one vCPU and on two are held to the Windows runner's (run 41326239822, three runs alike): A's sum 100,000,
-/// B's adds lost 0; and its count of locked steps to A's 100,000 adds.
+/// rows on one vCPU and on two are held to the laptop's (run lap-20261127T221622950Z-62b931c2-001, two runs alike;
+/// from Sprint 374, the runner's run 41326239822 equal to it by `cmp`): A's sum 100,000, B's adds lost 0; and its count
+/// of locked steps to A's 100,000 adds.
 #[test]
 fn a_locked_model_step_loses_no_add_of_another_vcpus_aligned_lock() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
-    let run = root.join("store/probe-runs/41326239822");
+    let run = root.join("store/probe-runs/lap-20261127T221622950Z-62b931c2-001");
     let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
     let binary = fs::read_to_string(run.join("probe.sha256")).unwrap();
     let program = root.join(format!("store/binaries/{}.exe", binary.trim()));
@@ -1612,7 +1613,8 @@ fn a_locked_model_step_loses_no_add_of_another_vcpus_aligned_lock() {
 /// Sprint 344 (reviewer-4's thirteenth review, Medium 1): `probes/thread_values_race`, threads A and B each 200,000
 /// rounds at once, each round setting its own last error and TLS value and reading them back and reading its own thread
 /// id, all calls of lock class none (Sprint 342). Its rows on one vCPU and on two, but `overlap`, are held to the
-/// Windows runner's (run 45760720489, three runs alike but `overlap`): each mismatch count 0. `overlap` counts the
+/// laptop's (run lap-20261127T221622950Z-62b931c2-002, two runs alike but `overlap`; from Sprint 374, the runner's run
+/// 45760720489 equal to it but `overlap`): each mismatch count 0. `overlap` counts the
 /// rounds in which a thread saw the other's round count move: measured before the floor, 21 runs each way, 260 and 260
 /// in every run on one vCPU, where the two loops meet only at the time slices' switches, and 155,991 to 170,312 (A)
 /// and 158,350 to 170,509 (B) on two. On two vCPUs each is held above `OVERLAP_FLOOR`, which shows the loops ran at
@@ -1624,7 +1626,7 @@ fn each_threads_last_error_tls_value_and_id_stay_its_own_on_two_vcpus() {
     const OVERLAP_FLOOR: u64 = 10_000;
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
-    let run = root.join("store/probe-runs/45760720489");
+    let run = root.join("store/probe-runs/lap-20261127T221622950Z-62b931c2-002");
     let but_overlap = |body: &str| -> String {
         body.lines()
             .filter(|l| !l.starts_with("{\"s\":\"overlap\","))
@@ -1632,7 +1634,7 @@ fn each_threads_last_error_tls_value_and_id_stay_its_own_on_two_vcpus() {
             .collect()
     };
     let windows = but_overlap(&fs::read_to_string(run.join("body-1.jsonl")).unwrap());
-    for i in [2, 3] {
+    for i in (2..).take_while(|i| run.join(format!("body-{i}.jsonl")).is_file()) {
         let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
         assert_eq!(
             but_overlap(&body),
@@ -1675,7 +1677,9 @@ fn each_threads_last_error_tls_value_and_id_stay_its_own_on_two_vcpus() {
 /// word, then clearing the marks and freeing them by TlsFree; an index found marked by the other is a `duplicate`.
 /// Part 2: 16 threads each make their FLS data by a first FlsSetValue of one index at once, the main thread frees it,
 /// and a value read back after the free is `stale`. Its rows on two vCPUs and on one, but `tls.overlap`, are held to the
-/// Windows runner's (run 45763850660, three runs alike but `tls.overlap`): `duplicate` 0 and `stale` 0. `tls.overlap`
+/// Windows runner's (run 45763850660, three runs alike but `tls.overlap`; kept from Sprint 374 until the laptop runs the
+/// probe, Smart App Control having refused both its binaries there in Sprint 372, as
+/// `store/reference_machine/runner-runs-after-the-laptop-2026-11-27.tsv` says): `duplicate` 0 and `stale` 0. `tls.overlap`
 /// counts the rounds in which a thread saw the other's round count move: measured before the floor on the slots' lock,
 /// 191 and 191 in each of 21 runs on one vCPU, where the loops meet only at the time slices' switches, and on two, in
 /// 71 runs, 3,072 to 19,633, with one run at 0 and 0 (one thread's 20,000 rounds done before the other's began); with
@@ -1741,16 +1745,17 @@ fn two_threads_taking_and_freeing_tls_and_fls_slots_at_once_never_share_one_on_t
 /// and so does the main thread; the main thread frees the index and the worker reads it; the main thread allocates
 /// again, taking the same index, and the worker reads again, then the main thread reads its own. Once at a TEB slot
 /// (below 64) and once at an expansion slot (64 and up), each step waiting on an event. Its rows on one vCPU and on
-/// two are held to the Windows runner's (run 45780352907, three runs alike) field by field, each field unlike Windows'
+/// two are held to the laptop's (run lap-20261127T221622950Z-62b931c2-004, two runs alike; from Sprint 374, the
+/// runner's run 45780352907 equal to it by `cmp`) field by field, each field unlike Windows'
 /// named: the worker reads 0 after the free and after the new allocation. Before the change both read 2827 (0xB0B, the
 /// worker's value) on one vCPU and on two, TlsFree and TlsAlloc clearing the caller's slot alone.
 #[test]
 fn another_threads_tls_value_after_tlsfree_and_tlsalloc_is_windows_on_one_and_two_vcpus() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
-    let run = root.join("store/probe-runs/45780352907");
+    let run = root.join("store/probe-runs/lap-20261127T221622950Z-62b931c2-004");
     let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
-    for i in [2, 3] {
+    for i in (2..).take_while(|i| run.join(format!("body-{i}.jsonl")).is_file()) {
         let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
         assert_eq!(body, windows, "the Windows run's body-{i} against body-1");
     }
@@ -1805,16 +1810,17 @@ fn another_threads_tls_value_after_tlsfree_and_tlsalloc_is_windows_on_one_and_tw
 
 /// Sprint 347's amendment (found by builder-347's experiment): `probes/tls_expansion_first`. A worker takes TLS
 /// indices until one lies past the 64 TEB slots and ends; the first thread, which took none past 63, sets its own
-/// value at that index and reads it back. Its row on one vCPU and on two is held to the Windows runner's (run
-/// 45783238565, three runs alike): set 1, got 1511, the last error 0 after the read. Before the fix the first thread
+/// value at that index and reads it back. Its row on one vCPU and on two is held to the laptop's (run
+/// lap-20261127T221622950Z-62b931c2-005, two runs alike; from Sprint 374, the runner's run 45783238565 equal to it by
+/// `cmp`): set 1, got 1511, the last error 0 after the read. Before the fix the first thread
 /// had no expansion array, and the run stopped at "HostRequest op 4: TlsSetValue argument form 0x40".
 #[test]
 fn the_first_thread_uses_an_expansion_index_another_thread_allocated_on_one_and_two_vcpus() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
-    let run = root.join("store/probe-runs/45783238565");
+    let run = root.join("store/probe-runs/lap-20261127T221622950Z-62b931c2-005");
     let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
-    for i in [2, 3] {
+    for i in (2..).take_while(|i| run.join(format!("body-{i}.jsonl")).is_file()) {
         let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
         assert_eq!(body, windows, "the Windows run's body-{i} against body-1");
     }
@@ -2378,16 +2384,19 @@ fn four_threads_on_two_vcpus_keep_a_semaphores_units_and_every_wait_returns() {
 /// Sprint 350's amendment (found by builder-350's reading of `sync_objects.c`): `probes/wait_closed_handle`. A worker
 /// waits 1000 ms on a semaphore; the main thread closes its only handle, makes a new semaphore, releases it once and
 /// waits on it with a zero timeout. The main thread's row, which Windows defines, is held on one vCPU and on two to the
-/// Windows runner's (run 45797800625, three runs alike), field by field, each unlike field named; the worker's row is
-/// recorded and not compared, Microsoft Learn calling a wait on a handle closed meanwhile undefined (the runner's worker
-/// timed out, 258, as w2m's now does, its entry holding the closed semaphore). Before the fix the closed semaphore
+/// laptop's (run lap-20261127T225150596Z-62b931c2, two runs alike, its binary the laptop's build of the probe's one
+/// source; from Sprint 374, the runner's run 45797800625 equal to it by `cmp`), field by field, each unlike field named;
+/// w2m runs the laptop's binary. The worker's row is
+/// recorded and not compared, Microsoft Learn calling a wait on a handle closed meanwhile undefined (the worker
+/// timed out, 258, on the runner and on the laptop, as w2m's now does, its entry holding the closed semaphore). Before
+/// the fix the closed semaphore
 /// was freed under the worker's waiter entry, the new one took its index, the release went to the stale entry, and the
 /// main thread's wait answered 258 on one vCPU and on two.
 #[test]
 fn a_semaphore_made_after_a_waited_handle_is_closed_keeps_its_unit_on_one_and_two_vcpus() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
-    let run = root.join("store/probe-runs/45797800625");
+    let run = root.join("store/probe-runs/lap-20261127T225150596Z-62b931c2");
     let row_of = |body: &str, name: &str| -> serde_json::Map<String, serde_json::Value> {
         let line = body
             .lines()
@@ -2400,7 +2409,7 @@ fn a_semaphore_made_after_a_waited_handle_is_closed_keeps_its_unit_on_one_and_tw
     };
     let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
     let expected = row_of(&windows, "main");
-    for i in [2, 3] {
+    for i in (2..).take_while(|i| run.join(format!("body-{i}.jsonl")).is_file()) {
         let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
         assert_eq!(
             row_of(&body, "main"),
@@ -2440,7 +2449,8 @@ fn a_semaphore_made_after_a_waited_handle_is_closed_keeps_its_unit_on_one_and_tw
 }
 
 /// Sprint 352 (card 2 of `docs/design-handles-and-sync-objects-2026-11-26.md`): `probes/wait_closed_kinds`. The rows
-/// Windows defines, held on one vCPU and on two to the Windows runner's (run 45813040124, three runs, those rows alike),
+/// Windows defines, held on one vCPU and on two to the laptop's (run lap-20261127T221622950Z-62b931c2-007, two runs,
+/// those rows alike; from Sprint 374, the runner's run 45813040124 equal to it by `cmp`),
 /// field by field, each unlike field named: WaitForMultipleObjects of a closed handle beside a set event, for any and
 /// for all, its return, last error and the event left set (`any_closed`, `all_closed`); the main thread's calls
 /// (`main`); and 600 rounds over every caller of the object lookup (`cycles`), more than the 256 objects, so a lookup's
@@ -2453,7 +2463,7 @@ fn a_semaphore_made_after_a_waited_handle_is_closed_keeps_its_unit_on_one_and_tw
 fn the_waits_keep_their_objects_and_a_closed_handle_fails_wait_for_multiple_objects_on_one_and_two_vcpus() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
-    let run = root.join("store/probe-runs/45813040124");
+    let run = root.join("store/probe-runs/lap-20261127T221622950Z-62b931c2-007");
     let row_of = |body: &str, name: &str| -> serde_json::Map<String, serde_json::Value> {
         let line = body
             .lines()
@@ -2467,7 +2477,7 @@ fn the_waits_keep_their_objects_and_a_closed_handle_fails_wait_for_multiple_obje
     let defined = ["any_closed", "all_closed", "main", "cycles"];
     let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
     eprintln!("wait_closed_kinds on Windows:\n{windows}");
-    for i in [2, 3] {
+    for i in (2..).take_while(|i| run.join(format!("body-{i}.jsonl")).is_file()) {
         let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
         for name in defined {
             assert_eq!(
@@ -2528,19 +2538,21 @@ fn the_waits_keep_their_objects_and_a_closed_handle_fails_wait_for_multiple_obje
 }
 
 /// Sprint 356's amendment (reviewer-4's twenty-sixth review, Medium 1): `probes/mutex_abandoned`, waits on a mutex
-/// whose owner thread returned holding it. Windows run 45871497648 (Server 2025 10.0.26100.33828, an Intel Xeon
-/// Platinum 8370C, three runs alike) answers WAIT_ABANDONED (128) to the first wait and 0 to the owner's recursive wait
+/// whose owner thread returned holding it. Windows run lap-20261127T221622950Z-62b931c2-008 (the laptop, Windows 11
+/// client 10.0.26200.9974, a 13th Gen Intel Core i5-13420H, two runs alike; from Sprint 374, equal by `cmp` to runner
+/// run 45871497648, Server 2025 10.0.26100.33828 on an Intel Xeon Platinum 8370C, three runs alike) answers
+/// WAIT_ABANDONED (128) to the first wait and 0 to the owner's recursive wait
 /// and to a fresh wait after two releases; 129, WAIT_ABANDONED_0 + 1, to a wait for any whose abandoned mutex is at
 /// index 1; 128, WAIT_ABANDONED_0, to a wait for all of a set event and an abandoned mutex at index 1; 128 to a worker
 /// blocked with no timeout when the holder ends, the worker ending inside 5000 ms; and FALSE with 288 to a non-owner's
 /// ReleaseMutex. Before the amendment w2m never released such a mutex: 258 to every wait, the blocked worker never
-/// returning. Every row is defined; each is held on one vCPU and on two to the runner's, field by field, each unlike
-/// field named, and the runner's three bodies to each other.
+/// returning. Every row is defined; each is held on one vCPU and on two to the laptop's, field by field, each unlike
+/// field named, and the laptop's two bodies to each other.
 #[test]
 fn a_mutex_whose_owner_ends_answers_wait_abandoned_as_windows_on_one_and_two_vcpus() {
     let _one = ONE_VM.lock().unwrap_or_else(|e| e.into_inner());
     let root = root();
-    let run = root.join("store/probe-runs/45871497648");
+    let run = root.join("store/probe-runs/lap-20261127T221622950Z-62b931c2-008");
     let row_of = |body: &str, name: &str| -> serde_json::Map<String, serde_json::Value> {
         let line = body
             .lines()
@@ -2554,7 +2566,7 @@ fn a_mutex_whose_owner_ends_answers_wait_abandoned_as_windows_on_one_and_two_vcp
     let rows = ["single", "any", "all", "blocked", "not_owner"];
     let windows = fs::read_to_string(run.join("body-1.jsonl")).unwrap();
     eprintln!("mutex_abandoned on Windows:\n{windows}");
-    for i in [2, 3] {
+    for i in (2..).take_while(|i| run.join(format!("body-{i}.jsonl")).is_file()) {
         let body = fs::read_to_string(run.join(format!("body-{i}.jsonl"))).unwrap();
         for name in rows {
             assert_eq!(

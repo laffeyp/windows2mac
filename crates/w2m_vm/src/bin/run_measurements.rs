@@ -9,8 +9,8 @@
 //!   that took it, as `runtime_word_hold_ns_p50/p99` and `runtime_word_wait_ns_p50/p99` (nearest rank over the exact
 //!   ticks), the takings an exit interrupted apart;
 //! - `--wfe-probe`: `wfe_exits` for `wfe` and `wfi`, the WFx traps of 1,000 each.
-//! - step 6's two-vCPU run (Sprint 337): `probes/locked_race`, the binary `store/probe-runs/41326239822/probe.sha256`
-//!   names, with `--vcpus 2 --vcpu-figures`: `locked_model_steps` (`count`) and `turn_start_ns_p50` and
+//! - step 6's two-vCPU run (Sprint 337): `probes/locked_race`, the binary its laptop run's `probe.sha256` names
+//!   (`LOCKED_RACE_RUN`, the runner's run 41326239822 until Sprint 374), with `--vcpus 2 --vcpu-figures`: `locked_model_steps` (`count`) and `turn_start_ns_p50` and
 //!   `turn_start_ns_p99` (`ns`, nearest rank over each turn's start), each with `vcpus` 2;
 //! - the runtime word on two vCPUs while the waits and releases run (Sprint 356, its amendment 2):
 //!   `tests/data/timed_waits/semaphore_units` with `--vcpus 2 --runtime-word`, its output "done": the word's hold and
@@ -46,8 +46,9 @@ use w2m_vm::monitor_code::Site;
 use w2m_vm::record::{lock_measurement_line, measurement_line, measurement_line_on, quantile};
 
 const GUESTS: [&str; 2] = ["qpc", "sleeper"];
-/// The Windows run whose `locked_race` binary and rows the two-vCPU run is held to (Sprint 331).
-const LOCKED_RACE_RUN: &str = "store/probe-runs/41326239822";
+/// The Windows run whose `locked_race` binary and rows the two-vCPU run is held to (Sprint 331): from Sprint 374 the
+/// laptop's, its binary and rows the runner's run 41326239822's by `cmp`.
+const LOCKED_RACE_RUN: &str = "store/probe-runs/lap-20261127T221622950Z-62b931c2-001";
 /// The vCPUs of step 6's run.
 const TWO: u32 = 2;
 
