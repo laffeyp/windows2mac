@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-//! `family_known [ROOT]` (Sprint 221): what each runner run of the family index will ask of the Rust host, read from
+//! `family_known [ROOT [TABLE]]` (Sprint 221): what each runner run of the family index will ask of the Rust host, read from
 //! the files before any run (the user's rule of 2026-10-29, "no searching for already knowable answers that you can
 //! look up at once"; KIT_DIARY #87).
 //!
@@ -18,6 +18,11 @@
 //! holds the output; `tests/family_runs.rs` holds the file to it. From Sprint 369 the families that joined on the Rust
 //! host follow the frozen index's 273 runs, from `store/family_runs/joined-2026-11-27.tsv` (`JOINED`), each run's binary
 //! and contract named there, since the frozen index and extract hold the frozen host's families alone.
+//!
+//! From Sprint 378 a frozen family can be held to a contract re-taken on the laptop: a family that
+//! `store/family_runs/retaken-2026-11-27.tsv` (`RETAKEN`) names prints every run with the contract version named there,
+//! and the row rule that contract states, in place of its record's. `family_known ROOT TABLE` reads the table at TABLE
+//! instead, for a test's fixture; the table refuses a row by what it names (`retaken`).
 //!
 //! The extract was written by this binary's text reader from `family_run.py` at the tag frozen-python-2026-10-29, and the
 //! table it gives was held equal to the stored one before the Python went. A column of the imported services whose C body refuses some argument form was tried and
@@ -209,6 +214,56 @@ mod known {
             .collect()
     }
 
+    /// The frozen families held to a contract re-taken on the laptop (Sprint 378). Rows: family, contract@version, the
+    /// laptop run whose rows that contract holds. Empty of families until a card re-takes one.
+    const RETAKEN: &str = "store/family_runs/retaken-2026-11-27.tsv";
+
+    /// The re-taken contract of each family `table` names, checked against the frozen index's families and the
+    /// contract each one's record names (`recorded`). A row is refused naming what it names wrongly: a family the index
+    /// lacks, a contract file that does not exist, a contract other than the record's, a run that is not a stored
+    /// laptop run, or a family already named.
+    fn retaken(
+        root: &Path,
+        table: &Path,
+        text: &str,
+        recorded: &BTreeMap<String, String>,
+    ) -> Result<BTreeMap<String, String>, String> {
+        let at = table.display();
+        let mut out = BTreeMap::new();
+        for l in text.lines().filter(|l| !l.starts_with('#') && !l.is_empty()) {
+            let [family, contract, run] = l.split('\t').collect::<Vec<_>>()[..] else {
+                return Err(format!("{at}: a row of 3 columns, not {l:?}"));
+            };
+            let Some(theirs) = recorded.get(family) else {
+                return Err(format!(
+                    "{at}: {family} is no family of the frozen index (store/runs/family-runs.json)"
+                ));
+            };
+            let (id, version) = contract
+                .split_once('@')
+                .ok_or(format!("{at}: {family}'s contract {contract} names no version"))?;
+            let file = format!("contracts/{id}/{version}.json");
+            if !root.join(&file).is_file() {
+                return Err(format!("{at}: {family}'s contract {contract}: {file} does not exist"));
+            }
+            if theirs.split_once('@').map(|(i, _)| i) != Some(id) {
+                return Err(format!(
+                    "{at}: {family} re-taken under {id}, where its record names {theirs}"
+                ));
+            }
+            let profile = format!("store/probe-runs/{run}/profile.txt");
+            if !fs::read_to_string(root.join(&profile)).is_ok_and(|p| p.starts_with("laptop-")) {
+                return Err(format!(
+                    "{at}: {family}'s run {run} is no stored laptop run ({profile})"
+                ));
+            }
+            if out.insert(family.to_string(), contract.to_string()).is_some() {
+                return Err(format!("{at}: {family} named twice"));
+            }
+        }
+        Ok(out)
+    }
+
     /// An image's imports as "dll!name", delay imports included (`pe_image`'s `iat`).
     fn imports(path: &Path) -> Result<BTreeSet<String>, String> {
         let raw = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -248,9 +303,19 @@ mod known {
                 .collect()
         };
         let index = index.as_object().ok_or("family-runs.json: not an object")?;
+        // each frozen family's contract as its record names it, then as the re-taken table moves it (Sprint 378)
+        let mut recorded = BTreeMap::new();
         for (family, entry) in index {
             let record = entry["record"].as_str().ok_or(format!("{family}: no record"))?;
-            let contract = contract(&root, record)?;
+            recorded.insert(family.clone(), contract(&root, record)?);
+        }
+        let table = std::env::args()
+            .nth(2)
+            .map_or_else(|| root.join(RETAKEN), PathBuf::from);
+        let text = fs::read_to_string(&table).map_err(|e| format!("{}: {e}", table.display()))?;
+        let moved = retaken(&root, &table, &text, &recorded)?;
+        for (family, entry) in index {
+            let contract = moved.get(family).unwrap_or(&recorded[family]).clone();
             let (excluded, stop) = excluded_and_stops.get(family).cloned().unwrap_or_default();
             let rule = format!("{} excluded {}", rule(&root, &contract)?, excluded.len());
             let excluded = if excluded.is_empty() {

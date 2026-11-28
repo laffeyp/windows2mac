@@ -4,7 +4,8 @@
 //! Sprint 221). The population is every run `store/runs/family-runs.json` judged, 273 in 68 families, read from the
 //! lookup `store/family_runs/known-2026-10-29.tsv` (`family_known`; from Sprint 369 after them the families that joined
 //! on the Rust host, `store/family_runs/joined-2026-11-27.tsv`): each run's binary, the contract and version its
-//! family record judged it by, its beside DLL, and its row rule. `scripts/gates.sh` runs each row in `w2m-vm` as
+//! family record judged it by (from Sprint 378 the version `store/family_runs/retaken-2026-11-27.tsv` re-takes on the
+//! laptop, for a frozen family it names), its beside DLL, and its row rule. `scripts/gates.sh` runs each row in `w2m-vm` as
 //! probe.exe with its beside DLL and an instruction budget, writing build/family_runs/<family>-<run>.txt and .stop.
 //!
 //! A run that ends at ExitProcess under a row rule this test carries (raw, or `module_names_ansi_rows`) is held to
@@ -1294,6 +1295,130 @@ fn the_stored_lookup_is_family_knowns_output() {
             "{family} joins on the Rust host and is a frozen family"
         );
     }
+}
+
+/// The frozen families held to a contract re-taken on the laptop (Sprint 378), which `family_known` reads.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const RETAKEN: &str = "store/family_runs/retaken-2026-11-27.tsv";
+
+/// A stored laptop run, the third column of the fixtures' rows: `code_rewrite`'s own run in the lookup.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const FIXTURE_RUN: &str = "lap-20261014T044509652Z-627bbd99";
+
+/// `family_known` over the tree with a re-taken table of `rows` under the stored table's comment, written to the test's
+/// temporary directory as `retaken-<name>.tsv`: whether it exited 0, its output, its errors.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn family_known_with(root: &Path, name: &str, rows: &str) -> (bool, String, String) {
+    let comment = fs::read_to_string(root.join(RETAKEN)).unwrap();
+    let table = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("retaken-{name}.tsv"));
+    fs::write(&table, format!("{comment}{rows}\n")).unwrap();
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_family_known"))
+        .arg(root)
+        .arg(&table)
+        .output()
+        .unwrap();
+    (
+        out.status.success(),
+        String::from_utf8(out.stdout).unwrap(),
+        String::from_utf8_lossy(&out.stderr).to_string(),
+    )
+}
+
+/// A row of the re-taken table moves its family's contract column in `family_known`'s output and nothing else
+/// (Sprint 378). The fixture holds `code_rewrite`, a frozen family of one run whose record names
+/// windows.memory.code_rewrite@0.2.0, to that contract's 0.1.0, of row rule raw as 0.2.0 is, so its row's fourth column
+/// alone moves and every other line is the stored lookup's. The stored table names no family: no card has re-taken one.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn a_retaken_row_moves_its_familys_contract_and_nothing_else() {
+    let root = root();
+    let named: Vec<String> = fs::read_to_string(root.join(RETAKEN))
+        .unwrap()
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+        .map(str::to_string)
+        .collect();
+    assert!(
+        named.is_empty(),
+        "{RETAKEN} names {named:?}, where no card has re-taken a family"
+    );
+    let known = fs::read_to_string(root.join(KNOWN)).unwrap();
+    let known: Vec<&str> = known.lines().filter(|l| !l.starts_with('#')).collect();
+    let row = format!("code_rewrite\twindows.memory.code_rewrite@0.1.0\t{FIXTURE_RUN}");
+    let (ok, out, err) = family_known_with(&root, "moves", &row);
+    assert!(ok, "family_known with the fixture: {err}");
+    let derived: Vec<&str> = out.lines().collect();
+    assert_eq!(
+        derived.len(),
+        known.len(),
+        "the fixture's lookup against {KNOWN}, in lines"
+    );
+    let moved: Vec<String> = known
+        .iter()
+        .zip(&derived)
+        .filter(|(was, now)| was != now)
+        .map(|(was, now)| {
+            let (a, b): (Vec<&str>, Vec<&str>) = (was.split('\t').collect(), now.split('\t').collect());
+            let columns: Vec<usize> = (0..a.len().max(b.len()))
+                .filter(|&i| a.get(i) != b.get(i))
+                .map(|i| i + 1)
+                .collect();
+            format!("{} run {}: columns {columns:?} moved", a[0], a[1])
+        })
+        .collect();
+    assert_eq!(
+        moved,
+        vec![format!("code_rewrite run {FIXTURE_RUN}: columns [4] moved")],
+        "the rows the fixture moves"
+    );
+    let line = derived.iter().find(|l| l.starts_with("code_rewrite\t")).unwrap();
+    assert_eq!(line.split('\t').nth(3), Some("windows.memory.code_rewrite@0.1.0"));
+}
+
+/// A re-taken row is refused naming what it names wrongly (Sprint 378): a family the frozen index lacks (a joined
+/// family among them, which moves by its own row in the joined table), a contract file that does not exist, another
+/// contract than the record's, a run that is no stored laptop run, a family named twice.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn a_retaken_row_is_refused_by_what_it_names() {
+    let root = root();
+    let ours = format!("code_rewrite\twindows.memory.code_rewrite@0.1.0\t{FIXTURE_RUN}");
+    let cases = [
+        (
+            "family",
+            format!("no_such_family\twindows.memory.code_rewrite@0.1.0\t{FIXTURE_RUN}"),
+            "no_such_family is no family of the frozen index",
+        ),
+        (
+            "joined",
+            format!("named_sync_objects\twindows.sync.named_objects@0.1.0\t{FIXTURE_RUN}"),
+            "named_sync_objects is no family of the frozen index",
+        ),
+        (
+            "file",
+            format!("code_rewrite\twindows.memory.code_rewrite@0.9.0\t{FIXTURE_RUN}"),
+            "contracts/windows.memory.code_rewrite/0.9.0.json does not exist",
+        ),
+        (
+            "contract",
+            format!("code_rewrite\twindows.memory.virtual@0.1.0\t{FIXTURE_RUN}"),
+            "code_rewrite re-taken under windows.memory.virtual, where its record names windows.memory.code_rewrite@0.2.0",
+        ),
+        (
+            "run",
+            "code_rewrite\twindows.memory.code_rewrite@0.1.0\t38173733146".to_string(),
+            "code_rewrite's run 38173733146 is no stored laptop run",
+        ),
+        ("twice", format!("{ours}\n{ours}"), "code_rewrite named twice"),
+    ];
+    let mut wrong = Vec::new();
+    for (name, rows, refusal) in cases {
+        let (ok, _, err) = family_known_with(&root, name, &rows);
+        if ok || !err.contains(refusal) {
+            wrong.push(format!("{name}: exit 0 {ok}, stderr {err:?}, not naming {refusal:?}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 #[test]
