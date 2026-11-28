@@ -21,6 +21,29 @@ $clang = (& clang --version 2>$null | Select-Object -First 1)
 
 . (Join-Path $PSScriptRoot 'cpusets.ps1')
 
+# the system and Windows directories as kernel32 answers a program (Sprint 379; tools/guest_runtime/system_info.c answers
+# both): GetSystemDirectoryW and GetWindowsDirectoryW called themselves, UINT f(LPWSTR lpBuffer, UINT uSize), each
+# answering the string's length without its NUL, or 0 on failure, the path ending in no backslash unless it is a root
+# (learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemdirectoryw and
+# .../nf-sysinfoapi-getwindowsdirectoryw, both updated 2025-07-01, read 2026-11-27)
+if (-not ('W2mDirectories' -as [type])) {
+  Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class W2mDirectories {
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern uint GetSystemDirectoryW([Out] char[] buffer, uint size);
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern uint GetWindowsDirectoryW([Out] char[] buffer, uint size);
+  static string Answer(uint n, char[] b) {
+    if (n == 0 || n >= b.Length) throw new System.ComponentModel.Win32Exception();
+    return new string(b, 0, (int)n);
+  }
+  public static string SystemDirectory() { var b = new char[260]; return Answer(GetSystemDirectoryW(b, 260), b); }
+  public static string WindowsDirectory() { var b = new char[260]; return Answer(GetWindowsDirectoryW(b, 260), b); }
+}
+'@
+}
+
 $profile = [ordered]@{
   machine          = 'laptop'
   computer         = $env:COMPUTERNAME
@@ -28,6 +51,8 @@ $profile = [ordered]@{
   bios             = (Get-CimInstance Win32_BIOS).SMBIOSBIOSVersion
   windows          = [ordered]@{ edition = $os.Caption; display_version = $cv.DisplayVersion; build = [int]$os.BuildNumber
                                  ubr = [int]$cv.UBR; architecture = $os.OSArchitecture }
+  system_directory = [W2mDirectories]::SystemDirectory()
+  windows_directory = [W2mDirectories]::WindowsDirectory()
   cpu              = [ordered]@{ name = $cpu.Name.Trim(); identifier = (Get-ItemPropertyValue $cpk Identifier); processor_id = $cpu.ProcessorId
                                  microcode = ([BitConverter]::ToString((Get-ItemPropertyValue $cpk 'Update Revision')) -replace '-', '')
                                  cores = $cpu.NumberOfCores; logical = $cpu.NumberOfLogicalProcessors
