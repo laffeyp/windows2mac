@@ -10,6 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+use windows_machine::{LAPTOP_PROFILE, laptop_profile};
 
 /// The last GitHub runner run before the laptop arrived: 2026-10-12, 21:37:24Z, `code_rewrite` on windows-2022. A
 /// runner's run with an id at most this stays on the record by the user's decision of 2026-10-11 ("the runners'
@@ -30,7 +31,8 @@ fn root() -> PathBuf {
 /// Which machine a stored run is held to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Machine {
-    /// `profile.txt` starts `laptop-`.
+    /// `profile.txt` is `LAPTOP_PROFILE`, `laptop-x64-10.0.26200.<revision>-Client` (Sprint 377; a prefix `laptop-`
+    /// before it).
     Laptop,
     /// A laptop batch's folder: `profile.json` naming `"machine": "laptop"` and no `profile.txt`.
     LaptopBatch,
@@ -63,9 +65,8 @@ fn listed(root: &Path) -> BTreeMap<String, String> {
 fn machine(store: &str, run: &Path, listed: &BTreeMap<String, String>) -> Result<Machine, String> {
     let name = run.file_name().expect("a run has a name").to_string_lossy().to_string();
     let at = format!("{store}/{name}");
-    let profile = fs::read_to_string(run.join("profile.txt"))
-        .ok()
-        .map(|p| p.trim().to_string());
+    // the file's whole text: the laptop's profile.txt is written with no newline, and the pattern holds it so
+    let profile = fs::read_to_string(run.join("profile.txt")).ok();
     let json_machine = match fs::read_to_string(run.join("profile.json")) {
         Ok(t) => Some(
             serde_json::from_str::<Value>(&t)
@@ -79,7 +80,7 @@ fn machine(store: &str, run: &Path, listed: &BTreeMap<String, String>) -> Result
     };
     // a profile.json is the laptop's profile.ps1's: it names the laptop, and the profile.txt beside it agrees
     if let Some(m) = &json_machine
-        && (m != "laptop" || profile.as_deref().is_some_and(|p| !p.starts_with("laptop-")))
+        && (m != "laptop" || profile.as_deref().is_some_and(|p| !laptop_profile(p)))
     {
         return Err(format!(
             "{at}: profile.json names machine {m:?} and profile.txt is {profile:?}: they do not both name the laptop"
@@ -93,9 +94,10 @@ fn machine(store: &str, run: &Path, listed: &BTreeMap<String, String>) -> Result
             )),
         };
     };
-    if profile.starts_with("laptop-") {
+    if laptop_profile(&profile) {
         return Ok(Machine::Laptop);
     }
+    let profile = profile.trim();
     let id = name.parse::<u64>().ok().filter(|_| profile.starts_with("gha-"));
     match id {
         Some(id) if id <= LAST_RUNNER_BEFORE_THE_LAPTOP => Ok(Machine::RunnerBeforeTheLaptop),
@@ -105,8 +107,8 @@ fn machine(store: &str, run: &Path, listed: &BTreeMap<String, String>) -> Result
              {LAST_RUNNER_BEFORE_THE_LAPTOP}) and not named in {LISTED}"
         )),
         None => Err(format!(
-            "{at}: profile {profile}: neither the laptop's (laptop-...) nor a GitHub runner's (gha-...) under its numeric \
-             run id"
+            "{at}: profile {profile}: neither the laptop's ({LAPTOP_PROFILE}) nor a GitHub runner's (gha-...) under its \
+             numeric run id"
         )),
     }
 }
@@ -146,8 +148,8 @@ fn every_stored_windows_run_is_the_laptops_or_on_the_list() {
     }
     let count = |k| kinds.get(&k).copied().unwrap_or(0);
     println!(
-        "walked {} runs: laptop {}, laptop batch {}, runner before the laptop {}, listed runner {}, failing {}; not a \
-         run: {}",
+        "walked {} runs: laptop ({LAPTOP_PROFILE}) {}, laptop batch {}, runner before the laptop {}, listed runner {}, \
+         failing {}; not a run: {}",
         kinds.values().sum::<usize>() + failed.len(),
         count(Machine::Laptop),
         count(Machine::LaptopBatch),
@@ -180,6 +182,61 @@ fn every_stored_windows_run_is_the_laptops_or_on_the_list() {
         count(Machine::Laptop) > 0 && count(Machine::LaptopBatch) > 0,
         "the walk found no laptop run or no laptop batch: {kinds:?}"
     );
+}
+
+/// The first stored run whose job recorded the code-integrity policy and window (Sprint 377's probe job, HEAD
+/// 6fa622231): `profile.json` `code_integrity`, `code-integrity.json`.
+const FIRST_CODE_INTEGRITY_RUN: &str = "lap-20261128T032403626Z-6fa62223";
+
+/// Every stored laptop run from `FIRST_CODE_INTEGRITY_RUN` on, by its id's stamp, carries the code-integrity state its
+/// job met and its job's window with no block (a run whose window held one is not stored): in its own folder, or for a
+/// run split from a batch, in the batch's (`batch.txt`). Prints the count held.
+#[test]
+fn every_laptop_run_from_377_records_its_code_integrity() {
+    let root = root();
+    let first = &FIRST_CODE_INTEGRITY_RUN["lap-".len().."lap-".len() + 19];
+    let mut held = 0;
+    let mut wrong = Vec::new();
+    for store in STORES {
+        let mut runs: Vec<PathBuf> = fs::read_dir(root.join(store))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.is_dir())
+            .collect();
+        runs.sort();
+        for run in runs {
+            let name = run.file_name().unwrap().to_string_lossy().to_string();
+            let Some(stamp) = name.strip_prefix("lap-").and_then(|s| s.get(..19)) else {
+                continue;
+            };
+            if stamp < first {
+                continue;
+            }
+            let at = match fs::read_to_string(run.join("batch.txt")) {
+                Ok(batch) if store == "store/probe-runs" => root.join(store).join(batch.trim()),
+                _ => run.clone(),
+            };
+            let profile: Value = serde_json::from_str(&fs::read_to_string(at.join("profile.json")).unwrap_or_default())
+                .unwrap_or(Value::Null);
+            let ci = &profile["code_integrity"];
+            if !(ci["verified_and_reputable_policy_state"].is_i64() && ci["smart_app_control"].is_string()) {
+                wrong.push(format!("{store}/{name}: profile.json's code_integrity is {ci}"));
+            }
+            let window: Value = serde_json::from_str(
+                fs::read_to_string(at.join("code-integrity.json"))
+                    .unwrap_or_default()
+                    .trim_start_matches('\u{feff}'),
+            )
+            .unwrap_or(Value::Null);
+            if window["blocks"].as_array().is_none_or(|b| !b.is_empty()) || window.get("error").is_some() {
+                wrong.push(format!("{store}/{name}: code-integrity.json is {window}"));
+            }
+            held += 1;
+        }
+    }
+    println!("{held} stored laptop runs from {FIRST_CODE_INTEGRITY_RUN} carry their code-integrity state and window");
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    assert!(held > 0, "no stored run from {FIRST_CODE_INTEGRITY_RUN}");
 }
 
 /// The family tables, each run in its second column (Sprint 374).

@@ -189,6 +189,12 @@ Three changes, read back over SSH the same day:
   (mDNS), `User w2m`, `IdentityFile ~/.ssh/w2m_laptop`, `IdentitiesOnly yes`. The host key on record in
   `~/.ssh/known_hosts` is under `192.168.4.55` (and `windowsmachine.local`, the same ed25519 key), so every `ssh` and
   `scp` passes `-o HostKeyAlias=192.168.4.55`, as `windows_machine` does (`crates/windows_machine/src/lib.rs` `LINK`).
+  From Sprint 377 the key is on record under the alias, `w2m-laptop`: the three lines held under `192.168.4.55`
+  (ED25519 `SHA256:xsrU4PoaBpi5+Vk94B9t5cIoV/qEKw0oetfrOGmudK8`, RSA `SHA256:Y9Ft+/701V4dti/h7sLrC0DBBrbdmmHxV/rcbc4aN4k`,
+  ECDSA `SHA256:n3Tq4wFo0ZLvJNUBRuPnClrRof2kljlvWVv+PhwzCj8`, each the fingerprint `ssh-keyscan windowsmachine.local`
+  read that day) copied under it, and `LINK` passes `-o HostKeyAlias=w2m-laptop`. The `192.168.4.55` lines stay until
+  the sprint's close commit carries the new `LINK`, since a job sent from an earlier HEAD's program still names them;
+  `ssh-keygen -R 192.168.4.55` removes them then.
 - The network is Private: `Get-NetConnectionProfile` reads `NewWifi 2`, `Wi-Fi`, `NetworkCategory Private`.
 - The rule admits SSH on any profile, still from the local subnet only: `Set-NetFirewallRule -Name w2m-sshd -Profile
   Any`, run at the laptop; `Get-NetFirewallRule -Name w2m-sshd` reads `Profile Any`, `Enabled True`, `Action Allow`,

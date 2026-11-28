@@ -42,8 +42,9 @@ pub const EXECUTOR: [&str; 7] = [
     "pmc_sample.wprp",
 ];
 /// The link's options, the Python's: a dead connection ends in a minute instead of hanging (2026-10-13: one scp of a
-/// finished bundle stalled 6 minutes; the same copy by hand took 0.9 s). The host key on record is under the laptop's
-/// first address, 192.168.4.55; the alias names it while the host is reached by name.
+/// finished bundle stalled 6 minutes; the same copy by hand took 0.9 s). The host key is on record under the laptop's
+/// alias, [`HOST`] (Sprint 377: it was under the laptop's first address, 192.168.4.55, and the laptop moved to
+/// 192.168.4.82), so the key is checked by the machine's name whatever address it answers at.
 pub const LINK: [&str; 8] = [
     "-o",
     "ConnectTimeout=15",
@@ -52,14 +53,31 @@ pub const LINK: [&str; 8] = [
     "-o",
     "ServerAliveCountMax=4",
     "-o",
-    "HostKeyAlias=192.168.4.55",
+    "HostKeyAlias=w2m-laptop",
 ];
+/// The laptop's profile as `run-job.ps1` writes it (Sprint 377): its machine, CPU class and Windows build, the revision
+/// free (7840 in October, 9974 from 2026-11-27). Only a run whose `profile.txt` is this, the revision one or more
+/// digits, is stored or held as the laptop's.
+pub const LAPTOP_PROFILE: &str = "laptop-x64-10.0.26200.<revision>-Client";
+
+/// Whether `profile`, a `profile.txt`'s whole text, is [`LAPTOP_PROFILE`].
+pub fn laptop_profile(profile: &str) -> bool {
+    let (head, tail) = LAPTOP_PROFILE
+        .split_once("<revision>")
+        .expect("the pattern names its revision");
+    profile
+        .strip_prefix(head)
+        .and_then(|rest| rest.strip_suffix(tail))
+        .is_some_and(|revision| !revision.is_empty() && revision.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// A job's ssh ends after this even if the link stays alive (audit 2026-10-13); its code is then 124.
 pub const JOB_SECONDS: u64 = 2 * 3600;
 /// The lock that holds one job at a time to the laptop's one workspace.
 pub const LOCK: &str = "build/windows_machine.lock";
-/// A stored run's files besides its executions' (`store_probe_runs.py` `KEPT`).
-pub const KEPT: [&str; 7] = [
+/// A stored run's files besides its executions' (`store_probe_runs.py` `KEPT`), each kept when the bundle holds it; from
+/// Sprint 377 with the job's code-integrity window ([`CODE_INTEGRITY`]).
+pub const KEPT: [&str; 8] = [
     "cpu.txt",
     "probe.sha256",
     "profile.txt",
@@ -67,6 +85,7 @@ pub const KEPT: [&str; 7] = [
     "job.json",
     "run-job.log",
     "batch.txt",
+    CODE_INTEGRITY,
 ];
 /// The family runs' lookup: family, run, binary, contract, the beside DLL as `name:sha256`, ...
 pub const KNOWN: &str = "store/family_runs/known-2026-10-29.tsv";
@@ -510,6 +529,16 @@ fn run_job_inner(root: &Path, request: &Request) -> Result<i32, String> {
             .status();
     }
     drop(scratch);
+    // a block in the job's window is named in place of the verdict on a missing output (Sprint 372: probe.exe, 3077)
+    if fetched {
+        match code_integrity(&dst) {
+            Ok(line) => println!("{run}: {line}"),
+            Err(why) => {
+                println!("{run}: {why}; nothing stored; bundle {relative}");
+                return Ok(1);
+            }
+        }
+    }
     let (status, line) = verdict(code, fetched, &dst, request.repeat);
     println!("{run}: {line}; bundle {relative}");
     if status != 0 {
@@ -521,7 +550,7 @@ fn run_job_inner(root: &Path, request: &Request) -> Result<i32, String> {
 
 /// The store step (`store_probe_runs.py` for one run): `build/probe-runs/<run>/traces-<execution>/` to
 /// `store/probe-runs/<run>/` (its executions' bodies and exec files and the `KEPT` files), its `probe.exe` to
-/// `store/binaries/<sha256>.exe` unless that binary is stored. A run whose `profile.txt` does not start `laptop-` is
+/// `store/binaries/<sha256>.exe` unless that binary is stored. A run whose `profile.txt` is not [`LAPTOP_PROFILE`] is
 /// refused before anything is written, as is a `probe.exe` whose sha256 is not its `probe.sha256`. Returns the line
 /// that names what was stored.
 pub fn store(root: &Path, run: &str) -> Result<String, String> {
@@ -543,10 +572,9 @@ pub fn store(root: &Path, run: &str) -> Result<String, String> {
     let src = &found[0];
     let read = |name: &str| fs::read_to_string(src.join(name)).map_err(|e| format!("{run}: {name}: {e}"));
     let profile = read("profile.txt")?;
-    if !profile.starts_with("laptop-") {
+    if !laptop_profile(&profile) {
         return Err(format!(
-            "{run}: profile.txt is {:?}, not the laptop's (laptop-...): only a laptop run is stored",
-            profile.trim()
+            "{run}: profile.txt is {profile:?}, not the laptop's ({LAPTOP_PROFILE}): only a laptop run is stored"
         ));
     }
     let sha = read("probe.sha256")?.trim().to_string();
@@ -582,6 +610,11 @@ pub fn store(root: &Path, run: &str) -> Result<String, String> {
                 }
                 once.push((from, kept.join(name)));
             }
+        }
+        // the batch's code-integrity window, once beside them, when its bundle holds one (Sprint 377)
+        let window = root.join(BATCHES).join(b).join(CODE_INTEGRITY);
+        if !kept.join(CODE_INTEGRITY).exists() && window.is_file() {
+            once.push((window, kept.join(CODE_INTEGRITY)));
         }
     }
     let dst = root.join("store/probe-runs").join(run);
@@ -1027,6 +1060,13 @@ fn run_batch_inner(
         println!("{run}: bundle not copied back; the laptop's job folder is kept");
         return Ok(if code == 0 { 1 } else { code });
     }
+    match code_integrity(&bundle) {
+        Ok(line) => println!("{run}: {line}"),
+        Err(why) => {
+            println!("{run}: {why}; nothing stored; bundle {BATCHES}/{run}");
+            return Ok(1);
+        }
+    }
     let runs = split_batch(root, &run, &items, repeat)?;
     let short: Vec<&(String, i32, String)> = runs.iter().filter(|r| r.1 != 0).collect();
     for (_, _, line) in &short {
@@ -1046,10 +1086,9 @@ fn run_batch_inner(
     // the batch is one job on one machine: every run's profile is read before any is stored
     for (id, _, _) in &runs {
         let profile = fs::read_to_string(traces(root, id)?.join("profile.txt")).map_err(|e| format!("{id}: {e}"))?;
-        if !profile.starts_with("laptop-") {
+        if !laptop_profile(&profile) {
             return Err(format!(
-                "{id}: profile.txt is {:?}, not the laptop's: nothing stored",
-                profile.trim()
+                "{id}: profile.txt is {profile:?}, not the laptop's ({LAPTOP_PROFILE}): nothing stored"
             ));
         }
     }
@@ -1224,6 +1263,8 @@ pub fn run_game(root: &Path, game: &Game) -> i32 {
 fn run_game_inner(root: &Path, game: &Game) -> Result<i32, String> {
     let limit = game.checked_limit()?;
     let (_lock, head, stamp) = begin(root)?;
+    // the TEMP the job's state declares, at the commit the job sends: what each execution's game must have read
+    let declared = declared_temp(root, &head, &game.game, &game.initial_state)?;
     let run = run_id(&stamp, &head);
     let scratch = Scratch(std::env::temp_dir().join(format!("windows_machine-{}", std::process::id())));
     let job = scratch.0.join(&run);
@@ -1248,6 +1289,14 @@ fn run_game_inner(root: &Path, game: &Game) -> Result<i32, String> {
         println!("{run}: bundle not copied back; the laptop's job folder is kept");
         return Ok(if code == 0 { 1 } else { code });
     }
+    // a block in the job's window is the block's, not the game's (Sprint 376's first job: handler_trace.dll, 3077)
+    match code_integrity(&bundle) {
+        Ok(line) => println!("{run}: {line}"),
+        Err(why) => {
+            println!("{run}: {why}; nothing stored; bundle {BATCHES}/{run}");
+            return Ok(1);
+        }
+    }
     let (done, lines) = split_game(root, &run, game.executions)?;
     for line in &lines {
         println!("{line}");
@@ -1266,26 +1315,25 @@ fn run_game_inner(root: &Path, game: &Game) -> Result<i32, String> {
     for id in &ids {
         let profile = fs::read_to_string(root.join("build/game-runs").join(id).join("profile.txt"))
             .map_err(|e| format!("{id}: profile.txt: {e}"))?;
-        if !profile.starts_with("laptop-") {
+        if !laptop_profile(&profile) {
             return Err(format!(
-                "{id}: profile.txt is {:?}, not the laptop's: nothing stored",
-                profile.trim()
+                "{id}: profile.txt is {profile:?}, not the laptop's ({LAPTOP_PROFILE}): nothing stored"
             ));
         }
         let dir = root.join("build/game-runs").join(id);
         steam_free(&dir).map_err(|why| format!("{id}: {why}: nothing stored"))?;
-        temp_declared(&dir).map_err(|why| format!("{id}: {why}: nothing stored"))?;
+        temp_declared(&dir, &declared).map_err(|why| format!("{id}: {why}: nothing stored"))?;
     }
     for id in &ids {
-        println!("{}", store_game(root, id)?);
+        println!("{}", store_game(root, id, &declared)?);
     }
     Ok(0)
 }
 
 /// The game job's bundle split into one folder per execution (the Python's loop after the fetch): `build/batches/<run>/
-/// <i>/` to `build/game-runs/<run>-<i>/`, with `batch.txt` naming the job and the job's `profile.json` (the machine the
-/// game asked); an execution without `exec.json` is named and skipped. Returns the count split and the lines naming
-/// the skipped.
+/// <i>/` to `build/game-runs/<run>-<i>/`, with `batch.txt` naming the job, the job's `profile.json` (the machine the
+/// game asked) and its [`CODE_INTEGRITY`] file (Sprint 377); an execution without `exec.json` is named and skipped.
+/// Returns the count split and the lines naming the skipped.
 pub fn split_game(root: &Path, run: &str, executions: u32) -> Result<(u32, Vec<String>), String> {
     let bundle = root.join(BATCHES).join(run);
     let (mut done, mut lines) = (0, Vec::new());
@@ -1298,13 +1346,71 @@ pub fn split_game(root: &Path, run: &str, executions: u32) -> Result<(u32, Vec<S
         let dst = root.join("build/game-runs").join(format!("{run}-{i:02}"));
         copy_tree(&src, &dst)?;
         fs::write(dst.join("batch.txt"), run).map_err(|e| format!("{}/batch.txt: {e}", dst.display()))?;
-        if bundle.join("profile.json").is_file() {
-            fs::copy(bundle.join("profile.json"), dst.join("profile.json"))
-                .map_err(|e| format!("{}/profile.json: {e}", dst.display()))?;
+        // the job's profile and its code-integrity window, the machine and the policy each execution met
+        for name in ["profile.json", CODE_INTEGRITY] {
+            if bundle.join(name).is_file() {
+                fs::copy(bundle.join(name), dst.join(name)).map_err(|e| format!("{}/{name}: {e}", dst.display()))?;
+            }
         }
         done += 1;
     }
     Ok((done, lines))
+}
+
+/// The file `run-job.ps1` writes to a job's `out/` as the job ends (Sprint 377): the job's window on the laptop's clock
+/// (`from`, `to`, UTC) and each event 3077 the `Microsoft-Windows-CodeIntegrity/Operational` log holds in it
+/// (`blocks`: `time`, `file`, `process`, `policy`), the event by which Smart App Control's policy
+/// `VerifiedAndReputableDesktop` refused a file: the laptop's log held six, each a file of a job (probe.exe under
+/// `D:\a\windows2mac\windows2mac` loaded by cmd.exe, Sprint 372; handler_trace.dll loaded by UnityCrashHandler64.exe,
+/// Sprint 376's first game job), each beside an event 3033 at the same instant; the log's other 3033s name vendor DLLs
+/// refused by protected processes, no file of a job. A read that failed writes `error`.
+pub const CODE_INTEGRITY: &str = "code-integrity.json";
+
+/// The job's code-integrity window, from `bundle`'s [`CODE_INTEGRITY`]: `Ok` with its line when the window holds no
+/// block, `Err` naming each blocked file (and the process that loaded it, the policy and the time) when it holds one, so
+/// a job whose binary or DLL Smart App Control refused is not reported as the program's missing output, and when the
+/// file is missing or records an error, since then the window's blocks are not known.
+pub fn code_integrity(bundle: &Path) -> Result<String, String> {
+    let text = fs::read_to_string(bundle.join(CODE_INTEGRITY))
+        .map_err(|e| format!("{CODE_INTEGRITY}: {e}: the job's code-integrity blocks are not known"))?;
+    let record: Value = serde_json::from_str(text.trim_start_matches('\u{feff}'))
+        .map_err(|e| format!("{CODE_INTEGRITY}: {e}: the job's code-integrity blocks are not known"))?;
+    let window = format!(
+        "from {} to {}",
+        record["from"].as_str().unwrap_or("?"),
+        record["to"].as_str().unwrap_or("?")
+    );
+    if let Some(error) = record["error"].as_str() {
+        return Err(format!(
+            "{CODE_INTEGRITY}: the CodeIntegrity log was not read ({error}) {window}: the job's blocks are not known"
+        ));
+    }
+    // ConvertTo-Json writes an array, or one object for a lone block
+    let blocks: Vec<&Value> = match &record["blocks"] {
+        Value::Array(items) => items.iter().collect(),
+        Value::Null => Vec::new(),
+        one => vec![one],
+    };
+    if blocks.is_empty() {
+        return Ok(format!("CodeIntegrity: no block {window}"));
+    }
+    let named: Vec<String> = blocks
+        .iter()
+        .map(|b| {
+            let s = |k: &str| b[k].as_str().unwrap_or("?").to_string();
+            format!(
+                "{} (loaded by {}, policy {}, at {})",
+                s("file"),
+                s("process"),
+                s("policy"),
+                s("time")
+            )
+        })
+        .collect();
+    Err(format!(
+        "CodeIntegrity blocked {} {window}: the job's missing output is the block's, not the program's",
+        named.join("; ")
+    ))
 }
 
 /// What the game writes to `unity.log` when the Steam client is not running, as the reference runs of 2026-10-14 ran.
@@ -1329,24 +1435,32 @@ pub fn steam_free(dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// An execution's game read the TEMP its declared state names: the run's `state.json` records the TEMP path the
-/// executor proved (`seen.temp_path`), and each folder the capture's strings name right after a GetTempPathW call (the
-/// row at the call's seq + 1 ending in `\`, as the reference runs' rows 3423 and 3496 do) is that path. Sprint 376's
-/// first three executions read `C:\w2m\temp\`, the job's own folder, where the reference runs read the user's TEMP, and
-/// nine of the game's values differed with it. A folder without a trace passes; a run whose state.json records no TEMP
-/// path is refused.
-pub fn temp_declared(dir: &Path) -> Result<(), String> {
+/// The TEMP path `games/<game>/state.json` declares for `state`, at `commit`, the tree the game job sends (Sprint 377):
+/// what [`temp_declared`] holds each execution to.
+pub fn declared_temp(root: &Path, commit: &str, game: &str, state: &str) -> Result<String, String> {
+    let at = format!("games/{game}/state.json");
+    let text = git(root, &["show", &format!("{commit}:{at}")])?;
+    let states: Value = serde_json::from_slice(&text).map_err(|e| format!("{at} at {commit}: {e}"))?;
+    states["states"][state]["temp_path"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or(format!(
+            "{at} at {commit} declares no temp_path for state {state}: the TEMP the game must read is not named"
+        ))
+}
+
+/// An execution's game read the TEMP its declared state names, `declared` ([`declared_temp`]; Sprint 377, Sprint 376's
+/// Rubber Duck Observation 2: the check had read the proof the executor wrote, so a proof and a game that agreed on
+/// another TEMP passed). Each folder the capture's strings name right after a GetTempPathW call (the row at the call's
+/// seq + 1 ending in `\`, as the reference runs' rows 3423 and 3496 do) is that path, and the run's `state.json` proves
+/// that path (`seen.temp_path`). Sprint 376's first three executions read `C:\w2m\temp\`, the job's own folder, where the
+/// reference runs read the user's TEMP, and nine of the game's values differed with it. A folder without a trace passes;
+/// a run whose state.json is missing, records no TEMP path or records another is refused.
+pub fn temp_declared(dir: &Path, declared: &str) -> Result<(), String> {
     let Ok(trace) = fs::read_to_string(dir.join("jit_capture.bin.trace.tsv")) else {
         return Ok(());
     };
-    let proof: Value = fs::read_to_string(dir.join("state.json"))
-        .ok()
-        .and_then(|t| serde_json::from_str(t.trim_start_matches('\u{feff}')).ok())
-        .ok_or("state.json is missing or not JSON: the TEMP the game read is not proved")?;
-    let Some(path) = proof["seen"]["temp_path"].as_str() else {
-        return Err("state.json records no TEMP path: the TEMP the game read is not proved".to_string());
-    };
-    let want = format!("{}\\", path.trim_end_matches('\\'));
+    let want = format!("{}\\", declared.trim_end_matches('\\'));
     let calls: Vec<u64> = trace
         .lines()
         .filter_map(|l| {
@@ -1369,24 +1483,35 @@ pub fn temp_declared(dir: &Path) -> Result<(), String> {
             ));
         }
     }
+    let proof: Value = fs::read_to_string(dir.join("state.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(t.trim_start_matches('\u{feff}')).ok())
+        .ok_or("state.json is missing or not JSON: the TEMP the game read is not proved")?;
+    let Some(path) = proof["seen"]["temp_path"].as_str() else {
+        return Err("state.json records no TEMP path: the TEMP the game read is not proved".to_string());
+    };
+    if !format!("{}\\", path.trim_end_matches('\\')).eq_ignore_ascii_case(&want) {
+        return Err(format!(
+            "state.json proves the TEMP {path}, where its state declares {want}"
+        ));
+    }
     Ok(())
 }
 
 /// One game execution stored: `build/game-runs/<id>/` to `store/game-runs/<id>/`, refused before anything is written
-/// unless its `profile.txt` is the laptop's, its `unity.log` names no Steam account ([`steam_free`]) and its game read
-/// the declared TEMP ([`temp_declared`]). Returns the line naming what was stored, with its log's and its call trace's
-/// line counts.
-pub fn store_game(root: &Path, id: &str) -> Result<String, String> {
+/// unless its `profile.txt` is [`LAPTOP_PROFILE`], its `unity.log` names no Steam account ([`steam_free`]) and its game
+/// read the TEMP its state declares, `declared` ([`temp_declared`]). Returns the line naming what was stored, with its
+/// log's and its call trace's line counts.
+pub fn store_game(root: &Path, id: &str, declared: &str) -> Result<String, String> {
     let src = root.join("build/game-runs").join(id);
     let profile = fs::read_to_string(src.join("profile.txt")).map_err(|e| format!("{id}: profile.txt: {e}"))?;
-    if !profile.starts_with("laptop-") {
+    if !laptop_profile(&profile) {
         return Err(format!(
-            "{id}: profile.txt is {:?}, not the laptop's (laptop-...): only a laptop run is stored",
-            profile.trim()
+            "{id}: profile.txt is {profile:?}, not the laptop's ({LAPTOP_PROFILE}): only a laptop run is stored"
         ));
     }
     steam_free(&src).map_err(|why| format!("{id}: {why}"))?;
-    temp_declared(&src).map_err(|why| format!("{id}: {why}"))?;
+    temp_declared(&src, declared).map_err(|why| format!("{id}: {why}"))?;
     let dst = root.join("store/game-runs").join(id);
     let n = copy_tree(&src, &dst)?;
     let lines = |name: &str| fs::read_to_string(src.join(name)).map_or(0, |t| t.lines().count());

@@ -8,10 +8,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use windows_machine::{
-    Batch, BatchItem, EXECUTOR, Game, JOINED, Job, KNOWN, Kind, Py, Request, STEAM_ABSENT, batch_inputs, batch_items,
-    run_id, sha256, split_batch, split_game, stamp, steam_free, store, store_game, stored_run, temp_declared, tree_tar,
-    verdict, write_job,
+    Batch, BatchItem, CODE_INTEGRITY, EXECUTOR, Game, HOST, JOINED, Job, KNOWN, Kind, LAPTOP_PROFILE, LINK, Py,
+    Request, STEAM_ABSENT, batch_inputs, batch_items, code_integrity, declared_temp, laptop_profile, run_id, sha256,
+    split_batch, split_game, stamp, steam_free, store, store_game, stored_run, temp_declared, tree_tar, verdict,
+    write_job,
 };
+
+/// The TEMP `games/hail-to-the-rainbow/state.json` declares for its state `empty`, the reference runs' (Sprint 376).
+const USER_TEMP: &str = "C:\\Users\\w2m\\AppData\\Local\\Temp";
 
 /// Sprint 372's references: the October batch the Python sent (195 binaries, its job.json and the runs split from
 /// it), and one execution of the reference set's game job.
@@ -195,7 +199,7 @@ fn the_store_refuses_a_runners_run() {
     bundle(&at, RUNNER, RUNNER, "named_sync_objects-46053401854");
     let why = store(&at, RUNNER).unwrap_err();
     assert!(
-        why.contains("not the laptop's (laptop-...): only a laptop run is stored"),
+        why.contains("not the laptop's (laptop-x64-10.0.26200.<revision>-Client): only a laptop run is stored"),
         "{why}"
     );
     assert!(why.contains("gha-windows-2025"), "{why}");
@@ -669,7 +673,7 @@ fn a_game_job_is_split_and_stored() {
     let (done, lines) = split_game(&at, "lap-g", 2).unwrap();
     assert_eq!(done, 1);
     assert_eq!(lines, ["lap-g-02: no exec.json"]);
-    let line = store_game(&at, "lap-g-01").unwrap();
+    let line = store_game(&at, "lap-g-01", USER_TEMP).unwrap();
     assert_eq!(
         line,
         "lap-g-01: stored store/game-runs/lap-g-01, 20 files, profile laptop-x64-10.0.26200.7840-Client, unity.log 180 \
@@ -691,7 +695,7 @@ fn a_game_job_is_split_and_stored() {
         "gha-windows-2025-x64-10.0.26100.33828-Server",
     )
     .unwrap();
-    let why = store_game(&at, "lap-r").unwrap_err();
+    let why = store_game(&at, "lap-r", USER_TEMP).unwrap_err();
     assert!(why.contains("only a laptop run is stored"), "{why}");
     assert!(!at.join("store/game-runs/lap-r").exists());
     let _ = fs::remove_dir_all(&at);
@@ -727,15 +731,15 @@ fn a_log_with_the_steam_client_running_is_not_stored() {
         fs::write(dir.join("unity.log"), text).unwrap();
     }
     assert_eq!(steam_free(&at.join("build/game-runs/lap-s-01")), Ok(()));
-    let why = store_game(&at, "lap-s-02").unwrap_err();
+    let why = store_game(&at, "lap-s-02", USER_TEMP).unwrap_err();
     assert_eq!(
         why,
         "lap-s-02: unity.log speaks of Steam and has no \"SteamAPI_Init() failed\": the Steam client ran, and the game's \
          Steam lines may name its account, so the execution stays in build/"
     );
     assert!(!at.join("store/game-runs/lap-s-02").exists());
-    assert!(store_game(&at, "lap-s-01").is_ok());
-    assert!(store_game(&at, "lap-s-03").is_ok());
+    assert!(store_game(&at, "lap-s-01", USER_TEMP).is_ok());
+    assert!(store_game(&at, "lap-s-03", USER_TEMP).is_ok());
     assert!(steam_free(&at.join("build/game-runs/no-such-run")).is_ok());
     let _ = fs::remove_dir_all(&at);
 }
@@ -790,10 +794,12 @@ fn the_game_kind_holds_every_declared_item_and_stops_the_steam_client() {
     assert!(script.contains("& $fromGameTemp | Remove-Item -Force"));
 }
 
-/// Sprint 376: an execution whose game read a TEMP other than the one its state.json proves is not stored. The
+/// Sprint 376, held from Sprint 377 to the declared path (Sprint 376's Rubber Duck Observation 2): an execution whose
+/// game read a TEMP other than the one `games/<game>/state.json` declares is not stored, whatever its proof says. The
 /// reference run read the user's TEMP (strings rows 3423 and 3496, each after a GetTempPathW call); with a proof naming
-/// that path it passes, with one naming the job's own folder it is refused at the row, and a proof with no TEMP path, as
-/// the first three executions of this sprint wrote, is refused.
+/// that path it passes. A run whose proof and strings both name the job's own folder, as Sprint 376's first three
+/// executions read, is refused at the row against the declared path; a proof naming that folder beside the reference
+/// strings is refused at the proof; and a proof with no TEMP path is refused.
 #[test]
 fn a_run_whose_game_read_another_temp_is_not_stored() {
     let at = scratch("temp");
@@ -804,17 +810,34 @@ fn a_run_whose_game_read_another_temp_is_not_stored() {
         fs::copy(reference.join(name), dir.join(name)).unwrap();
     }
     fs::write(dir.join("state.json"), USER_TEMP_PROOF).unwrap();
-    assert_eq!(temp_declared(&dir), Ok(()));
+    assert_eq!(temp_declared(&dir, USER_TEMP), Ok(()));
+    // the job's own folder in the proof and the strings alike: agreeing with each other, not with the declaration
+    let job_temp_proof = USER_TEMP_PROOF.replace("C:\\\\Users\\\\w2m\\\\AppData\\\\Local\\\\Temp", "C:\\\\w2m\\\\temp");
+    fs::write(dir.join("state.json"), &job_temp_proof).unwrap();
+    let strings = fs::read_to_string(reference.join("jit_capture.bin.strings.tsv")).unwrap();
+    assert!(strings.contains("\tC:\\Users\\w2m\\AppData\\Local\\Temp\\\n"));
     fs::write(
-        dir.join("state.json"),
-        USER_TEMP_PROOF.replace("C:\\\\Users\\\\w2m\\\\AppData\\\\Local\\\\Temp", "C:\\\\w2m\\\\temp"),
+        dir.join("jit_capture.bin.strings.tsv"),
+        strings.replace("C:\\Users\\w2m\\AppData\\Local\\Temp\\", "C:\\w2m\\temp\\"),
     )
     .unwrap();
     assert_eq!(
-        temp_declared(&dir),
+        temp_declared(&dir, USER_TEMP),
         Err(
-            "the game's TEMP is C:\\Users\\w2m\\AppData\\Local\\Temp\\ (strings row 3423, after GetTempPathW), where its \
-             state declares C:\\w2m\\temp\\"
+            "the game's TEMP is C:\\w2m\\temp\\ (strings row 3423, after GetTempPathW), where its state declares \
+             C:\\Users\\w2m\\AppData\\Local\\Temp\\"
+                .to_string()
+        )
+    );
+    fs::copy(
+        reference.join("jit_capture.bin.strings.tsv"),
+        dir.join("jit_capture.bin.strings.tsv"),
+    )
+    .unwrap();
+    assert_eq!(
+        temp_declared(&dir, USER_TEMP),
+        Err(
+            "state.json proves the TEMP C:\\w2m\\temp, where its state declares C:\\Users\\w2m\\AppData\\Local\\Temp\\"
                 .to_string()
         )
     );
@@ -824,8 +847,154 @@ fn a_run_whose_game_read_another_temp_is_not_stored() {
     )
     .unwrap();
     assert_eq!(
-        temp_declared(&dir),
+        temp_declared(&dir, USER_TEMP),
         Err("state.json records no TEMP path: the TEMP the game read is not proved".to_string())
     );
     let _ = fs::remove_dir_all(&at);
+}
+
+/// Sprint 377: the declared TEMP is read from `games/<game>/state.json` at the commit the job sends, HEAD here; a state
+/// it does not declare is refused before the job is sent.
+#[test]
+fn the_declared_temp_is_the_states_at_the_commit() {
+    let head = String::from_utf8(windows_machine::git(&root(), &["rev-parse", "HEAD"]).unwrap()).unwrap();
+    assert_eq!(
+        declared_temp(&root(), head.trim(), "hail-to-the-rainbow", "empty"),
+        Ok(USER_TEMP.to_string())
+    );
+    let why = declared_temp(&root(), head.trim(), "hail-to-the-rainbow", "no_such_state").unwrap_err();
+    assert!(why.contains("declares no temp_path for state no_such_state"), "{why}");
+}
+
+/// Sprint 377: the one profile a stored Windows run may carry, `laptop-x64-10.0.26200.<revision>-Client`, the revision
+/// free; the runner's, another build, another edition, an empty or a lettered revision and a trailing newline refused.
+#[test]
+fn the_laptop_profile_is_one_pattern() {
+    assert_eq!(LAPTOP_PROFILE, "laptop-x64-10.0.26200.<revision>-Client");
+    for ok in [
+        "laptop-x64-10.0.26200.7840-Client",
+        "laptop-x64-10.0.26200.9974-Client",
+        "laptop-x64-10.0.26200.1-Client",
+    ] {
+        assert!(laptop_profile(ok), "{ok}");
+    }
+    for refused in [
+        "gha-windows-2025-x64-10.0.26100.33828-Server",
+        "laptop-x64-10.0.26100.1-Server",
+        "laptop-x64-10.0.26200.7840-Server",
+        "laptop-x64-10.0.26100.7840-Client",
+        "laptop-arm64-10.0.26200.7840-Client",
+        "laptop-x64-10.0.26200.-Client",
+        "laptop-x64-10.0.26200.78a0-Client",
+        "laptop-x64-10.0.26200.7840-Client\n",
+        "laptop-",
+        "",
+    ] {
+        assert!(!laptop_profile(refused), "{refused:?}");
+    }
+}
+
+/// Sprint 377: every ssh and scp checks the laptop's host key under the alias the laptop is reached by, not under an
+/// address it no longer answers at.
+#[test]
+fn the_link_checks_the_key_under_the_laptops_alias() {
+    assert_eq!(HOST, "w2m-laptop");
+    let alias: Vec<&str> = LINK
+        .iter()
+        .filter(|o| o.starts_with("HostKeyAlias="))
+        .copied()
+        .collect();
+    assert_eq!(alias, [format!("HostKeyAlias={HOST}")]);
+    assert!(!LINK.iter().any(|o| o.contains("192.168.")), "{LINK:?}");
+}
+
+/// One window as `run-job.ps1` writes it, measured on the laptop 2026-11-27 over 01:13-01:14Z on 2026-11-28: Sprint
+/// 376's third block of handler_trace.dll.
+const ONE_BLOCK: &str = "{\n  \"from\": \"2026-11-28T01:13:00.0000000Z\",\n  \"to\": \"2026-11-28T01:14:00.0000000Z\",\n  \
+                         \"blocks\": [\n    {\n      \"time\": \"2026-11-28T01:13:05.3973818Z\",\n      \"file\": \
+                         \"\\\\Device\\\\HarddiskVolume6\\\\w2m\\\\game\\\\handler_trace.dll\",\n      \"process\": \
+                         \"\\\\Device\\\\HarddiskVolume6\\\\w2m\\\\game\\\\UnityCrashHandler64.exe\",\n      \"policy\": \
+                         \"VerifiedAndReputableDesktop\"\n    }\n  ]\n}\n";
+
+/// Sprint 377: a job's code-integrity window names each blocked file, so a job Smart App Control refused is not taken
+/// for the program's missing output; a window with no block passes with its line; a missing file or a failed read is
+/// refused, the window's blocks not being known.
+#[test]
+fn a_block_in_the_jobs_window_is_named() {
+    let at = scratch("integrity");
+    let why = code_integrity(&at).unwrap_err();
+    assert!(why.starts_with("code-integrity.json: "), "{why}");
+    assert!(why.ends_with("the job's code-integrity blocks are not known"), "{why}");
+    fs::write(at.join(CODE_INTEGRITY), ONE_BLOCK).unwrap();
+    assert_eq!(
+        code_integrity(&at),
+        Err(
+            "CodeIntegrity blocked \\Device\\HarddiskVolume6\\w2m\\game\\handler_trace.dll (loaded by \
+             \\Device\\HarddiskVolume6\\w2m\\game\\UnityCrashHandler64.exe, policy VerifiedAndReputableDesktop, at \
+             2026-11-28T01:13:05.3973818Z) from 2026-11-28T01:13:00.0000000Z to 2026-11-28T01:14:00.0000000Z: the job's \
+             missing output is the block's, not the program's"
+                .to_string()
+        )
+    );
+    let none = "\u{feff}{\n  \"from\": \"2026-11-20T00:00:00.0000000Z\",\n  \"to\": \"2026-11-20T00:05:00.0000000Z\",\n  \
+                \"blocks\": []\n}\n";
+    fs::write(at.join(CODE_INTEGRITY), none).unwrap();
+    assert_eq!(
+        code_integrity(&at),
+        Ok("CodeIntegrity: no block from 2026-11-20T00:00:00.0000000Z to 2026-11-20T00:05:00.0000000Z".to_string())
+    );
+    fs::write(
+        at.join(CODE_INTEGRITY),
+        "{\"from\": \"a\", \"to\": \"b\", \"blocks\": [], \"error\": \"Attempted to perform an unauthorized operation.\"}",
+    )
+    .unwrap();
+    let why = code_integrity(&at).unwrap_err();
+    assert!(
+        why.contains(
+            "the CodeIntegrity log was not read (Attempted to perform an unauthorized operation.) from a to b"
+        ),
+        "{why}"
+    );
+    let _ = fs::remove_dir_all(&at);
+}
+
+/// Sprint 377: the executor records the code-integrity state each run met, and each job's window. There is no
+/// PowerShell on this Mac, so the scripts are held by their text (both were parsed, and profile.ps1 run, on the laptop
+/// 2026-11-27: no parse error; `code_integrity` {"verified_and_reputable_policy_state":1, "sac_previous_state":2,
+/// "sac_enforcement_reason":1, "smart_app_control":"On"}).
+#[test]
+fn the_executor_records_the_code_integrity_state_and_window() {
+    let profile = fs::read_to_string(root().join("tools/windows_machine/profile.ps1")).unwrap();
+    assert!(profile.contains("$ci  = Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\CI\\Policy'"));
+    let entry = &profile[profile
+        .find("  code_integrity   = [ordered]@{")
+        .expect("profile.json carries code_integrity")..];
+    let entry = &entry[..entry.find("\n  scheduler").unwrap()];
+    for field in [
+        "verified_and_reputable_policy_state = $ci.VerifiedAndReputablePolicyState",
+        "sac_previous_state = $ci.SAC_PreviousState",
+        "sac_enforcement_reason = $ci.SAC_EnforcementReason",
+        "smart_app_control = $mp.SmartAppControlState",
+    ] {
+        assert!(
+            entry.contains(field),
+            "profile.ps1's code_integrity has no {field}:\n{entry}"
+        );
+    }
+    let job = fs::read_to_string(root().join("tools/windows_machine/run-job.ps1")).unwrap();
+    let opened = job
+        .find("\n$jobStart = Get-Date")
+        .expect("the window opens as the job starts");
+    assert!(opened < job.find("Get-Content (Join-Path $Job 'job.json')").unwrap());
+    let last = &job[job.rfind("} finally {").unwrap()..];
+    for step in [
+        "LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3077",
+        "StartTime = $jobStart; EndTime = $ciEnd",
+        "-notlike 'NoMatchingEventsFound*') { $window.error = \"$_\" }",
+        "Set-Content -Path (Join-Path $out 'code-integrity.json')",
+    ] {
+        assert!(last.contains(step), "run-job.ps1's last finally has no {step:?}");
+    }
+    assert!(last.find("code-integrity.json").unwrap() < last.find("Remove-Item $src, $tree").unwrap());
+    assert_eq!(CODE_INTEGRITY, "code-integrity.json");
 }

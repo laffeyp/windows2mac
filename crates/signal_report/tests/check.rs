@@ -595,6 +595,10 @@ struct Shape {
     amendment: Option<u32>,
     /// and the amendment also adds `crates/a/extra.rs`
     amendment_crates: bool,
+    /// the second sprint's card's exit codes name a laptop job, `target/release/windows_machine probe p` (Sprint 377)
+    laptop_card: bool,
+    /// and the amendment also writes these paths
+    amendment_paths: Vec<&'static str>,
 }
 
 const WALK_FIXTURE: &str = "store/translation-cache/walk-fixtures-2026-10-30.json";
@@ -632,9 +636,15 @@ fn folded(name: &str, shape: &Shape) -> (PathBuf, String) {
         } else {
             ""
         };
+        let codes = if shape.laptop_card && n == b {
+            "\n## artifact contract\n\n### Command exit codes\n\n- `scripts/gates.sh` returns 0\n- \
+             `target/release/windows_machine probe p` returns 0\n\n## observation contract\n"
+        } else {
+            ""
+        };
         fs::write(
             root.join(format!("sprints/sprint-{n}-x.md")),
-            format!("# card\n\n```yaml\n---\nstatus: {status}\n---\n```\n{emits}"),
+            format!("# card\n\n```yaml\n---\nstatus: {status}\n---\n```\n{emits}{codes}"),
         )
         .unwrap();
     };
@@ -703,6 +713,11 @@ fn folded(name: &str, shape: &Shape) -> (PathBuf, String) {
         fs::write(root.join("probes/p/p.c"), "int main(void) { return 0; }\n").unwrap();
         if shape.amendment_crates {
             fs::write(root.join("crates/a/extra.rs"), "fn extra() {}\n").unwrap();
+        }
+        for path in &shape.amendment_paths {
+            let path = root.join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, "amended\n").unwrap();
         }
         commit(&root, &format!("Sprint {m} card amendment: the probe p"));
     }
@@ -964,6 +979,91 @@ fn a_card_amendment_that_changes_another_path_is_named() {
         format!(
             "sprint 335: commit {amendment} \"Sprint 335 card amendment: the probe p\" amends its card and changes \
              crates/a/extra.rs, outside card 335 and probes/"
+        )
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// The laptop's paths a laptop card's amendment changes (Sprint 377): the executor, the sender and a game's state.
+const LAPTOP_AMENDED: [&str; 3] = [
+    "tools/windows_machine/run-job.ps1",
+    "crates/windows_machine/src/lib.rs",
+    "games/g/state.json",
+];
+
+/// Sprint 377 (the fifty-first review's follow-up): a card amendment of a laptop card, one whose exit codes name a
+/// `target/release/windows_machine` job, passes when it changes the executor, the sender or a game's declared state
+/// beside its card, committed and with the close prepared on the working tree; the same amendment touching
+/// `crates/w2m_vm/` is named by that path (plant 4), and a card that names no laptop job is held to its card and
+/// `probes/` as before.
+#[test]
+fn a_laptop_cards_amendment_of_the_laptops_paths_passes() {
+    let laptop = || Shape {
+        amendment: Some(335),
+        laptop_card: true,
+        amendment_paths: LAPTOP_AMENDED.to_vec(),
+        ..Shape::default()
+    };
+    let (root, _) = folded("laptopamendment", &laptop());
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(0), ""));
+    let _ = fs::remove_dir_all(&root);
+
+    let (root, _) = folded(
+        "laptopamendmentprepared",
+        &Shape {
+            uncommitted: true,
+            ..laptop()
+        },
+    );
+    let (code, stderr) = check_kept(&root);
+    assert_eq!((code, stderr.trim()), (Some(0), ""));
+    let _ = fs::remove_dir_all(&root);
+
+    let mut vm = LAPTOP_AMENDED.to_vec();
+    vm.push("crates/w2m_vm/src/lib.rs");
+    let (root, _) = folded(
+        "laptopamendmentvm",
+        &Shape {
+            amendment_paths: vm,
+            ..laptop()
+        },
+    );
+    let amendment = git(
+        &root,
+        &["log", "-1", "--format=%h", "--abbrev=9", "--grep=card amendment"],
+    );
+    let (code, stderr) = check_kept(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        format!(
+            "sprint 335: commit {amendment} \"Sprint 335 card amendment: the probe p\" amends its card and changes \
+             crates/w2m_vm/src/lib.rs, outside card 335, probes/ and the laptop's paths (tools/windows_machine/, \
+             crates/windows_machine/, games/<game>/state.json)"
+        )
+    );
+    let _ = fs::remove_dir_all(&root);
+
+    let (root, _) = folded(
+        "notlaptopamendment",
+        &Shape {
+            laptop_card: false,
+            amendment_paths: vec![LAPTOP_AMENDED[0]],
+            ..laptop()
+        },
+    );
+    let amendment = git(
+        &root,
+        &["log", "-1", "--format=%h", "--abbrev=9", "--grep=card amendment"],
+    );
+    let (code, stderr) = check_kept(&root);
+    assert_eq!(code, Some(1));
+    assert_eq!(
+        stderr.trim(),
+        format!(
+            "sprint 335: commit {amendment} \"Sprint 335 card amendment: the probe p\" amends its card and changes \
+             tools/windows_machine/run-job.ps1, outside card 335 and probes/"
         )
     );
     let _ = fs::remove_dir_all(&root);

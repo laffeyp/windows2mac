@@ -1499,7 +1499,8 @@ fn named_design_change(commit: &str, path: &str) -> bool {
 /// covered it (it changes `probes/tls_expansion_first/` alone): a commit a rule admits is not a lapse.
 /// From Sprint 367 a card amendment that changes paths outside its card and `probes/` passes when named here too, as any
 /// other commit does (reviewer-4's thirty-eighth review's follow-up, Low 1: the amendment branch had never read this
-/// list).
+/// list). Sprint 376's two amendments stand here as history; from Sprint 377 `LAPTOP_PATHS` admits such a commit by
+/// rule, its card naming a `windows_machine` job.
 const BETWEEN_SPRINTS: [(&str, &str); 4] = [
     (
         "c2fe0bbc8",
@@ -1527,22 +1528,79 @@ fn named_between_sprints(hash: &str) -> bool {
     BETWEEN_SPRINTS.iter().any(|(h, _)| hash.starts_with(h))
 }
 
-/// The faults of sprint `n`'s card amendment `hash`, `subject`, whose paths outside card N and `probes/` are `outside`:
-/// none when `BETWEEN_SPRINTS` names it (Sprint 367), else one for each such path (Sprint 349).
-fn amendment_faults(n: u32, hash: &str, subject: &str, outside: &[String]) -> Vec<String> {
+/// The faults of sprint `n`'s card amendment `hash`, `subject`, whose paths outside what it may change are `outside`
+/// (card N and `probes/`, and for a laptop card the laptop's paths, `laptop`): none when `BETWEEN_SPRINTS` names it
+/// (Sprint 367), else one for each such path (Sprint 349).
+fn amendment_faults(n: u32, hash: &str, subject: &str, outside: &[String], laptop: bool) -> Vec<String> {
     if named_between_sprints(hash) {
         return Vec::new();
     }
+    let may = if laptop {
+        format!("card {n}, probes/ and the laptop's paths ({})", LAPTOP_PATHS.join(", "))
+    } else {
+        format!("card {n} and probes/")
+    };
     outside
         .iter()
         .map(|path| {
             format!(
-                "sprint {n:03}: commit {} \"{subject}\" amends its card and changes {path}, outside card {n} and \
-                 probes/",
+                "sprint {n:03}: commit {} \"{subject}\" amends its card and changes {path}, outside {may}",
                 &hash[..9]
             )
         })
         .collect()
+}
+
+/// The paths a laptop card's amendment may change besides its card and `probes/` (Sprint 377): the executor the
+/// laptop runs and the program that sends it, and a game's declared state, each of which a laptop job reads only from
+/// HEAD (`git archive HEAD`, `git show HEAD:`), so the card commits it before its job. Sprint 376's two amendments,
+/// 24284d8f1 and 33b6423b3, changed these alone and stand in `BETWEEN_SPRINTS` as history.
+const LAPTOP_PATHS: [&str; 3] = [
+    "tools/windows_machine/",
+    "crates/windows_machine/",
+    "games/<game>/state.json",
+];
+
+/// Whether `path` is one of `LAPTOP_PATHS`: under the first two folders, or `games/<game>/state.json` for one game.
+fn laptop_path(path: &str) -> bool {
+    path.starts_with(LAPTOP_PATHS[0])
+        || path.starts_with(LAPTOP_PATHS[1])
+        || path
+            .strip_prefix("games/")
+            .and_then(|rest| rest.split_once('/'))
+            .is_some_and(|(game, file)| !game.is_empty() && file == "state.json")
+}
+
+/// The kinds of job `target/release/windows_machine` sends to the laptop.
+const LAPTOP_JOBS: [&str; 4] = ["probe", "binary", "batch", "game"];
+
+/// Whether card N as `commit` holds it is a laptop card: a line of its `### Command exit codes` names a job of
+/// `target/release/windows_machine` (Sprint 377).
+fn laptop_card(root: &Path, n: u32, commit: &str) -> Result<bool, String> {
+    let prefix = format!("sprints/sprint-{n:03}-");
+    let listed = git(root, &["ls-tree", "-r", "--name-only", commit, "--", "sprints/"])?;
+    let Some(card) = listed.lines().find(|p| {
+        p.strip_prefix(&prefix)
+            .is_some_and(|rest| !rest.contains('/') && rest.ends_with(".md"))
+    }) else {
+        return Ok(false);
+    };
+    let text = git(root, &["show", &format!("{commit}:{card}")])?;
+    let codes = text
+        .split_once("### Command exit codes")
+        .map(|(_, after)| {
+            after
+                .lines()
+                .skip(1)
+                .take_while(|l| !l.starts_with("## ") && !l.starts_with("### "))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Ok(codes.iter().any(|l| {
+        LAPTOP_JOBS
+            .iter()
+            .any(|kind| l.contains(&format!("target/release/windows_machine {kind}")))
+    }))
 }
 
 /// Whether `subject` is sprint `n`'s card amendment, "Sprint N card amendment: ...": a commit inside sprint N that
@@ -1555,8 +1613,8 @@ fn is_card_amendment(subject: &str, n: u32) -> bool {
 }
 
 /// Each path sprint `n`'s card amendment `commit` changes against its parent that is neither card N
-/// (`sprints/sprint-NNN-*.md`) nor under `probes/` (Sprint 349).
-fn amendment_outside(root: &Path, n: u32, commit: &str) -> Result<Vec<String>, String> {
+/// (`sprints/sprint-NNN-*.md`) nor under `probes/` (Sprint 349), nor, when `laptop`, one of `LAPTOP_PATHS` (Sprint 377).
+fn amendment_outside(root: &Path, n: u32, commit: &str, laptop: bool) -> Result<Vec<String>, String> {
     let card = format!("sprints/sprint-{n:03}-");
     Ok(git(
         root,
@@ -1574,7 +1632,7 @@ fn amendment_outside(root: &Path, n: u32, commit: &str) -> Result<Vec<String>, S
         let is_card = p
             .strip_prefix(&card)
             .is_some_and(|rest| !rest.contains('/') && rest.ends_with(".md"));
-        !(is_card || p.starts_with("probes/"))
+        !(is_card || p.starts_with("probes/") || (laptop && laptop_path(p)))
     })
     .map(str::to_string)
     .collect())
@@ -1584,8 +1642,9 @@ fn amendment_outside(root: &Path, n: u32, commit: &str) -> Result<Vec<String>, S
 /// its close ("Sprint N closed:", bookkeeping only, held by `close_moved`) or the card itself (Sprint 195; reviewer-2's
 /// Medium 4 of its review of 190-192: a commit under another subject between a pass and a close went unchecked). From
 /// `FIRST_FOLDED_SPRINT` the close is the work commit, and a "Sprint N closed:" commit is named too (Sprint 333). A card
-/// amendment of sprint N passes when it changes card N and `probes/` alone, and each other path it changes is named
-/// (Sprint 349); one of another sprint is named as any other subject.
+/// amendment of sprint N passes when it changes card N and `probes/` alone, or, its card naming a `windows_machine` job,
+/// those and `LAPTOP_PATHS` (Sprint 377), and each other path it changes is named (Sprint 349); one of another sprint is
+/// named as any other subject.
 fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
     let is_card =
         |s: &str, k: u32| s.starts_with(&format!("Sprint {k} card:")) || s.starts_with(&format!("Sprint {k}'s card:"));
@@ -1613,9 +1672,11 @@ fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
             continue;
         }
         // from Sprint 349 a card amendment is a kind of commit inside its sprint, held to card N and probes/ unless
-        // named (Sprint 367)
+        // named (Sprint 367); a laptop card's, to those and the laptop's paths (Sprint 377)
         if is_card_amendment(subject, n) {
-            wrong.extend(amendment_faults(n, hash, subject, &amendment_outside(root, n, hash)?));
+            let laptop = laptop_card(root, n, hash)?;
+            let outside = amendment_outside(root, n, hash, laptop)?;
+            wrong.extend(amendment_faults(n, hash, subject, &outside, laptop));
             continue;
         }
         if !(subject.starts_with(&work) || is_close(subject, n) || named) {
@@ -1930,16 +1991,46 @@ mod tests {
             "BLACKBOARD.md".to_string(),
             "docs/design-host-requests-off-the-runtime-word-2026-11-26.md".to_string(),
         ];
-        assert_eq!(amendment_faults(367, named, subject, &outside), Vec::<String>::new());
+        assert_eq!(
+            amendment_faults(367, named, subject, &outside, false),
+            Vec::<String>::new()
+        );
         let other = "0123456789abcdef0123456789abcdef01234567";
         assert_eq!(
-            amendment_faults(367, other, subject, &["crates/a/src/lib.rs".to_string()]),
+            amendment_faults(367, other, subject, &["crates/a/src/lib.rs".to_string()], false),
             [
                 "sprint 367: commit 012345678 \"Sprint 367 card amendment: every C2 card built\" amends its card and \
                  changes crates/a/src/lib.rs, outside card 367 and probes/"
             ]
         );
-        assert_eq!(amendment_faults(367, other, subject, &[]), Vec::<String>::new());
+        assert_eq!(amendment_faults(367, other, subject, &[], false), Vec::<String>::new());
+    }
+
+    /// Sprint 377: the laptop's paths are the executor's and the sender's folders and one game's declared state; a
+    /// game's other files, another crate and a state file deeper down are not.
+    #[test]
+    fn the_laptop_paths_are_the_executor_the_sender_and_a_games_state() {
+        for ok in [
+            "tools/windows_machine/run-job.ps1",
+            "tools/windows_machine/profile.ps1",
+            "crates/windows_machine/src/lib.rs",
+            "crates/windows_machine/tests/windows_machine.rs",
+            "games/hail-to-the-rainbow/state.json",
+        ] {
+            assert!(laptop_path(ok), "{ok}");
+        }
+        for refused in [
+            "crates/w2m_vm/src/bin/w2m-vm.rs",
+            "tools/jit_capture/jit_capture.c",
+            "games/hail-to-the-rainbow/files.json",
+            "games/hail-to-the-rainbow/inputs/state.json",
+            "games//state.json",
+            "crates/windows_machine_extra/src/lib.rs",
+            "tools/windows_machineX/a.ps1",
+            "store/game-runs/x/state.json",
+        ] {
+            assert!(!laptop_path(refused), "{refused}");
+        }
     }
 
     #[test]

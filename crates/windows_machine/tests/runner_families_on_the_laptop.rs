@@ -205,9 +205,12 @@ fn judge(
         };
     };
     let l = store.join(laptop);
-    let laptop_profile = read(&l.join("profile.txt")).trim().to_string();
-    if !laptop_profile.starts_with("laptop-") {
-        wrong.push(format!("{family}: laptop run {laptop}'s profile is {laptop_profile}"));
+    let laptop_profile = read(&l.join("profile.txt"));
+    if !windows_machine::laptop_profile(&laptop_profile) {
+        wrong.push(format!(
+            "{family}: laptop run {laptop}'s profile is {laptop_profile:?}, not {}",
+            windows_machine::LAPTOP_PROFILE
+        ));
     }
     if laptop_family(&store, laptop).as_deref() != Some(family) {
         wrong.push(format!(
