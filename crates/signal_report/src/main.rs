@@ -1224,6 +1224,10 @@ fn close_moved(root: &Path, n: u32) -> Result<Option<String>, String> {
     else {
         return Ok(None);
     };
+    // a named close (BETWEEN_SPRINTS) holds its sprint's work, as a work commit does
+    if named_between_sprints(&commit) {
+        return Ok(None);
+    }
     let changed = git(root, &["diff-tree", "--no-commit-id", "--name-only", "-r", &commit])?;
     Ok(changed
         .lines()
@@ -1501,7 +1505,7 @@ fn named_design_change(commit: &str, path: &str) -> bool {
 /// other commit does (reviewer-4's thirty-eighth review's follow-up, Low 1: the amendment branch had never read this
 /// list). Sprint 376's two amendments stand here as history; from Sprint 377 `LAPTOP_PATHS` admits such a commit by
 /// rule, its card naming a `windows_machine` job.
-const BETWEEN_SPRINTS: [(&str, &str); 4] = [
+const BETWEEN_SPRINTS: [(&str, &str); 5] = [
     (
         "c2fe0bbc8",
         "reviewer-3's review at 246, its dispositions, committed after 246's close and before card 247 (Sprint 247)",
@@ -1520,6 +1524,11 @@ const BETWEEN_SPRINTS: [(&str, &str); 4] = [
         "33b6423b3",
         "Sprint 376's second card amendment: the game's TEMP the user's own and the store's TEMP check, committed before \
          the second laptop game job for the same reason",
+    ),
+    (
+        "3b17c1b78",
+        "Sprint 379's close, its work and its close in one commit as from Sprint 334, under the subject \
+         \"Sprint 379 closed-partial:\" where \"Sprint 379: \" was due; pushed, so named here (Sprint 380's card)",
     ),
 ];
 
@@ -1663,7 +1672,7 @@ fn commits_walked(root: &Path, n: u32) -> Result<Vec<String>, String> {
         }
         let named = named_between_sprints(hash);
         // from Sprint 334 the close folds into the work commit (Sprint 333): a close of its own is named
-        if n >= FIRST_FOLDED_SPRINT && is_close(subject, n) {
+        if n >= FIRST_FOLDED_SPRINT && is_close(subject, n) && !named {
             wrong.push(format!(
                 "sprint {n:03}: commit {} \"{subject}\" closes it apart from its work, and from Sprint \
                  {FIRST_FOLDED_SPRINT} a sprint closes in its work commit",
@@ -1729,7 +1738,7 @@ fn trees_moved(root: &Path, n: u32, line: &str) -> Result<Option<String>, String
     let commit = log
         .lines()
         .filter_map(|l| l.split_once('\t'))
-        .find(|(_, s)| s.starts_with(&subject))
+        .find(|(h, s)| s.starts_with(&subject) || (is_close(s, n) && named_between_sprints(h)))
         .map(|(h, _)| h.to_string());
     let (commit, holder) = match commit {
         _ if prepared => (None, "the working tree, its close not yet committed,".to_string()),
