@@ -4,7 +4,8 @@
  *
  * contracts/windows.messages.format_message records Server 2025 and 2022 answering mono's form (equal rows):
  * FROM_SYSTEM | IGNORE_INSERTS, with ALLOCATE_BUFFER or a caller's buffer. The text is the table's (specs/
- * system_messages.json, build 26100), inserts such as %1 kept; the answer is its length in units, the NUL after it.
+ * system_messages-0.2.0.json, the laptop's build 26200.7840; 0.1.0, build 26100, until Sprint 380), inserts such as
+ * %1 kept; the answer is its length in units, the NUL after it.
  * An HRESULT of FACILITY_WIN32 (0x8007xxxx) names its low 16 bits; an id the table lacks is ERROR_MR_MID_NOT_FOUND;
  * LANG_NEUTRAL, LANG_USER_DEFAULT and en-US give the text, de-DE ERROR_RESOURCE_LANG_NOT_FOUND; a caller's buffer
  * shorter than the text and its NUL is ERROR_INSUFFICIENT_BUFFER, as many units as fit written first;

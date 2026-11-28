@@ -67,7 +67,7 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 
 /// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
 /// is the frozen one with these changes, which their own tests judge (Sprint 272).
-const DEPARTURES: [(&str, &str); 16] = [
+const DEPARTURES: [(&str, &str); 17] = [
     (
         "tools/guest_runtime/block_compiler.c",
         "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
@@ -90,6 +90,12 @@ const DEPARTURES: [(&str, &str); 16] = [
          without the define the image is the one built before, byte for byte; Sprint 359: the heap's take a scoped \
          guard, W2M_HELD(heap) (runtime.h), whose clang cleanup lets the lock go at its scope's end, hold and let_go \
          renamed hold_heap and let_heap_go, no release by hand left",
+    ),
+    (
+        "tools/guest_runtime/messages.c",
+        "Sprint 380: its comment names the table it now includes, specs/system_messages-0.2.0.json, the laptop's rows \
+         (lap-20261013T231059422Z-136bec80-086), the code unchanged; the header the build generates holds that table \
+         (headers.rs SYSTEM_MESSAGES)",
     ),
     (
         "tools/guest_runtime/processes.c",

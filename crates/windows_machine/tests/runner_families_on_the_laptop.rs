@@ -123,23 +123,54 @@ fn laptop_family(store: &Path, run: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-/// The rows by which two bodies differ, line for line, each named by its `s` (or by its line where it has none); a
-/// difference in the count of lines is named as one.
+/// A row that carries an `id` beside its `s`, as format_message's "dump" rows do (one a message id): "<s> <id>", the
+/// name it is compared and named by.
+fn keyed(line: &str) -> Option<String> {
+    let row = serde_json::from_str::<Value>(line).ok()?;
+    Some(format!("{} {}", row["s"].as_str()?, row["id"].as_u64()?))
+}
+
+/// The rows by which two bodies differ, each named by its `s` (or by its line where it has none): the rows with no `id`
+/// line for line, a difference in their count named as one; then, from Sprint 380, the rows with one (`keyed`) by
+/// name, each the runner's that the laptop's lacks or holds otherwise, then each the laptop's alone, so a row one
+/// build has and the other lacks names itself and not every row after it.
 fn rows_unlike(runner: &[u8], laptop: &[u8]) -> Vec<String> {
     let (a, b) = (String::from_utf8_lossy(runner), String::from_utf8_lossy(laptop));
-    let (a, b): (Vec<&str>, Vec<&str>) = (a.lines().collect(), b.lines().collect());
+    // a body's rows with no id, each with its line's index, and its rows with one, each with its name
+    type Parts<'a> = (Vec<(usize, &'a str)>, Vec<(String, &'a str)>);
+    fn split(text: &str) -> Parts<'_> {
+        let (mut plain, mut named) = (Vec::new(), Vec::new());
+        for (n, line) in text.lines().enumerate() {
+            match keyed(line) {
+                Some(name) => named.push((name, line)),
+                None => plain.push((n, line)),
+            }
+        }
+        (plain, named)
+    }
+    let ((a, a_named), (b, b_named)) = (split(&a), split(&b));
     let mut unlike: Vec<String> = a
         .iter()
         .zip(&b)
-        .enumerate()
-        .filter(|(_, (x, y))| x != y)
-        .map(|(n, (x, _))| match serde_json::from_str::<Value>(x) {
+        .filter(|((_, x), (_, y))| x != y)
+        .map(|((n, x), _)| match serde_json::from_str::<Value>(x) {
             Ok(row) => row["s"].as_str().map_or(format!("line {}", n + 1), str::to_string),
             Err(_) => format!("line {}", n + 1),
         })
         .collect();
     if a.len() != b.len() {
         unlike.push(format!("{} lines against {}", a.len(), b.len()));
+    }
+    let find = |rows: &[(String, &str)], name: &str| rows.iter().find(|(n, _)| n == name).map(|(_, l)| l.to_string());
+    for (name, line) in &a_named {
+        if find(&b_named, name).as_deref() != Some(*line) {
+            unlike.push(name.clone());
+        }
+    }
+    for (name, _) in &b_named {
+        if find(&a_named, name).is_none() {
+            unlike.push(name.clone());
+        }
     }
     unlike
 }
@@ -392,8 +423,9 @@ fn named_sync_objects_is_held_to_its_laptop_run() {
 /// by which its laptop run's bodies differ from those of every runner run of the same binary, as Sprint 378's result
 /// measured them: a workstation's product type, suite and build (version, and DllGetVersion's shell32 revision, which
 /// its row rule keeps as set), the product type and the system directory's spelling (system_info), the Windows directory
-/// in lower case (files_more).
-const RETAKEN_DIFFERENCES: [(&str, &[&str]); 3] = [
+/// in lower case (files_more); from Sprint 380 the system message table's four ids, runner 38120951889's 4566 and 8661
+/// and the laptop's 15680 and 15681, every form row alike (format_message).
+const RETAKEN_DIFFERENCES: [(&str, &[&str]); 4] = [
     (
         "version",
         &[
@@ -406,6 +438,10 @@ const RETAKEN_DIFFERENCES: [(&str, &[&str]); 3] = [
     ),
     ("files_more", &["windows.full", "windows.exact"]),
     ("system_info", &["version_ex", "system_directory"]),
+    (
+        "format_message",
+        &["dump 4566", "dump 8661", "dump 15680", "dump 15681"],
+    ),
 ];
 
 /// Each re-taken family's laptop run, as the re-taken table names it, is a stored laptop run of that family that ran a
