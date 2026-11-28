@@ -424,8 +424,10 @@ fn named_sync_objects_is_held_to_its_laptop_run() {
 /// measured them: a workstation's product type, suite and build (version, and DllGetVersion's shell32 revision, which
 /// its row rule keeps as set), the product type and the system directory's spelling (system_info), the Windows directory
 /// in lower case (files_more); from Sprint 380 the system message table's four ids, runner 38120951889's 4566 and 8661
-/// and the laptop's 15680 and 15681, every form row alike (format_message).
-const RETAKEN_DIFFERENCES: [(&str, &[&str]); 4] = [
+/// and the laptop's 15680 and 15681, every form row alike (format_message); from Sprint 381 GetTempPathW's fallback to
+/// the Windows directory in lower case (temp_path) and GetModuleFileNameW's path of SHELL32, `C:\windows\System32\`
+/// (system_modules).
+const RETAKEN_DIFFERENCES: [(&str, &[&str]); 6] = [
     (
         "version",
         &[
@@ -442,6 +444,8 @@ const RETAKEN_DIFFERENCES: [(&str, &[&str]); 4] = [
         "format_message",
         &["dump 4566", "dump 8661", "dump 15680", "dump 15681"],
     ),
+    ("temp_path", &["temp.none"]),
+    ("system_modules", &["file_name"]),
 ];
 
 /// Each re-taken family's laptop run, as the re-taken table names it, is a stored laptop run of that family that ran a

@@ -42,6 +42,12 @@ pub const START_GROUP: u32 = 1000;
 pub const STDOUT_HANDLE: u64 = 0x74;
 pub const PROCESS_ID: u64 = 4096;
 pub const APP_DIRECTORY: &str = "C:\\w2m\\app\\";
+/// The directory a system DLL's path names, as Windows writes a module's path: `C:\windows\System32\`, the Windows
+/// directory in lower case and `System32` capitalized (Sprint 381: the laptop's row file_name,
+/// `lap-20261013T231059422Z-136bec80-158`, GetModuleFileNameW of SHELL32, "C:\\windows\\System32\\SHELL32.dll";
+/// contracts/windows.module.system 0.2.0). The runners wrote `C:\Windows\System32\`, which w2m gave until then; it is
+/// not GetSystemDirectoryW's spelling, `C:\windows\system32` (system_info.c).
+pub const SYSTEM32_PATH: &str = "C:\\windows\\System32\\";
 pub use virtual_memory::STACK_GUARD_PAGES;
 /// kernel.py 65-66: an inherited entry's kind that is a standard handle, or the parent's error mode.
 pub const KIND_STANDARD: u64 = 100;
@@ -574,7 +580,7 @@ pub fn write_loader_data<M: ProcessBytes + ?Sized>(
     area: &ProcessArea,
 ) -> Result<(), ProcessError> {
     let (base, va0) = (LOADER_DATA_OFF, PROCESS_VA + LOADER_DATA_OFF);
-    let system32 = "C:\\Windows\\System32\\";
+    let system32 = SYSTEM32_PATH;
     type Entry = (u64, u64, u64, String, String);
     let program: Entry = (
         list.images[0].base,

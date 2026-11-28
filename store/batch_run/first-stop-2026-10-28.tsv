@@ -1,9 +1,9 @@
-# the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n; "-" in both for a guest the frozen host never ran, two_process_deadlock from Sprint 364, two_process_pipe_pingpong from Sprint 365 and condition_cs from Sprint 368, which exits 0 only when SleepConditionVariableCS's checks hold); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs; Sprint 379: hvc 8 38881 to 38939, compiled 274830 to 274778 and blocks the host compiled 275608 to 275556, the game answered the laptop's C:\windows (three runs alike)
+# the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n; "-" in both for a guest the frozen host never ran, two_process_deadlock from Sprint 364, two_process_pipe_pingpong from Sprint 365 and condition_cs from Sprint 368, which exits 0 only when SleepConditionVariableCS's checks hold); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs; Sprint 379: hvc 8 38881 to 38939, compiled 274830 to 274778 and blocks the host compiled 275608 to 275556, the game answered the laptop's C:\windows (three runs alike); Sprint 381: hvc 8 38939 to 38938, compiled 274778 to 274788, blocks the host compiled 275556 to 275566 and calls traced 10505 to 10515, the game given the laptop's profile, C:\Users\w2m (USERPROFILE and the known folders; runs alike)
 stop	ReferenceEnd: the log holds the reference's 168 lines and the main thread its calls
 images	Hail to the Rainbow.exe UnityPlayer.dll
 hvc 1	1147
 hvc 4	10
-hvc 8	38939
+hvc 8	38938
 hvc 10	258
 hvc 11	286
 hvc 13	13639
@@ -11,7 +11,7 @@ hvc 14	167
 hvc 15	35
 model steps of a locked form	0
 code cache full	0
-compiled	274778
+compiled	274788
 cut by decode	243
 cut by encoder	0
 cut by guarded	210
@@ -33,8 +33,8 @@ pages protected	17086
 pause	2
 recon full	0
 scan pages	0
-blocks the host compiled	275556
-calls traced	10505
+blocks the host compiled	275566
+calls traced	10515
 calls in flight	0
 calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n

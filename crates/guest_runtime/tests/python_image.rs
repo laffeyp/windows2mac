@@ -67,7 +67,7 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 
 /// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
 /// is the frozen one with these changes, which their own tests judge (Sprint 272).
-const DEPARTURES: [(&str, &str); 17] = [
+const DEPARTURES: [(&str, &str); 19] = [
     (
         "tools/guest_runtime/block_compiler.c",
         "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
@@ -76,6 +76,12 @@ const DEPARTURES: [(&str, &str); 17] = [
         "tools/guest_runtime/critical_section.c",
         "Sprint 368: w2m_critical_section_leave_once and w2m_critical_section_enter, SleepConditionVariableCS's two \
          halves (slim_locks.c): the section left by its owner entered once, and entered again",
+    ),
+    (
+        "tools/guest_runtime/environment.c",
+        "Sprint 381: GetTempPathW's fallback the Windows directory as the laptop writes it, C:\\windows\\ (laptop run \
+         lap-20261013T231059422Z-136bec80-160, row temp.none), where the runners wrote C:\\Windows\\; held by \
+         contracts/windows.environment.temp_path 0.2.0",
     ),
     (
         "tools/guest_runtime/file.c",
@@ -90,6 +96,12 @@ const DEPARTURES: [(&str, &str); 17] = [
          without the define the image is the one built before, byte for byte; Sprint 359: the heap's take a scoped \
          guard, W2M_HELD(heap) (runtime.h), whose clang cleanup lets the lock go at its scope's end, hold and let_go \
          renamed hold_heap and let_heap_go, no release by hand left",
+    ),
+    (
+        "tools/guest_runtime/known_folders.c",
+        "Sprint 381: the profile the laptop's, C:\\Users\\w2m (the laptop's profile \
+         store/reference_machine/profile-lap-20261128T042841141Z-4c0653e2.json, user.profile), where the runners' user \
+         gave C:\\Users\\runneradmin; the rows show the user as <user> and are equal on both machines",
     ),
     (
         "tools/guest_runtime/messages.c",

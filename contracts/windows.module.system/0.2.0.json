@@ -1,0 +1,129 @@
+{
+ "contract_id": "windows.module.system",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "A system DLL imported statically (SHELL32): LoadLibraryW and GetModuleHandleW find it under any spelling (case, no extension, full path); GetModuleFileNameW gives C:\\windows\\System32\\SHELL32.dll; GetProcAddress gives the import's address for an imported name, an address for another export, NULL and 127 for a name it does not export; FreeLibrary succeeds and the module stays. 0.2.0 holds the laptop's rows (Sprint 381; the Decision \"Which Windows w2m answers as, the reference being the laptop\", 2026-11-27): the runners' two binaries run on the laptop, where one row differs from 0.1.0's, file_name, the Windows directory written C:\\windows in lower case before System32.",
+ "applicability": "laptop (laptop-x64-10.0.26200.7840-Client, 13th Gen Intel(R) Core(TM) i5-13420H)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the laptop's tools/windows_machine/run-job.ps1 through cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/system_modules/system_modules.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "first",
+    "non_null": 1
+   },
+   {
+    "s": "load.lower",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "load.upper",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "load.no_extension",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "load.full_path",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "handle.upper",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "handle.no_extension",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "handle.full_path",
+    "same": 1,
+    "err": 57005
+   },
+   {
+    "s": "file_name",
+    "len_is_text": 1,
+    "path": "C:\\windows\\System32\\SHELL32.dll",
+    "err": 0
+   },
+   {
+    "s": "proc.imported",
+    "is_import": 1,
+    "non_null": 1,
+    "err": 57005
+   },
+   {
+    "s": "proc.other_export",
+    "non_null": 1,
+    "err": 57005
+   },
+   {
+    "s": "proc.missing",
+    "non_null": 0,
+    "err": 127
+   },
+   {
+    "s": "free",
+    "ret": 1,
+    "err": 57005
+   },
+   {
+    "s": "after_free",
+    "still_loaded": 1
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "laptop-rows",
+   "category": "observed",
+   "source_ref": "runs lap-20261013T231059422Z-136bec80-158 and lap-20261013T231059422Z-136bec80-159: laptop, laptop-x64-10.0.26200.7840-Client, 13th Gen Intel(R) Core(TM) i5-13420H, probe sha256:202f2b6b77d3d16a726ca95179127ab97bb20c6046018bb51cfdcdf89827a815 (-158) and sha256:fac0b4e6a2d2de1aaea8d131e2cbe342c0940cff819e154fbd11940add2ec7ff (-159), the runners' two binaries; store/probe-runs/lap-20261013T231059422Z-136bec80-158/body-1.jsonl and body-2.jsonl and -159's, all four byte for byte alike; the rows -158's, raw",
+   "applicability": "the build and CPU observed",
+   "execution_ids": [
+    "system_modules-20261013T231059422Z-158-1",
+    "system_modules-20261013T231059422Z-158-2",
+    "system_modules-20261013T231059422Z-159-1",
+    "system_modules-20261013T231059422Z-159-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getmodulehandlew",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlew (page updated 2024-12-09; retrieved 2026-10-10)",
+   "quote": "Retrieves a module handle for the specified module. The module must have been loaded by the calling process."
+  }
+ ],
+ "open_questions": [
+  "The system DLLs are not in PEB.Ldr's lists in w2m; Windows lists them. Nothing on the frontier walks the lists for them yet.",
+  "Export names are Server 2025's (specs/windows_exports.json, run 38094046782); 2022 differs in counts (user32 1,007 against 1,041)."
+ ],
+ "sections": {
+  "probe": "probes/system_modules (Sprint 044)",
+  "implementation": "tools/guest_runtime/module.c",
+  "rows": "scripts/family_run.py system_modules",
+  "excluded": "none"
+ },
+ "history": "0.1.0 (Sprint 048) held the GitHub runners' rows, runs 38094160385 (windows-2025, AMD EPYC 7763 64-Core Processor) and 38094162181 (windows-2022, AMD EPYC 7763 64-Core Processor), the module's path C:\\Windows\\System32\\SHELL32.dll; 0.2.0 (Sprint 381) the laptop's, the same two binaries, differing in file_name alone; 0.1.0 is kept unchanged (the Decision of 2026-10-07)."
+}

@@ -44,8 +44,19 @@ const REPEATS: [&str; 3] = [
 /// function's parameters in specs/signatures.json (ResumeThread's a7, WaitForSingleObjectEx's a6, ReleaseSemaphore's
 /// a7 and a4), and the calls' order changes from row 6881; the answers re-taken earlier in the stream
 /// (GlobalMemoryStatusEx's total, DllGetVersion's revision, RtlVerifyVersionInfo's product type) leave every row up
-/// to it equal, and this test holds them so.
-const FIRST_RETAKEN_CALL: &str = "GetWindowsDirectoryW";
+/// to it equal. That cut held rows 0-6364 to Sprint 380.
+///
+/// From Sprint 381 the cut is a row, `LAST_HELD_ROW`: the profile re-taken, C:\Users\w2m where the frozen host gave the
+/// runners' C:\Users\runneradmin, changes what the game is given before any traced call, its start environment's
+/// USERPROFILE, which ucrtbase's environment copy (untraced) reads after row 28. Measured (Sprint 381's result, each
+/// change reverted in place, one batch run at a time): with USERPROFILE re-taken the first difference is row 29,
+/// EnterCriticalSection's a3, a register past its one parameter holding a heap block 0x20 lower (0x200009d20 for
+/// 0x200009d40); with it reverted and the known folder path re-taken, row 967, CoTaskMemFree's a2 after
+/// SHGetKnownFolderPath (row 966); with both reverted and the temp fallback and the system path re-taken, every row
+/// matches. The frozen stream is the reference to row 28; past it the rows are judged against Windows alone.
+const LAST_HELD_ROW: usize = 28;
+/// The calls `STREAM` holds at `LAST_HELD_ROW` and after it, by which the row is checked to be the one measured.
+const AT_THE_CUT: [&str; 2] = ["LeaveCriticalSection", "EnterCriticalSection"];
 /// Guests whose output is a clock's reading, 16 hex digits and a newline (`two_counters`' the ticks its two counters
 /// took, Sprint 354)
 const CLOCK_GUESTS: [&str; 3] = ["qpc", "qpc2", "two_counters"];
@@ -249,11 +260,21 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
             })
             .collect()
     };
-    // the cut: the first call whose answer was re-taken from the laptop (Sprint 379), found in the stream by name
-    let cut = stream
+    // the cut: the last row before the first answer re-taken from the laptop reaches the game (Sprint 381; Sprint 379's
+    // was a call found by name), its two calls the stream's
+    let cut = LAST_HELD_ROW;
+    let at: Vec<&str> = stream
         .lines()
-        .position(|l| l.split('\t').nth(4) == Some(FIRST_RETAKEN_CALL))
-        .unwrap_or_else(|| panic!("{STREAM} has no {FIRST_RETAKEN_CALL}"));
+        .skip(cut)
+        .take(2)
+        .map(|l| l.split('\t').nth(4).unwrap_or(""))
+        .collect();
+    assert_eq!(
+        at,
+        AT_THE_CUT,
+        "{STREAM}'s rows {cut} and {} are not the calls the cut was measured at",
+        cut + 1
+    );
     for (row, (r, p)) in ours.iter().zip(&python).enumerate().take(cut + 1) {
         assert_eq!(
             cells(row, r, &ours_names),
@@ -263,8 +284,10 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
     }
     if ours.len() > cut {
         println!(
-            "the Rust stream equals the Python's rows 0-{cut}, to {FIRST_RETAKEN_CALL}, the first call re-taken from the \
-             laptop; its {} rows past it are judged against Windows alone",
+            "the Rust stream equals the Python's rows 0-{cut} of {}, to the start environment re-taken from the laptop \
+             ({:.1}% held); its {} rows past it are judged against Windows alone",
+            stream.lines().count(),
+            100.0 * (cut + 1) as f64 / stream.lines().count() as f64,
             ours.len() - cut - 1
         );
         return;

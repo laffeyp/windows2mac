@@ -232,10 +232,10 @@ system_info	38049993205	3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d544
 system_info	38049995593	d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4	windows.system.information@0.2.0	-	-	-	raw excluded 0	-	-
 system_info	38049997476	3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97	windows.system.information@0.2.0	-	-	-	raw excluded 0	-	-
 system_info	38049999396	d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4	windows.system.information@0.2.0	-	-	-	raw excluded 0	-	-
-system_modules	38094160385	202f2b6b77d3d16a726ca95179127ab97bb20c6046018bb51cfdcdf89827a815	windows.module.system@0.1.0	-	-	-	raw excluded 0	-	-
-system_modules	38094162181	fac0b4e6a2d2de1aaea8d131e2cbe342c0940cff819e154fbd11940add2ec7ff	windows.module.system@0.1.0	-	-	-	raw excluded 0	-	-
-temp_path	38098847298	ff7714fa701c3870ceac7080865aaac604719f71d7318a1ca00b371236dfdba1	windows.environment.temp_path@0.1.0	-	-	-	temp_path_rows excluded 0	-	-
-temp_path	38098848806	4c25a456e35e5b7cf5461baa1e2a1dba6c79451c8e5b6fbc3e932ef36d3f3e20	windows.environment.temp_path@0.1.0	-	-	-	temp_path_rows excluded 0	-	-
+system_modules	38094160385	202f2b6b77d3d16a726ca95179127ab97bb20c6046018bb51cfdcdf89827a815	windows.module.system@0.2.0	-	-	-	raw excluded 0	-	-
+system_modules	38094162181	fac0b4e6a2d2de1aaea8d131e2cbe342c0940cff819e154fbd11940add2ec7ff	windows.module.system@0.2.0	-	-	-	raw excluded 0	-	-
+temp_path	38098847298	ff7714fa701c3870ceac7080865aaac604719f71d7318a1ca00b371236dfdba1	windows.environment.temp_path@0.2.0	-	-	-	temp_path_rows excluded 0	-	-
+temp_path	38098848806	4c25a456e35e5b7cf5461baa1e2a1dba6c79451c8e5b6fbc3e932ef36d3f3e20	windows.environment.temp_path@0.2.0	-	-	-	temp_path_rows excluded 0	-	-
 thread_handles	38114820680	42e42696025a5ee2c71994db9a47d4be2fe667d8b769e65a617b68359cf65703	windows.handle.thread_handles@0.1.0	-	-	-	raw excluded 0	-	-
 thread_handles	38114822014	6b75ead1c4597d8c4b1ec8426c3e775e4b8fbd9e859d861ef6a249f8a51c56a6	windows.handle.thread_handles@0.1.0	-	-	-	raw excluded 0	-	-
 thread_queries	38048923955	397c3cb472085b1bc1b455fb2fb312a37bf9ea2cc4990fbf8165a988299aad7f	windows.thread.queries@0.1.0	-	-	-	raw excluded 0	-	-

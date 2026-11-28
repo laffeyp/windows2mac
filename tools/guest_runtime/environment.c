@@ -23,8 +23,11 @@
  * GetEnvironmentVariableW: the value and its length; a buffer too small gets a NUL at [0] and the answer is the size
  * needed; a missing name answers 0 and 203 and leaves the buffer; an empty value answers 0, writes the NUL and leaves
  * the last error. GetTempPathW: the first of TMP, TEMP and USERPROFILE, made full (GetFullPathNameW's rules) with
- * one backslash after it, else C:\Windows\; a value whose path passes MAX_PATH is skipped; an empty value answers
- * 1 and writes nothing; a buffer too small gets size - 1 units and a NUL and the answer is the size needed; the last
+ * one backslash after it, else the Windows directory, C:\windows\ (Sprint 381: the laptop's row temp.none,
+ * lap-20261013T231059422Z-136bec80-160, contracts/windows.environment.temp_path 0.2.0; the runners' C:\Windows\ until
+ * then; Microsoft Learn, GetTempPathW, updated 2025-07-01: after TMP, TEMP and USERPROFILE, "The Windows directory.",
+ * and "The returned string ends with a backslash"); a value whose path passes MAX_PATH is skipped; an empty value
+ * answers 1 and writes nothing; a buffer too small gets size - 1 units and a NUL and the answer is the size needed; the last
  * error is left.
  */
 #include "runtime.h"
@@ -213,7 +216,7 @@ u64 k32_SetEnvironmentVariableW(u64 name, u64 value) {
 u64 k32_GetTempPathW(u64 size, u64 buffer) {
     static const u16 TMP[] = {'T', 'M', 'P', 0}, TEMP[] = {'T', 'E', 'M', 'P', 0};
     static const u16 PROFILE[] = {'U', 'S', 'E', 'R', 'P', 'R', 'O', 'F', 'I', 'L', 'E', 0};
-    static const u16 WINDOWS[] = {'C', ':', '\\', 'W', 'i', 'n', 'd', 'o', 'w', 's', '\\', 0};
+    static const u16 WINDOWS[] = {'C', ':', '\\', 'w', 'i', 'n', 'd', 'o', 'w', 's', '\\', 0};
     static const u16 *const ORDER[] = {TMP, TEMP, PROFILE};
     static u16 path[1024];
     u64 len = 0;

@@ -20,6 +20,7 @@ use crate::guest::Guest;
 
 /// `APP_DIRECTORY` (modules.py 46)
 pub use crate::process::APP_DIRECTORY;
+use crate::process::SYSTEM32_PATH;
 
 /// `API_SET_HOSTS` (modules.py 49-53): API sets whose host is not kernelbase, as LoadLibraryExW answered on Server 2025
 /// and 2022 (Sprint 055, rows load.api_sets) and the C runtime's thread start (Sprint 063).
@@ -437,11 +438,13 @@ pub fn file_name(guest: &Guest, handle: u64) -> Option<String> {
     {
         return Some(format!("{APP_DIRECTORY}{}", image.name));
     }
+    // the system DLLs' paths as the laptop writes them, `SYSTEM32_PATH` (Sprint 381; the runners' C:\Windows\System32\
+    // until then)
     if handle == p.kernel32 {
-        return Some("C:\\Windows\\System32\\KERNEL32.DLL".into());
+        return Some(format!("{SYSTEM32_PATH}KERNEL32.DLL"));
     }
     if handle == p.kernelbase {
-        return Some("C:\\Windows\\System32\\KERNELBASE.dll".into());
+        return Some(format!("{SYSTEM32_PATH}KERNELBASE.dll"));
     }
     if let Some((c, _, _, i)) = dlls(guest).find(|(_, base, ..)| *base == handle) {
         // a DLL loaded after the start by its full path (`dll_paths`, modules.py 143; Sprint 205)
@@ -457,7 +460,7 @@ pub fn file_name(guest: &Guest, handle: u64) -> Option<String> {
     p.system
         .values()
         .find(|(h, _)| *h == handle)
-        .map(|(_, spelling)| format!("C:\\Windows\\System32\\{spelling}"))
+        .map(|(_, spelling)| format!("{SYSTEM32_PATH}{spelling}"))
 }
 
 /// `proc` (160-190): GetProcAddress, a thunk or an export's address, 0 when the module does not export `name`.

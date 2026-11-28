@@ -708,11 +708,13 @@ mod run {
         }
     }
 
-    /// `USER_ENVIRONMENT` (vm_backend 342-343): the environment the batch run's game starts with.
+    /// `USER_ENVIRONMENT` (vm_backend 342-343): the environment the batch run's game starts with, its USERPROFILE the
+    /// laptop's profile, C:\Users\w2m (Sprint 381; `store/reference_machine/profile-lap-20261128T042841141Z-4c0653e2.json`
+    /// `user.profile`), where vm_backend gave the runners' C:\Users\runneradmin.
     const USER_ENVIRONMENT: [&str; 3] = [
         "TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp",
         "TMP=C:\\Users\\w2m\\AppData\\Local\\Temp",
-        "USERPROFILE=C:\\Users\\runneradmin",
+        "USERPROFILE=C:\\Users\\w2m",
     ];
     /// `BATCH_ARGUMENTS` (scripts/run_frontier.py 64)
     const BATCH_ARGUMENTS: &str = "-batchmode -nographics -logFile \"C:\\w2m\\unity.log\"";

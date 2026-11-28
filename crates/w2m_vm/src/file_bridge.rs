@@ -39,12 +39,14 @@ pub const ABSENT: u64 = 0;
 pub const IS_FILE: u64 = 1;
 pub const IS_DIRECTORY: u64 = 2;
 pub const PARENT_MISSING: u64 = 3;
-/// file_bridge.py 64-65: the runners' user's AppData folders and C:\Users\w2m's Temp, fresh each run
-const PROFILE_FOLDERS: [&str; 4] = [
-    "Users/runneradmin/AppData/LocalLow",
-    "Users/runneradmin/AppData/Local/Temp",
-    "Users/runneradmin/AppData/Roaming",
+/// The profile's AppData folders, fresh each run: the laptop's user, C:\Users\w2m (Sprint 381; the laptop's profile
+/// `store/reference_machine/profile-lap-20261128T042841141Z-4c0653e2.json`, `user.profile`), whose Temp the batch
+/// run's TMP and TEMP name; until Sprint 381 file_bridge.py 64-65's, the runners' user's (runneradmin) three and
+/// C:\Users\w2m's Temp
+const PROFILE_FOLDERS: [&str; 3] = [
+    "Users/w2m/AppData/LocalLow",
     "Users/w2m/AppData/Local/Temp",
+    "Users/w2m/AppData/Roaming",
 ];
 
 /// Why a request was not answered, by the kind the frozen bridge raises (Sprint 239; Deferred 2026-10-29, the helpers'
