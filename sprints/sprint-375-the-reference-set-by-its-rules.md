@@ -50,8 +50,11 @@ order after the stop, the cards that take each deferred item", card 375).
 
 ### Emits
 
-- `EXECUTION_STARTED` and `EXECUTION_COMPLETED` for each stored game run put on the record, as `record_game_run.py`
-  emitted them; no other emit site changes.
+- None on today's store (amendment, builder-375's finding): every stored game run the rules read, 38 of the 44, is
+  already on the record (`store/runs/game-run-<run>/`, written by the frozen `record_game_run.py`), and a record is
+  never written over, so the record step writes none. Its EXECUTION_STARTED and EXECUTION_COMPLETED payloads, built
+  from each stored run, are held field for field to those 38 frozen records by a test; the step's first records are
+  card 376's new laptop game runs. No other emit site changes.
 
 ### Invariants
 
@@ -94,7 +97,7 @@ a laptop game run that meets the rules joins it.
 
 - [x] Scope names one verifiable property: the set computed by its rules, equal to the frozen choice.
 - [x] context_files cite the frozen rules, the reader, the records and the vocabulary.
-- [x] Emits: the two tags the record step emits, from the vocabulary.
+- [x] Emits: none on today's store, with its reason; the record step held to the 38 frozen records.
 - [x] Artifact contract gradable by command.
 - [x] Observation contract: the set and its reasons; numbered plants.
 - [x] One concept: the reference set chosen by its rules.
