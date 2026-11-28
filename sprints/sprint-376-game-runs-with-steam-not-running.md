@@ -64,8 +64,11 @@ admit to G3's reference set (the Decision "The order after Sprint 375").
 
 ### Files modified
 
-- `tools/windows_machine/run-job.ps1`, `games/hail-to-the-rainbow/state.json`, with others only where the class
-  requires, reported to main when found. One concept: laptop game runs under the reference's initial state.
+- `tools/windows_machine/run-job.ps1`, `games/hail-to-the-rainbow/state.json`, `crates/windows_machine/src/lib.rs`
+  (`steam_free`: an execution whose `unity.log` speaks of Steam without "SteamAPI_Init() failed" is refused before
+  anything is stored) and `crates/windows_machine/tests/windows_machine.rs`, committed by this card's amendment
+  before the game job, since `windows_machine` sends the laptop only what HEAD holds (`run_game_inner`, `git archive
+  HEAD`); with others only where the class requires, reported to main when found. One concept: laptop game runs under the reference's initial state.
 
 ### Command exit codes
 

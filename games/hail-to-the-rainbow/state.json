@@ -4,12 +4,13 @@
  "product": "Hail to the Rainbow",
  "states": {
   "empty": {
-   "about": "a first launch: no saved settings or saves, an empty TEMP, no log, no process from the game's folder",
+   "about": "a first launch: no saved settings or saves, an empty TEMP, no log, no process from the game's folder, and the Steam client not running (no steam, steamwebhelper, steamservice, gameoverlayui or steamerrorreporter process), as the reference runs of 2026-10-14 ran: their unity.log says \"SteamAPI_Init() failed\" (Sprint 376)",
    "registry_key": "absent",
    "locallow": "absent",
    "temp_entries": 0,
    "unity_log": "absent",
-   "game_processes": 0
+   "game_processes": 0,
+   "steam_processes": 0
   }
  }
 }

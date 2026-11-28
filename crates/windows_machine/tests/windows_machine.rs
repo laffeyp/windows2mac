@@ -8,8 +8,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use windows_machine::{
-    Batch, BatchItem, EXECUTOR, Game, JOINED, Job, KNOWN, Kind, Py, Request, batch_inputs, batch_items, run_id, sha256,
-    split_batch, split_game, stamp, store, store_game, stored_run, tree_tar, verdict, write_job,
+    Batch, BatchItem, EXECUTOR, Game, JOINED, Job, KNOWN, Kind, Py, Request, STEAM_ABSENT, batch_inputs, batch_items,
+    run_id, sha256, split_batch, split_game, stamp, steam_free, store, store_game, stored_run, tree_tar, verdict,
+    write_job,
 };
 
 /// Sprint 372's references: the October batch the Python sent (195 binaries, its job.json and the runs split from
@@ -688,5 +689,48 @@ fn a_game_job_is_split_and_stored() {
     let why = store_game(&at, "lap-r").unwrap_err();
     assert!(why.contains("only a laptop run is stored"), "{why}");
     assert!(!at.join("store/game-runs/lap-r").exists());
+    let _ = fs::remove_dir_all(&at);
+}
+
+/// Sprint 376: an execution whose unity.log speaks of Steam without the reference runs' "SteamAPI_Init() failed" is not
+/// stored, since the game's Steam lines with the client signed in name the account; the reference run's log passes, as
+/// does a log that never names Steam. The refused log here is the reference log less that one line.
+#[test]
+fn a_log_with_the_steam_client_running_is_not_stored() {
+    let at = scratch("steam");
+    let reference = root().join("store/game-runs").join(format!("{GAME_RUN}-01"));
+    let log = fs::read_to_string(reference.join("unity.log")).unwrap();
+    assert!(log.contains(STEAM_ABSENT));
+    let without: String = log
+        .lines()
+        .filter(|l| !l.contains(STEAM_ABSENT))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let quiet: String = log
+        .lines()
+        .filter(|l| !l.to_lowercase().contains("steam"))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    for (id, text) in [
+        ("lap-s-01", log.as_str()),
+        ("lap-s-02", without.as_str()),
+        ("lap-s-03", quiet.as_str()),
+    ] {
+        let dir = at.join("build/game-runs").join(id);
+        fs::create_dir_all(&dir).unwrap();
+        fs::copy(reference.join("profile.txt"), dir.join("profile.txt")).unwrap();
+        fs::write(dir.join("unity.log"), text).unwrap();
+    }
+    assert_eq!(steam_free(&at.join("build/game-runs/lap-s-01")), Ok(()));
+    let why = store_game(&at, "lap-s-02").unwrap_err();
+    assert_eq!(
+        why,
+        "lap-s-02: unity.log speaks of Steam and has no \"SteamAPI_Init() failed\": the Steam client ran, and the game's \
+         Steam lines may name its account, so the execution stays in build/"
+    );
+    assert!(!at.join("store/game-runs/lap-s-02").exists());
+    assert!(store_game(&at, "lap-s-01").is_ok());
+    assert!(store_game(&at, "lap-s-03").is_ok());
+    assert!(steam_free(&at.join("build/game-runs/no-such-run")).is_ok());
     let _ = fs::remove_dir_all(&at);
 }

@@ -1272,6 +1272,7 @@ fn run_game_inner(root: &Path, game: &Game) -> Result<i32, String> {
                 profile.trim()
             ));
         }
+        steam_free(&root.join("build/game-runs").join(id)).map_err(|why| format!("{id}: {why}: nothing stored"))?;
     }
     for id in &ids {
         println!("{}", store_game(root, id)?);
@@ -1304,9 +1305,31 @@ pub fn split_game(root: &Path, run: &str, executions: u32) -> Result<(u32, Vec<S
     Ok((done, lines))
 }
 
+/// What the game writes to `unity.log` when the Steam client is not running, as the reference runs of 2026-10-14 ran.
+pub const STEAM_ABSENT: &str = "SteamAPI_Init() failed";
+
+/// An execution's `unity.log` names no Steam account: a log that speaks of Steam at all says [`STEAM_ABSENT`]. With
+/// the client running and signed in, the game writes its own Steam lines and the account's player name in that line's
+/// place (Sprint 372's three executions; the Decision "A laptop game run's initial state includes the Steam client":
+/// no `unity.log` naming the user's account enters `store/`). A folder without a log, or a log that never names Steam,
+/// passes. The refusal quotes nothing from the log.
+pub fn steam_free(dir: &Path) -> Result<(), String> {
+    let Ok(log) = fs::read(dir.join("unity.log")) else {
+        return Ok(());
+    };
+    let log = String::from_utf8_lossy(&log);
+    if log.to_lowercase().contains("steam") && !log.contains(STEAM_ABSENT) {
+        return Err(format!(
+            "unity.log speaks of Steam and has no \"{STEAM_ABSENT}\": the Steam client ran, and the game's Steam lines \
+             may name its account, so the execution stays in build/"
+        ));
+    }
+    Ok(())
+}
+
 /// One game execution stored: `build/game-runs/<id>/` to `store/game-runs/<id>/`, refused before anything is written
-/// unless its `profile.txt` is the laptop's. Returns the line naming what was stored, with its log's and its call
-/// trace's line counts.
+/// unless its `profile.txt` is the laptop's and its `unity.log` names no Steam account ([`steam_free`]). Returns the
+/// line naming what was stored, with its log's and its call trace's line counts.
 pub fn store_game(root: &Path, id: &str) -> Result<String, String> {
     let src = root.join("build/game-runs").join(id);
     let profile = fs::read_to_string(src.join("profile.txt")).map_err(|e| format!("{id}: profile.txt: {e}"))?;
@@ -1316,6 +1339,7 @@ pub fn store_game(root: &Path, id: &str) -> Result<String, String> {
             profile.trim()
         ));
     }
+    steam_free(&src).map_err(|why| format!("{id}: {why}"))?;
     let dst = root.join("store/game-runs").join(id);
     let n = copy_tree(&src, &dst)?;
     let lines = |name: &str| fs::read_to_string(src.join(name)).map_or(0, |t| t.lines().count());

@@ -18,7 +18,9 @@
 #           files.json, C:\w2m\app a junction to it, and before each execution the game's saved state removed
 #           (HKCU\Software\<company>\<product>, LocalLow\<company>\<product>; §5) so each starts as a runner's does.
 #           job.json `audio` "off" stops the Windows Audio service for the job (the runners have no output: their
-#           unity.log says "FMOD initialized on nosound output") and starts it again after. In play mode the game is
+#           unity.log says "FMOD initialized on nosound output") and starts it again after. A declared state with no
+#           Steam process (games/<game>/state.json `steam_processes` 0) stops the Steam client for the job, checks it
+#           absent before each execution with the state's other items, and starts it again after. In play mode the game is
 #           pinned to the high-performance GPU (UserGpuPreferences GpuPreference=2) and the screen is saved every
 #           `frame_seconds` (default 10) as out\<i>\frames\<seconds>.png.
 # Every input's sha256 is in job.json `inputs`; a mismatch stops the job before anything runs. job.json `cpu_class`
@@ -163,6 +165,27 @@ try {
         $stoppedAudio = $true
         Note "Windows Audio service: $((Get-Service Audiosrv).Status)"
       }
+      # the Steam client stopped for the job when the declared state has none of its processes, and started again after
+      # as it was: with it signed in, the game's unity.log names the account and loses "SteamAPI_Init() failed", which the
+      # reference runs of 2026-10-14 say (Sprint 372). w2m's sign-in starts it (HKCU Run, "steam.exe -silent"), and it
+      # starts the Steam Client Service, stopped with it
+      $steamNames = 'steam', 'steamwebhelper', 'steamservice', 'gameoverlayui', 'steamerrorreporter'
+      $fromSteam = { Get-Process -Name $steamNames -ErrorAction SilentlyContinue }
+      $steamExe = $null; $stoppedSteamService = $false; $userTemp = $env:TEMP; $userTmp = $env:TMP
+      $stateName = if ($spec.initial_state) { $spec.initial_state } else { 'empty' }
+      if ((Get-Content "games/$($spec.game)/state.json" -Raw | ConvertFrom-Json).states.$stateName.steam_processes -eq 0) {
+        $running = @(& $fromSteam)
+        if ($running | Where-Object ProcessName -eq 'steam') {
+          $steamExe = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamExe
+        }
+        $service = Get-Service 'Steam Client Service' -ErrorAction SilentlyContinue
+        if ($service -and $service.Status -eq 'Running') { Stop-Service 'Steam Client Service' -Force; $stoppedSteamService = $true }
+        $running | ForEach-Object {          # a helper the client's own exit ended is already gone
+          Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+          try { [void]$_.WaitForExit(30000) } catch { Note "Steam client: $($_.Exception.Message)" }
+        }
+        Note "Steam client: $($running.Count) processes stopped ($(($running.ProcessName | Sort-Object -Unique) -join ', ')), $(@(& $fromSteam).Count) running"
+      }
       if ($spec.mode -eq 'play') {
         $pref = 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences'
         if (-not (Test-Path $pref)) { New-Item $pref -Force | Out-Null }
@@ -231,6 +254,7 @@ try {
           temp_entries = @(Get-ChildItem $tempDir -Force -ErrorAction SilentlyContinue).Count
           unity_log = if (Test-Path C:\w2m\unity.log) { 'present' } else { 'absent' }
           game_processes = @(& $fromGame).Count
+          steam_processes = @(& $fromSteam).Count
         }
         $differ = @(foreach ($k in $seen.Keys) { if ("$($seen[$k])" -ne "$($declared.$k)") { "$k $($seen[$k]), declared $($declared.$k)" } })
         $proof = [ordered]@{ state = $stateName; files_json_sha256 = (Get-FileHash "games/$($spec.game)/files.json" -Algorithm SHA256).Hash.ToLower()
@@ -360,6 +384,15 @@ try {
       Pop-Location
       if (Test-Path C:\w2m\app) { cmd /c rmdir C:\w2m\app }
       if ($stoppedAudio) { Start-Service Audiosrv }
+      if ($stoppedSteamService) {
+        Start-Service 'Steam Client Service'
+        Note "Steam Client Service: $((Get-Service 'Steam Client Service').Status)"
+      }
+      if ($steamExe) {          # the user's TEMP back first: the game's was the job's folder
+        $env:TEMP = $userTemp; $env:TMP = $userTmp
+        Start-Process -FilePath $steamExe -ArgumentList '-silent'
+        Note "Steam client started again: $steamExe -silent"
+      }
     }
   } elseif ($spec.kind -eq 'batch') {
     foreach ($item in $spec.items) {
