@@ -305,6 +305,215 @@ fn the_game_calls_contract_0_1_0_is_unchanged() {
     assert_eq!(call_compare::CONTRACT, "contracts/windows.game.calls/0.2.0.json");
 }
 
+/// The laptop runs of 2026-10-14 01:10 that ran the game in a window, as their exec.json records the arguments
+const WINDOWED: &str = "other arguments (['-screen-fullscreen', '0', '-screen-width', '1280', '-screen-height', '720', \
+                        '-logFile', '\"C:\\\\w2m\\\\unity.log\"'])";
+const TWELVE: &str = "a machine of 12 processors, w2m reports 4";
+
+/// Each stored game run the rules leave out of the reference set on 2026-11-27, with the reason `call_compare.py`'s
+/// `outside_set` gives (its text, rule for rule)
+fn left_out() -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = [
+        ("37982448071", "no call trace with thread names"),
+        ("38006665419", "no call trace with thread names"),
+        ("38006671518", "no call trace with thread names"),
+        ("38113342549", "no call trace with thread names"),
+        ("38113343972", "no call trace with thread names"),
+        (
+            "38176899195",
+            "the capture names no threads (SetThreadDescription without names)",
+        ),
+        (
+            "38203364352",
+            "the capture names no threads (SetThreadDescription without names)",
+        ),
+        (
+            "38206263976",
+            "the capture names no threads (SetThreadDescription without names)",
+        ),
+        (
+            "38275716702",
+            "the contract names no capture thread for it (another capture or arguments)",
+        ),
+        ("lap-20261014T041748433Z-73c66e6a-01", "no call trace with thread names"),
+    ]
+    .iter()
+    .map(|(r, why)| (r.to_string(), why.to_string()))
+    .collect();
+    for i in 1..=3 {
+        out.push((format!("lap-20261014T011035282Z-e61fca06-{i:02}"), WINDOWED.into()));
+    }
+    for batch in ["lap-20261014T012302244Z-cb542225", "lap-20261014T023701004Z-3f1cf08d"] {
+        for i in 1..=10 {
+            out.push((format!("{batch}-{i:02}"), TWELVE.into()));
+        }
+    }
+    out.sort();
+    out
+}
+
+/// G3's reference set chosen by its rules (Sprint 375): from the stored game runs, `call_compare.py`'s `reference_set`
+/// gives the eleven runs the frozen host's run of 2026-10-21 names, and leaves out the 33 others, each for its reason;
+/// `Windows`, which judges the batch runs, holds that set and cites it in `reference_ref`.
+#[test]
+fn the_rules_choose_the_frozen_hosts_reference_set() {
+    let root = root();
+    let set = call_compare::reference_set_of(&root).unwrap();
+    let frozen = call_compare::frozen_reference_set(&root).unwrap();
+    let joined: Vec<&String> = set.members.iter().filter(|r| !frozen.contains(r)).collect();
+    let left: Vec<(&String, Option<&String>)> = frozen
+        .iter()
+        .filter(|r| !set.members.contains(r))
+        .map(|r| (r, set.outside.get(r)))
+        .collect();
+    assert!(
+        joined.is_empty() && left.is_empty(),
+        "runs the rules let in that the frozen host left out: {joined:#?}\nruns the frozen host chose that the rules \
+         leave out, with the rules' reason: {left:#?}"
+    );
+    assert_eq!(set.members, frozen, "the set in name order");
+    let outside: Vec<(String, String)> = set.outside.into_iter().collect();
+    assert_eq!(outside, left_out(), "each run left out, with its reason");
+    let windows = Windows::load(&root).unwrap();
+    let cited: Vec<String> = frozen.iter().map(|r| format!("game-run-{r}")).collect();
+    assert_eq!(windows.reference_ref(), cited.join(" + "));
+}
+
+/// The rules the store's runs do not reach, each on a copy of laptop run c8814547-01 under a root of the test's own:
+/// the run as stored joins; its arguments as one command line join; no arguments, no profile.json, no record, another
+/// profile kind or another game build on the record each leave it out, for the reason `outside_set` gives.
+#[test]
+fn each_rule_leaves_a_laptop_run_out_for_its_reason() {
+    let repo = root();
+    let at = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("reference-set-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&at);
+    let copy = |from: &str, to: &str| {
+        let to = at.join(to);
+        fs::create_dir_all(to.parent().unwrap()).unwrap();
+        fs::copy(repo.join(from), to).unwrap();
+    };
+    copy(
+        "games/hail-to-the-rainbow/files.json",
+        "games/hail-to-the-rainbow/files.json",
+    );
+    copy(call_compare::CONTRACT, call_compare::CONTRACT);
+    let source = "lap-20261014T032442034Z-c8814547-01";
+    let record =
+        fs::read_to_string(repo.join(format!("store/runs/game-run-{source}/events-000001.open.jsonl"))).unwrap();
+    let build = "643a6283510c88e3483212c9d0358de925ac415b83fa0302dced6381f412f974";
+    let run = |name: &str, exec: Option<&str>, profile_json: bool, record_text: Option<String>| {
+        for file in [
+            "jit_capture.bin.trace.tsv",
+            "jit_capture.bin.strings.tsv",
+            "profile.txt",
+            "exec.json",
+        ]
+        .iter()
+        .chain(profile_json.then_some(&"profile.json"))
+        {
+            copy(
+                &format!("store/game-runs/{source}/{file}"),
+                &format!("store/game-runs/{name}/{file}"),
+            );
+        }
+        if let Some(exec) = exec {
+            fs::write(at.join(format!("store/game-runs/{name}/exec.json")), exec).unwrap();
+        }
+        if let Some(text) = record_text {
+            let dir = at.join(format!("store/runs/game-run-{name}"));
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("events-000001.open.jsonl"), text).unwrap();
+        }
+    };
+    run("a-as-stored", None, true, Some(record.clone()));
+    let line = r#"{"arguments": "-batchmode -nographics -logFile \"C:\\w2m\\unity.log\"", "exited_by_itself": false}"#;
+    run("b-one-command-line", Some(line), true, Some(record.clone()));
+    run(
+        "c-no-arguments",
+        Some(r#"{"exited_by_itself": false}"#),
+        true,
+        Some(record.clone()),
+    );
+    run("d-no-profile", None, false, Some(record.clone()));
+    run("e-no-record", None, true, None);
+    run(
+        "f-another-kind",
+        None,
+        true,
+        Some(record.replace("\"windows_reference\"", "\"native_process\"")),
+    );
+    run(
+        "g-another-build",
+        None,
+        true,
+        Some(record.replace(build, &"0".repeat(64))),
+    );
+    let set = call_compare::reference_set_of(&at).unwrap();
+    let _ = fs::remove_dir_all(&at);
+    assert_eq!(set.members, ["a-as-stored", "b-one-command-line"]);
+    let outside: Vec<(&str, &str)> = set.outside.iter().map(|(r, why)| (r.as_str(), why.as_str())).collect();
+    assert_eq!(
+        outside,
+        [
+            ("c-no-arguments", "a laptop run whose exec.json records no arguments"),
+            ("d-no-profile", "a machine of None processors, w2m reports 4"),
+            ("e-no-record", "not on the record (game-run-e-no-record)"),
+            ("f-another-kind", "no windows_reference EXECUTION_STARTED on the record"),
+            (
+                "g-another-build",
+                "another game build (sha256:0000000000000000000000000000000000000000000000000000000000000000)"
+            ),
+        ]
+    );
+}
+
+/// Each stored game run on the record, as `record_game_run.py` put it there: the EXECUTION_STARTED and
+/// EXECUTION_COMPLETED that `call_compare::game_run_execution` makes from the run's files are the record's, field for
+/// field, for all 38 the frozen host recorded (Sprint 375).
+#[test]
+fn the_record_step_writes_the_frozen_hosts_executions() {
+    use events::{Event, ExecutionCompleted, ExecutionStarted};
+    let root = root();
+    let mut held = 0;
+    for entry in fs::read_dir(root.join(call_compare::GAME_RUNS)).unwrap().flatten() {
+        let run = entry.file_name().to_string_lossy().to_string();
+        let record = root.join(call_compare::RECORDS).join(format!("game-run-{run}"));
+        if !record.is_dir() {
+            continue;
+        }
+        let mut found: Vec<serde_json::Value> = Vec::new();
+        for segment in fs::read_dir(&record).unwrap().flatten() {
+            let name = segment.file_name().to_string_lossy().to_string();
+            if name.starts_with("events-") && name.ends_with(".jsonl") {
+                for line in fs::read_to_string(segment.path()).unwrap().lines() {
+                    let frame: serde_json::Value = serde_json::from_str(line).unwrap();
+                    if frame["kind"].as_str().is_some_and(|k| k.starts_with("EXECUTION_")) {
+                        found.push(frame);
+                    }
+                }
+            }
+        }
+        let payload = |kind: &str| {
+            let of: Vec<&serde_json::Value> = found.iter().filter(|f| f["kind"] == kind).collect();
+            assert_eq!(of.len(), 1, "{run}: one {kind} on its record");
+            of[0]["payload"].clone()
+        };
+        let (started, completed) = call_compare::game_run_execution(&root, &run).unwrap();
+        assert_eq!(
+            started,
+            ExecutionStarted::from_payload(&payload("EXECUTION_STARTED")).unwrap(),
+            "{run}"
+        );
+        assert_eq!(
+            completed,
+            ExecutionCompleted::from_payload(&payload("EXECUTION_COMPLETED")).unwrap(),
+            "{run}"
+        );
+        held += 1;
+    }
+    assert_eq!(held, 38, "the stored game runs on the record");
+}
+
 /// The main-thread calls `w2m-vm --game` stops by are the ones `call_compare` derives from the ending run (Sprint 219):
 /// the stored file cannot drift from the reference it is read from.
 #[test]

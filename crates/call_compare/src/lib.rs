@@ -16,11 +16,17 @@
 //! scheduling (`by_cause`).
 //!
 //! Where the frozen host is followed and where not is named at each rule; this module reads the contract
-//! (contracts/windows.game.calls 0.1.0) and the Windows runs first.
+//! (contracts/windows.game.calls 0.1.0) and the Windows runs first. From Sprint 375 the set's runs are chosen from
+//! store/game-runs by the frozen host's membership rules (`reference_set`), where before they were the frozen host's last
+//! choice, read from its record.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use events::{
+    ExecutionCompleted, ExecutionStarted, ExitStatus, FiniteF64, HarnessI64, HarnessU64, Id, ProfileKind, Sha256,
+    SubjectKind,
+};
 use serde_json::Value;
 
 /// A traced call: seq, thread, label (the calling image, or "GetProcAddress"), DLL, function, eight arguments, return
@@ -1210,9 +1216,10 @@ impl Windows {
                 .map(str::to_string)
                 .ok_or(format!("{CONTRACT}: no {name}"))
         };
-        let references = reference_runs(&read(&root.join(REFERENCE_RECORD))?)?
+        let references = reference_set(root, &contract)?
+            .members
             .iter()
-            .map(|r| load_reference(&root.join("store/game-runs").join(r), &contract))
+            .map(|r| load_reference(&root.join(GAME_RUNS).join(r), &contract))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Windows {
             references,
@@ -1248,9 +1255,17 @@ impl Windows {
     }
 }
 
+/// The reference set the frozen host's run of 2026-10-21 names, its last choice, which the set computed by the rules
+/// (`reference_set`) is held to (Sprint 375).
+pub fn frozen_reference_set(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join(REFERENCE_RECORD);
+    reference_runs(&std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?)
+}
+
 /// The reference set a frozen-host record names: its RunStarted baseline's `reference_set` (`run_frontier.py`), the runs
-/// `call_compare.py`'s `reference_set` chose (Sprint 214: the membership rules, which read laptop and runner run files
-/// and records, are not ported; the set is the frozen host's last choice).
+/// `call_compare.py`'s `reference_set` chose. From Sprint 214 to 374 this was the set the batch run was judged against,
+/// the membership rules not ported; from Sprint 375 the rules choose it (`reference_set`), and this names the frozen
+/// host's choice they are held to.
 fn reference_runs(record_first_segment: &str) -> Result<Vec<String>, String> {
     let started = record_first_segment
         .lines()
@@ -1301,12 +1316,8 @@ fn load_reference(dir: &Path, contract: &Value) -> Result<Reference, String> {
         |name: &str| std::fs::read_to_string(dir.join(name)).map_err(|e| format!("{}: {e}", dir.join(name).display()));
     let calls = read_tsv(&read("jit_capture.bin.trace.tsv")?)?;
     let strings = read_strings(&read("jit_capture.bin.strings.tsv").unwrap_or_default());
-    let run = dir
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let laptop = std::fs::read_to_string(dir.join("profile.txt")).is_ok_and(|p| p.starts_with("laptop-"));
-    let excluded = if laptop {
+    let run = name_of(dir);
+    let excluded = if laptop_run(dir) {
         calls.iter().min().map(|c| BTreeSet::from([c.tid])).unwrap_or_default()
     } else {
         contract_rules(contract, &run).0
@@ -1317,6 +1328,396 @@ fn load_reference(dir: &Path, contract: &Value) -> Result<Reference, String> {
         excluded,
         strings,
     })
+}
+
+fn name_of(dir: &Path) -> String {
+    dir.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+// The reference set by its rules (Sprint 375): `call_compare.py` 492-609 at the tag frozen-python-2026-10-29,
+// `GAME`, `GAME_RUNS`, `RECORDS`, `GAME_ARGUMENTS`, `arguments`, `laptop_run`, `game_build`, `outside_set` and
+// `reference_set`, rule for rule; and `scripts/record_game_run.py`, whose record `outside_set` reads.
+
+/// The game the set is of, and its executable (`GAME`, `GAME_EXE`)
+const GAME: &str = "hail-to-the-rainbow";
+const GAME_EXE: &str = "Hail to the Rainbow.exe";
+/// The stored game runs, and the records (`GAME_RUNS`, `RECORDS`)
+pub const GAME_RUNS: &str = "store/game-runs";
+pub const RECORDS: &str = "store/runs";
+const TRACE: &str = "jit_capture.bin.trace.tsv";
+const STRINGS: &str = "jit_capture.bin.strings.tsv";
+
+/// `GAME_ARGUMENTS`: the game's arguments in the capture the set is of, windows-game.yml's batch mode, as the
+/// contract's applicability states them and a laptop run's exec.json records them.
+const GAME_ARGUMENTS: [&str; 4] = ["-batchmode", "-nographics", "-logFile", "C:\\w2m\\unity.log"];
+
+/// The processors w2m reports to the game (`w2m.vm_backend.PROCESSORS`, 4), the Rust host's own constant, one
+/// definition of the fact (`w2m_vm/tests/layout_constants.rs`): a laptop run's machine must have reported as many, since
+/// the game sizes its job workers by them.
+pub const PROCESSORS: u64 = w2m_vm::process::PROCESSORS as u64;
+
+/// `laptop_run`: a laptop game run, its profile.txt starting "laptop-" (the runners' start "gha-").
+fn laptop_run(run: &Path) -> bool {
+    std::fs::read_to_string(run.join("profile.txt")).is_ok_and(|p| p.starts_with("laptop-"))
+}
+
+fn read_json(path: &Path) -> Result<Value, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// `game_build`: the game build the set is of, the executable's digest in games/<game>/files.json.
+pub fn game_build(root: &Path) -> Result<String, String> {
+    Ok(format!("sha256:{}", exe_sha256(root)?))
+}
+
+fn exe_sha256(root: &Path) -> Result<String, String> {
+    let path = root.join("games").join(GAME).join("files.json");
+    read_json(&path)?["listing"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|f| f["path"] == GAME_EXE)
+        .and_then(|f| f["sha256"].as_str())
+        .map(str::to_string)
+        .ok_or(format!("{}: no {GAME_EXE} in its listing", path.display()))
+}
+
+/// `shlex.split(given, posix=False)`: words split at whitespace, a word that opens with a quote running to its closing
+/// quote, the quotes kept; a quote inside a word is a character of it.
+fn split_command_line(given: &str) -> Result<Vec<String>, String> {
+    let mut words = Vec::new();
+    let mut chars = given.chars().peekable();
+    while let Some(&c) = chars.peek() {
+        if c.is_whitespace() {
+            chars.next();
+            continue;
+        }
+        let mut word = String::new();
+        if c == '"' || c == '\'' {
+            word.push(c);
+            chars.next();
+            loop {
+                match chars.next() {
+                    Some(x) if x == c => {
+                        word.push(x);
+                        break;
+                    }
+                    Some(x) => word.push(x),
+                    None => return Err(format!("{given:?}: no closing quotation")),
+                }
+            }
+        } else {
+            while let Some(&x) = chars.peek() {
+                if x.is_whitespace() {
+                    break;
+                }
+                word.push(x);
+                chars.next();
+            }
+        }
+        words.push(word);
+    }
+    Ok(words)
+}
+
+/// `arguments`: a command line's arguments, each without its quotes (a Windows path keeps its backslashes); the
+/// laptop's exec.json records them as a list (run-job.ps1), a command line as one string.
+fn arguments(given: &Value) -> Result<Vec<String>, String> {
+    let parts = match given {
+        Value::Array(list) => list
+            .iter()
+            .map(|a| {
+                a.as_str()
+                    .map(str::to_string)
+                    .ok_or(format!("an argument that is not a string: {a}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        Value::String(line) => split_command_line(line)?,
+        other => return Err(format!("arguments that are neither a list nor a command line: {other}")),
+    };
+    Ok(parts.iter().map(|a| a.trim_matches('"').to_string()).collect())
+}
+
+/// A JSON value as Python's `str` shows it in an f-string: a string as itself, a list of the items' `repr`s.
+fn python_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        other => python_repr(other),
+    }
+}
+
+/// Python's `repr` of a JSON value: a string in single quotes, or double when it holds a single quote and no double,
+/// with `\\`, the quote and control characters escaped; a list as `[a, b]`; None, True, False.
+fn python_repr(v: &Value) -> String {
+    match v {
+        Value::Null => "None".into(),
+        Value::Bool(b) => if *b { "True" } else { "False" }.into(),
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => {
+            let quote = if s.contains('\'') && !s.contains('"') {
+                '"'
+            } else {
+                '\''
+            };
+            let mut out = String::from(quote);
+            for c in s.chars() {
+                match c {
+                    '\\' => out.push_str("\\\\"),
+                    '\n' => out.push_str("\\n"),
+                    '\r' => out.push_str("\\r"),
+                    '\t' => out.push_str("\\t"),
+                    c if c == quote => {
+                        out.push('\\');
+                        out.push(c);
+                    }
+                    c if (c as u32) < 0x20 || (0x7f..0xa0).contains(&(c as u32)) => {
+                        out.push_str(&format!("\\x{:02x}", c as u32));
+                    }
+                    c => out.push(c),
+                }
+            }
+            out.push(quote);
+            out
+        }
+        Value::Array(items) => format!("[{}]", items.iter().map(python_repr).collect::<Vec<_>>().join(", ")),
+        Value::Object(_) => v.to_string(),
+    }
+}
+
+/// A record's envelopes in seq order, as substrate's `read_record` yields them: the sealed segments
+/// (`events-NNNNNN.jsonl`) by name, then the hot segment (`events-NNNNNN.open.jsonl`) up to its first line that is
+/// not a whole JSON line (a torn tail); a seq that does not follow refuses the record, as substrate's reader and
+/// `check_records` refuse it. A frame's crc is not checked here, as no Rust reader of the project checks it; the gates'
+/// `substrate replay --level 2` does over each new record.
+fn read_record(record: &Path) -> Result<Vec<Value>, String> {
+    let mut segments: Vec<std::path::PathBuf> = std::fs::read_dir(record)
+        .map_err(|e| format!("{}: {e}", record.display()))?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("events-") && n.ends_with(".jsonl"))
+        })
+        .collect();
+    segments.sort_by_key(|p| (p.to_string_lossy().ends_with(".open.jsonl"), p.clone()));
+    let mut out = Vec::new();
+    for segment in &segments {
+        let hot = segment.to_string_lossy().ends_with(".open.jsonl");
+        let text = std::fs::read_to_string(segment).map_err(|e| format!("{}: {e}", segment.display()))?;
+        let whole = text.len() - text.rsplit_once('\n').map_or(text.len(), |(_, tail)| tail.len());
+        if !hot && whole < text.len() {
+            return Err(format!("{}: a sealed segment with a torn tail", segment.display()));
+        }
+        for line in text[..whole].lines() {
+            let frame: Value = match serde_json::from_str(line) {
+                Ok(v) => v,
+                Err(_) if hot => break,
+                Err(e) => return Err(format!("{}: {e}", segment.display())),
+            };
+            if frame["seq"].as_u64() != Some(out.len() as u64) {
+                return Err(format!(
+                    "{}: seq {} where {} follows",
+                    record.display(),
+                    frame["seq"],
+                    out.len()
+                ));
+            }
+            out.push(frame);
+        }
+    }
+    Ok(out)
+}
+
+/// `outside_set`: why a stored game run is not in the reference set, or None when it is. A run is in the set when
+/// its capture names the game's threads (SetThreadDescription calls with their names in the strings file); when its game
+/// arguments are `GAME_ARGUMENTS`, a laptop run's by its exec.json, a runner run's, which records none, by the contract
+/// naming its capture thread; when a laptop run's machine reported w2m's processor count (profile.json); and when it is
+/// on the record as a windows_reference execution of the same game build (store/runs/game-run-<run>, written by
+/// `record_game_run`: EXECUTION_STARTED.subject_sha256 is files.json's digest of the executable).
+fn outside_set(run: &Path, build: &str, contract: &Value, records: &Path) -> Result<Option<String>, String> {
+    let read = |p: &Path| std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()));
+    let (trace, names) = (run.join(TRACE), run.join(STRINGS));
+    if !(trace.is_file() && names.is_file()) {
+        return Ok(Some("no call trace with thread names".into()));
+    }
+    if thread_names(&read_tsv(&read(&trace)?)?, &read_strings(&read(&names)?)).is_empty() {
+        return Ok(Some(
+            "the capture names no threads (SetThreadDescription without names)".into(),
+        ));
+    }
+    let name = name_of(run);
+    if laptop_run(run) {
+        let ended = run.join("exec.json");
+        let recorded = if ended.is_file() {
+            read_json(&ended)?.get("arguments").cloned().filter(|a| !a.is_null())
+        } else {
+            None
+        };
+        let Some(recorded) = recorded else {
+            return Ok(Some("a laptop run whose exec.json records no arguments".into()));
+        };
+        if arguments(&recorded)? != GAME_ARGUMENTS {
+            return Ok(Some(format!("other arguments ({})", python_text(&recorded))));
+        }
+        let profile = run.join("profile.json");
+        let logical = if profile.is_file() {
+            read_json(&profile)?
+                .get("cpu")
+                .and_then(|c| c.get("logical"))
+                .cloned()
+                .ok_or(format!("{}: no cpu.logical", profile.display()))?
+        } else {
+            Value::Null
+        };
+        if logical.as_f64() != Some(PROCESSORS as f64) {
+            return Ok(Some(format!(
+                "a machine of {} processors, w2m reports {PROCESSORS}",
+                python_text(&logical)
+            )));
+        }
+    } else if contract["excluded_threads"].get(&name).is_none() {
+        return Ok(Some(
+            "the contract names no capture thread for it (another capture or arguments)".into(),
+        ));
+    }
+    let record = records.join(format!("game-run-{name}"));
+    if !record.is_dir() {
+        return Ok(Some(format!("not on the record (game-run-{name})")));
+    }
+    let started: Vec<Value> = read_record(&record)?
+        .into_iter()
+        .filter(|e| e["kind"] == "EXECUTION_STARTED")
+        .map(|e| e["payload"].clone())
+        .collect();
+    let field = |key: &str| {
+        started[0]
+            .get(key)
+            .cloned()
+            .ok_or(format!("{}: EXECUTION_STARTED with no {key}", record.display()))
+    };
+    if started.is_empty() || field("profile_kind")? != "windows_reference" {
+        return Ok(Some("no windows_reference EXECUTION_STARTED on the record".into()));
+    }
+    let subject = field("subject_sha256")?;
+    if subject != build {
+        return Ok(Some(format!("another game build ({})", python_text(&subject))));
+    }
+    Ok(None)
+}
+
+/// The stored game runs in the reference set, in name order, and each run left out with its reason.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReferenceSet {
+    pub members: Vec<String>,
+    pub outside: BTreeMap<String, String>,
+}
+
+/// `reference_set`: every directory under store/game-runs judged by `outside_set` against the game build, in name
+/// order, the records read from store/runs.
+fn reference_set(root: &Path, contract: &Value) -> Result<ReferenceSet, String> {
+    let build = game_build(root)?;
+    let dir = root.join(GAME_RUNS);
+    let mut runs: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    runs.sort();
+    let mut set = ReferenceSet {
+        members: Vec::new(),
+        outside: BTreeMap::new(),
+    };
+    for run in runs {
+        match outside_set(&run, &build, contract, &root.join(RECORDS))? {
+            None => set.members.push(name_of(&run)),
+            Some(reason) => {
+                set.outside.insert(name_of(&run), reason);
+            }
+        }
+    }
+    Ok(set)
+}
+
+/// The reference set the rules choose from the repository's stored game runs, under the contract `CONTRACT`.
+pub fn reference_set_of(root: &Path) -> Result<ReferenceSet, String> {
+    reference_set(root, &read_json(&root.join(CONTRACT))?)
+}
+
+/// The SHA-256 of nothing: what a game run's record gives as its initial state and injected inputs, which the capture
+/// records neither of (`record_game_run.py`'s `EMPTY`).
+const EMPTY: &str = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+/// A stored game run's execution as `scripts/record_game_run.py` puts it on the record: EXECUTION_STARTED with the
+/// game's executable, its digest in files.json, and the run's profile (profile.txt's first word), its timeout the run's
+/// elapsed seconds rounded half to even as Python's `round` does; and EXECUTION_COMPLETED with the run's end
+/// (exec.json), the call trace's digest and its non-empty lines.
+pub fn game_run_execution(root: &Path, run: &str) -> Result<(ExecutionStarted, ExecutionCompleted), String> {
+    let invalid = |e: events::InvalidValue| e.to_string();
+    let dir = root.join(GAME_RUNS).join(run);
+    let trace_path = format!("{GAME_RUNS}/{run}/{TRACE}");
+    let trace = std::fs::read(root.join(&trace_path)).map_err(|e| format!("{trace_path}: {e}"))?;
+    let lines = String::from_utf8_lossy(&trace)
+        .lines()
+        .filter(|l| !l.is_empty())
+        .count();
+    let ended = read_json(&dir.join("exec.json"))?;
+    let profile_path = dir.join("profile.txt");
+    let profile = std::fs::read_to_string(&profile_path)
+        .map_err(|e| format!("{}: {e}", profile_path.display()))?
+        .split_whitespace()
+        .next()
+        .map(str::to_string)
+        .ok_or(format!("{}: empty", profile_path.display()))?;
+    let elapsed = ended["elapsed_seconds"]
+        .as_f64()
+        .ok_or(format!("{run}/exec.json: no elapsed_seconds"))?;
+    let exited = ended["exited_by_itself"]
+        .as_bool()
+        .ok_or(format!("{run}/exec.json: no exited_by_itself"))?;
+    let exit_code = match &ended["exit_code"] {
+        Value::Null => None,
+        code => {
+            Some(HarnessI64::new(code.as_i64().ok_or(format!("{run}/exec.json: exit_code {code}"))?).map_err(invalid)?)
+        }
+    };
+    let execution_id = Id::new(format!("game-run-{run}")).map_err(invalid)?;
+    let empty = Sha256::new(EMPTY).map_err(invalid)?;
+    let started = ExecutionStarted {
+        execution_id: execution_id.clone(),
+        subject_kind: SubjectKind::Application,
+        subject_sha256: Sha256::new(game_build(root)?).map_err(invalid)?,
+        profile_kind: ProfileKind::WindowsReference,
+        profile_id: Id::new(profile).map_err(invalid)?,
+        initial_state_sha256: empty.clone(),
+        injected_inputs_sha256: empty,
+        timeout_seconds: Some(FiniteF64::new(elapsed.round_ties_even()).map_err(invalid)?),
+        kill_grace_seconds: None,
+        unobserved: Some("initial state and injected inputs: the capture records neither".into()),
+        vcpus: None,
+    };
+    let completed = ExecutionCompleted {
+        execution_id,
+        exit_status: if exited {
+            ExitStatus::Exited
+        } else {
+            ExitStatus::TimedOut
+        },
+        trace_sha256: Sha256::new(format!("sha256:{}", guest_runtime::sha256::hex(&trace))).map_err(invalid)?,
+        guest_line_count: HarnessU64::new(lines as u64).map_err(invalid)?,
+        exit_code,
+        elapsed_seconds: Some(FiniteF64::new(elapsed).map_err(invalid)?),
+        unobserved: Some(format!(
+            "the trace is {trace_path} in tools/jit_capture/call_trace.h's columns, not a vocabulary guest trace: the \
+             capture does not record where threads start"
+        )),
+        guest_trace: None,
+    };
+    Ok((started, completed))
 }
 
 #[cfg(test)]
@@ -1531,6 +1932,35 @@ mod tests {
             Some((s("UnityPlayer.dll!Sleep"), s("a0"), Some(s("Job.Worker 0"))))
         );
         assert_eq!(undetermined_key("nospace"), None);
+    }
+
+    /// A command line splits as `shlex.split(posix=False)` splits it: a word that opens with a quote runs to the closing
+    /// one, the quotes kept, and the next word starts after it; a quote inside a word is a character; an unclosed quote
+    /// is refused. `arguments` then strips the quotes from each end.
+    #[test]
+    fn a_command_line_splits_as_shlex_without_posix() {
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            split_command_line(r#"-logFile "C:\w2m\a b.log"x it's"#).unwrap(),
+            s(&["-logFile", r#""C:\w2m\a b.log""#, "x", "it's"])
+        );
+        assert!(split_command_line(r#"-logFile "C:\w2m"#).is_err());
+        let given = Value::String(r#"-batchmode -nographics -logFile "C:\w2m\unity.log""#.into());
+        assert_eq!(arguments(&given).unwrap(), GAME_ARGUMENTS);
+        let listed = serde_json::json!(["-logFile", "\"\"C:\\w2m\""]);
+        assert_eq!(arguments(&listed).unwrap(), s(&["-logFile", "C:\\w2m"]));
+    }
+
+    /// A recorded value in a reason reads as Python's f-string shows it: a list by its items' reprs, a string bare.
+    #[test]
+    fn a_reason_shows_a_value_as_python_does() {
+        let v = serde_json::json!(["-logFile", "\"C:\\w2m\\unity.log\"", "it's", 4, null, true]);
+        assert_eq!(
+            python_text(&v),
+            r#"['-logFile', '"C:\\w2m\\unity.log"', "it's", 4, None, True]"#
+        );
+        assert_eq!(python_text(&Value::String("-batchmode x".into())), "-batchmode x");
+        assert_eq!(python_text(&Value::Null), "None");
     }
 
     /// A return that differs is named by its row; a function only w2m calls is "called"; a Windows call past w2m's is

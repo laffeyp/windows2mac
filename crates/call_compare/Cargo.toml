@@ -10,6 +10,12 @@ publish.workspace = true
 serde_json.workspace = true
 # the vocabulary's types: the verdict, and the Producer's two events
 events = { path = "../events" }
+# a game run's trace digest on the record, SHA-256 without a crate (Decision 2026-10-24), as windows_machine takes it
+# (Sprint 375)
+guest_runtime = { path = "../guest_runtime" }
+# the processor count w2m reports, which a laptop game run's machine must have reported to join the reference set: the
+# Rust host's `process::PROCESSORS`, one definition (Sprint 375)
+w2m_vm = { path = "../w2m_vm" }
 
 [dev-dependencies]
 # the stamp a test checks before judging the gates' batch run (Sprint 288)
