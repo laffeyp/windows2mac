@@ -44,9 +44,8 @@ laptop, never a GitHub runner"), but the code names it loosely, and the runner p
   for `probes/`: a card amendment whose paths outside its card lie under `tools/windows_machine/`,
   `crates/windows_machine/` or `games/<game>/state.json` passes when its card's exit codes name a
   `target/release/windows_machine` job; the two rows stay as history.
-- **`Py`** (`lib.rs` 630) writes JSON as Python's `json.dumps(indent=1)` did. Renamed for what it does, after a check
-  whether `serde_json`'s own writer gives the same bytes for the files it writes (named either way in the result).
-- **Not here:** the tables re-taken (card 378). No API id is added.
+- **Not here:** the tables re-taken (card 378); renaming `Py` (`lib.rs` 630), a separate concept, numbered at 377's
+  close (sdd-kit-3/AGENTS.md hard rule 6). No API id is added.
 
 ## prerequisites
 
@@ -93,7 +92,6 @@ laptop, never a GitHub runner"), but the code names it loosely, and the runner p
   - The laptop's code-integrity state as `profile.json` records it; the CodeIntegrity check's line for a job.
   - `ssh -G w2m-laptop` naming the alias, and the key's fingerprint before and after.
   - `.github/workflows/` holding `ci.yml` alone; the test's output.
-  - `Py`'s comparison with `serde_json` for each file kind it writes.
 - **Planted faults:**
   - (1) A stored run's `profile.txt` set to `laptop-x64-10.0.26100.1-Server`: the walk fails naming it.
   - (2) A workflow with `runs-on: windows-2025` added under `.github/workflows/`: the test fails naming it.
