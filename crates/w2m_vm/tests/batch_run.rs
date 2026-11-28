@@ -13,6 +13,10 @@
 //! the stream, and `tests/exit_ledger.rs` holds them from Sprint 206; reviewer-2's Medium 1 of 199-205), and
 //! each guest that ends at ExitProcess prints what the frozen Python host's run printed (the held file's fifth column),
 //! but `qpc` and `qpc2`, which print a clock's reading, held by its form.
+//!
+//! From Sprint 382 the frozen stream is the reference to `LAST_HELD_ROW` alone, and the Rust host's own one-vCPU run's
+//! stream, stored at Sprint 381's closing tree (`RUST_STREAM`), is the reference in every row: the run's stream equals
+//! it row for row and cell for cell but the varying cells, and a card that changes the stream regenerates it.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -27,7 +31,9 @@ const HELD: &str = "store/batch_run/first-stop-2026-10-28.tsv";
 /// predates Sprint 120's catch-up of a child at its start (2026-10-18), and its mono cookie (row 939) was
 /// 0x13fc8e8cff34 where the frozen host gives 0x165d8e8cc734.
 const STREAM: &str = "store/frontier-calls/frontier-643a6283510c-1792623423346201000.tsv";
-/// The cells at which the Python's own runs differ (Sprint 194)
+/// The cells at which the Python's own runs differ (Sprint 194); the Rust host's runs differ there too, at rows 426 and
+/// 438, columns 9-11 or 9-12 (Sprint 382, each run measured against the stored one), so the stored Rust stream is held
+/// outside them as well
 const VARYING: &str = "store/batch_run/stream-varying-2026-10-28.tsv";
 /// The frozen host's batch run run again on 2026-10-28 (`scripts/run_frontier.py --scratch --max-steps
 /// 1000000000000`), each 10,505 rows and equal to `STREAM` but in the varying cells (Sprint 207)
@@ -54,7 +60,14 @@ const REPEATS: [&str; 3] = [
 /// 0x200009d40); with it reverted and the known folder path re-taken, row 967, CoTaskMemFree's a2 after
 /// SHGetKnownFolderPath (row 966); with both reverted and the temp fallback and the system path re-taken, every row
 /// matches. The frozen stream is the reference to row 28; past it the rows are judged against Windows alone.
+///
+/// From Sprint 382 every row, the cut's included, is also held to `RUST_STREAM`.
 const LAST_HELD_ROW: usize = 28;
+/// The Rust host's one-vCPU batch run's call stream, `build/batch_run/first-stop.calls.tsv` from `scripts/gates.sh`'s
+/// batch-run step at the tree of 758f9f900, Sprint 381's close (Sprint 382; the Decision "The runner's strings
+/// re-taken, and the frozen host's reference after them", its revisit): 10,515 rows after its `#` header, whose lines
+/// name the run each regeneration came from. Another run differs from it only in the varying cells.
+const RUST_STREAM: &str = "store/batch_run/first-stop-calls-2026-11-28.tsv";
 /// The calls `STREAM` holds at `LAST_HELD_ROW` and after it, by which the row is checked to be the one measured.
 const AT_THE_CUT: [&str; 2] = ["LeaveCriticalSection", "EnterCriticalSection"];
 /// Guests whose output is a clock's reading, 16 hex digits and a newline (`two_counters`' the ticks its two counters
@@ -285,7 +298,7 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
     if ours.len() > cut {
         println!(
             "the Rust stream equals the Python's rows 0-{cut} of {}, to the start environment re-taken from the laptop \
-             ({:.1}% held); its {} rows past it are judged against Windows alone",
+             ({:.1}% held); its {} rows past it are held to {RUST_STREAM} and judged against Windows",
             stream.lines().count(),
             100.0 * (cut + 1) as f64 / stream.lines().count() as f64,
             ours.len() - cut - 1
@@ -324,6 +337,125 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
         "the Rust stream equals the Python's rows 0-{}, and row {row} is in flight",
         row - 1
     );
+}
+
+/// The Rust run's call stream is the stored Rust stream, `RUST_STREAM`, row for row and cell for cell in every row, but
+/// the varying cells (Sprint 382): past `LAST_HELD_ROW` the one-vCPU run's order and answers on the instruction clock
+/// were held by Windows' judge alone, G3, which tolerates scheduling. A cell is compared as written, an address in the
+/// runtime image included: the stored stream ran its own tree's image, and a card that moves the image changes the
+/// stream and regenerates the file. A difference fails naming the row, the column and the call.
+#[test]
+fn the_batch_runs_calls_are_the_stored_rust_runs_in_every_row() {
+    let root = root();
+    let Some(calls) = written(&root, "first-stop.calls.tsv") else {
+        return;
+    };
+    let stored = fs::read_to_string(root.join(RUST_STREAM)).unwrap();
+    let skip = varying(&root);
+    let ours: Vec<&str> = calls.lines().collect();
+    let held: Vec<&str> = stored.lines().filter(|l| !l.starts_with('#')).collect();
+    assert!(!held.is_empty(), "{RUST_STREAM} holds no row");
+    for row in 0..ours.len().max(held.len()) {
+        let (Some(r), Some(h)) = (ours.get(row), held.get(row)) else {
+            panic!(
+                "row {row} of the call stream: the run's stream has {} rows and {RUST_STREAM} {}",
+                ours.len(),
+                held.len()
+            );
+        };
+        let (r, h): (Vec<&str>, Vec<&str>) = (r.split('\t').collect(), h.split('\t').collect());
+        let cell = |cols: &[&str], c: usize| cols.get(c).copied().unwrap_or("(no cell)").to_string();
+        for column in 0..r.len().max(h.len()) {
+            if skip.contains(&(row, column)) {
+                continue;
+            }
+            assert!(
+                r.get(column) == h.get(column),
+                "row {row} column {column} of the call stream differs from {RUST_STREAM}'s: the run's {}, the stored {} \
+                 (the run's call {}, the stored {})",
+                cell(&r, column),
+                cell(&h, column),
+                cell(&r, 4),
+                cell(&h, 4)
+            );
+        }
+    }
+    println!(
+        "the Rust stream equals {RUST_STREAM}'s {} rows, every cell but the {} varying",
+        held.len(),
+        skip.len()
+    );
+}
+
+/// The sprint a `# Sprint N...` header line names, None for another line.
+fn header_sprint(line: &str) -> Option<u32> {
+    let rest = line.strip_prefix("# Sprint ")?;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// The sprint the work tree's active card is (`sprints/sprint-NNN-*.md` holding the line `status: active`), the one
+/// `scripts/gates.sh` books its run to; an error when none is active or more than one is.
+fn active_sprint(root: &Path) -> Result<u32, String> {
+    let mut active: Vec<u32> = fs::read_dir(root.join("sprints"))
+        .unwrap()
+        .flatten()
+        .filter(|e| fs::read_to_string(e.path()).is_ok_and(|t| t.lines().any(|l| l == "status: active")))
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            name.strip_prefix("sprint-")?.get(..3)?.parse().ok()
+        })
+        .collect();
+    active.sort();
+    match active[..] {
+        [n] => Ok(n),
+        [] => Err("no card has status: active".to_string()),
+        _ => Err(format!("cards {active:?} each have status: active")),
+    }
+}
+
+fn git(root: &Path, args: &[&str]) -> std::process::Output {
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+/// The stored stream's regeneration rule held in code (Sprint 382; reviewer-4's fifty-seventh review): the header's
+/// last `# Sprint N` line names the card that last changed the file. While the file differs from HEAD's, or HEAD does
+/// not hold it, that is the active card, so a card that regenerates the stream and adds no header line fails here,
+/// naming its own sprint; once committed, it is the sprint whose commit last changed the file, the "Sprint N" its
+/// subject begins with. The stored stream is a change detector, not a correctness check: G3 judges the batch run
+/// against Windows, and the frozen host holds the port's equivalence on rows 0-28 alone.
+#[test]
+fn the_stored_streams_header_names_the_sprint_that_last_changed_it() {
+    let root = root();
+    let text = fs::read(root.join(RUST_STREAM)).unwrap();
+    let named = String::from_utf8_lossy(&text)
+        .lines()
+        .take_while(|l| l.starts_with('#'))
+        .filter_map(header_sprint)
+        .last();
+    let at_head = git(&root, &["show", &format!("HEAD:{RUST_STREAM}")]);
+    let changed = !at_head.status.success() || at_head.stdout != text;
+    let (expected, why) = if changed {
+        let n = active_sprint(&root).unwrap_or_else(|e| panic!("{RUST_STREAM} differs from HEAD's and {e}"));
+        (n, "the active card, the file differing from HEAD's or not in HEAD")
+    } else {
+        let log = git(&root, &["log", "-1", "--format=%s", "--", RUST_STREAM]);
+        let subject = String::from_utf8_lossy(&log.stdout).trim().to_string();
+        let n = header_sprint(&format!("# {subject}"))
+            .unwrap_or_else(|| panic!("the last commit changing {RUST_STREAM} is {subject:?}, which names no sprint"));
+        (n, "the sprint of the last commit that changed it")
+    };
+    assert_eq!(
+        named,
+        Some(expected),
+        "{RUST_STREAM}'s header's last \"# Sprint N\" line names {named:?}; expected Sprint {expected}, {why}"
+    );
+    println!("{RUST_STREAM}'s header names Sprint {expected}, {why}");
 }
 
 /// A line with each run of digits, decimal point included, as one mark: the numbers a log line carries vary by run
