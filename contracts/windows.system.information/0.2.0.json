@@ -1,0 +1,152 @@
+{
+ "contract_id": "windows.system.information",
+ "version": "0.2.0",
+ "status": "accepted",
+ "summary": "GetNativeSystemInfo and GetSystemInfo (fixed fields as observed, processor level and revision from CPUID), GetVersionExW without a manifest (6.2 build 9200, product type 1), GlobalMemoryStatusEx, GetTickCount and GetSystemDirectoryW (19 characters, not C:\\Windows\\system32 as written), with their size and length errors. 0.2.0 holds the laptop's rows (Sprint 379; the Decision \"Which Windows w2m answers as, the reference being the laptop\", 2026-11-27): the runners' two binaries run on the laptop, Windows 11 client, where two rows differ from 0.1.0's, a workstation's product type and a system directory spelled otherwise.",
+ "applicability": "laptop (laptop-x64-10.0.26200.7840-Client, 13th Gen Intel(R) Core(TM) i5-13420H)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the laptop's tools/windows_machine/run-job.ps1 through cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/system_info/system_info.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "native_system_info",
+    "err": 57005,
+    "architecture": 9,
+    "reserved": 0,
+    "page_size": 4096,
+    "minimum_address": 65536,
+    "maximum_address": 140737488289791,
+    "processors_match_mask": true,
+    "processors_positive": true,
+    "processor_type": 8664,
+    "allocation_granularity": 65536,
+    "level_is_cpuid_family": true,
+    "revision_is_cpuid_model_stepping": true
+   },
+   {
+    "s": "system_info",
+    "err": 57005,
+    "architecture": 9,
+    "reserved": 0,
+    "page_size": 4096,
+    "minimum_address": 65536,
+    "maximum_address": 140737488289791,
+    "processors_match_mask": true,
+    "processors_positive": true,
+    "processor_type": 8664,
+    "allocation_granularity": 65536,
+    "level_is_cpuid_family": true,
+    "revision_is_cpuid_model_stepping": true
+   },
+   {
+    "s": "system_info.same_as_native",
+    "value": true
+   },
+   {
+    "s": "version_ex",
+    "ret": 1,
+    "err": 57005,
+    "major": 6,
+    "minor": 2,
+    "build": 9200,
+    "platform": 2,
+    "service_pack_major": 0,
+    "product_type": 1,
+    "csd_empty": true
+   },
+   {
+    "s": "version_ex.bad_size",
+    "ret": 0,
+    "err": 122
+   },
+   {
+    "s": "memory_status_ex",
+    "ret": 1,
+    "err": 57005,
+    "length": 64,
+    "load_percent": true,
+    "avail_phys_le_total": true,
+    "total_phys_ge_1gb": true,
+    "avail_virtual_le_total": true,
+    "total_virtual": 140737488224256,
+    "avail_extended_virtual": 0
+   },
+   {
+    "s": "memory_status_ex.bad_length",
+    "ret": 0,
+    "err": 87
+   },
+   {
+    "s": "tick_count",
+    "err": 57005,
+    "advances": true,
+    "step_under_100ms": true,
+    "system_time_under_100ms": true
+   },
+   {
+    "s": "system_directory",
+    "length": 19,
+    "err": 57005,
+    "is_c_windows_system32": false
+   },
+   {
+    "s": "system_directory.small",
+    "ret": 20,
+    "err": 57005
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "evidence_id": "laptop-rows",
+   "category": "observed",
+   "source_ref": "runs lap-20261013T231059422Z-136bec80-156 and lap-20261013T231059422Z-136bec80-157: laptop, laptop-x64-10.0.26200.7840-Client, 13th Gen Intel(R) Core(TM) i5-13420H, probe sha256:3a8a76e25b85a37d5966fefda2d3c607a6bdf5baf1fc885b46f8d5442e86ce97 (-156, the binary of the six windows-2025 runs) and sha256:d253082973f83d2c0c6ed95f911884f9e253b2c7519029efa7a1edbd969538e4 (-157, the six windows-2022 runs), the runners' two binaries; store/probe-runs/lap-20261013T231059422Z-136bec80-156/body-1.jsonl and body-2.jsonl and -157's, all four byte for byte alike; the rows raw",
+   "applicability": "the build and CPU observed",
+   "execution_ids": [
+    "system_info-20261013T231059422Z-156-1",
+    "system_info-20261013T231059422Z-156-2",
+    "system_info-20261013T231059422Z-157-1",
+    "system_info-20261013T231059422Z-157-2"
+   ]
+  },
+  {
+   "evidence_id": "ms-getversionexw",
+   "category": "documented",
+   "applicability": "Windows 10 and later",
+   "source_ref": "https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getversionexw (page updated 2024-02-22; retrieved 2026-10-10)",
+   "quote": "applications not manifested for Windows 8.1 or Windows 10 will return the Windows 8 OS version value (6.2)."
+  },
+  {
+   "evidence_id": "laptop-profile",
+   "category": "observed",
+   "source_ref": "store/reference_machine/profile-lap-20261128T042841141Z-4c0653e2.json (sha256 a4bdf40424dc75fbee367edb9ed1a53708930a41dacd2ed4e724e0952aedb476): the profile.json tools/windows_machine/profile.ps1 wrote in laptop job lap-20261128T042841141Z-4c0653e2, 2026-11-28T04:29:20.69Z, Windows 11 Home 26200.9974; system_directory C:\\windows\\system32 and windows_directory C:\\windows, each kernel32's GetSystemDirectoryW and GetWindowsDirectoryW called by the profile. Windows refused the job's probe (exit 4551, Device Guard policy), so no run of it is stored.",
+   "applicability": "the build observed"
+  }
+ ],
+ "open_questions": [
+  "The laptop is Windows 11 client: product type 1 (VER_NT_WORKSTATION), which w2m answers; the runners, Windows Server, answered 3.",
+  "Processor count, memory amounts and the tick count are machine values; the rows hold relations. w2m answers the runners' four processors (Sprint 061), the laptop's total physical memory, 33970921472 bytes (memory_bytes in store/reference_machine/profile-lap-20261128T042841141Z-4c0653e2.json, the one amount measured), other memory amounts chosen under the relations, and the guest counter's milliseconds.",
+  "The rows hold the system directory's length and that it is not C:\\Windows\\system32 compared case for case; its string is not a row. w2m answers C:\\windows\\system32, the laptop profile's (evidence laptop-profile). No 26200.9974 run of these binaries is stored: the laptop refused binary 3a8a76e2, -156's, in two jobs of 2026-11-28, one building it there byte for byte and one sending the stored copy (exit 4551, Device Guard policy)."
+ ],
+ "sections": {
+  "probe": "probes/system_info (Sprint 044)",
+  "implementation": "tools/guest_runtime/system_info.c",
+  "rows": "scripts/family_run.py system_info",
+  "excluded": "none"
+ },
+ "history": "0.1.0 (Sprint 046) held the GitHub runners' rows, twelve runs from 38049865817 to 38049999396 on windows-2025 and windows-2022, Windows Server: product type 3, the system directory C:\\Windows\\system32; 0.2.0 (Sprint 379) the laptop's, the same two binaries, differing in version_ex and system_directory; 0.1.0 is kept unchanged (the Decision of 2026-10-07)."
+}

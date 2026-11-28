@@ -1309,7 +1309,12 @@ const FIXTURE_RUN: &str = "lap-20261014T044509652Z-627bbd99";
 /// temporary directory as `retaken-<name>.tsv`: whether it exited 0, its output, its errors.
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 fn family_known_with(root: &Path, name: &str, rows: &str) -> (bool, String, String) {
-    let comment = fs::read_to_string(root.join(RETAKEN)).unwrap();
+    let comment: String = fs::read_to_string(root.join(RETAKEN))
+        .unwrap()
+        .lines()
+        .filter(|l| l.starts_with('#'))
+        .map(|l| format!("{l}\n"))
+        .collect();
     let table = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("retaken-{name}.tsv"));
     fs::write(&table, format!("{comment}{rows}\n")).unwrap();
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_family_known"))
@@ -1327,7 +1332,8 @@ fn family_known_with(root: &Path, name: &str, rows: &str) -> (bool, String, Stri
 /// A row of the re-taken table moves its family's contract column in `family_known`'s output and nothing else
 /// (Sprint 378). The fixture holds `code_rewrite`, a frozen family of one run whose record names
 /// windows.memory.code_rewrite@0.2.0, to that contract's 0.1.0, of row rule raw as 0.2.0 is, so its row's fourth column
-/// alone moves and every other line is the stored lookup's. The stored table names no family: no card has re-taken one.
+/// alone moves and every other line is the stored lookup's. From Sprint 379 the fixture is the stored table's rows, which
+/// name no `code_rewrite`, and the fixture's row after them.
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 #[test]
 fn a_retaken_row_moves_its_familys_contract_and_nothing_else() {
@@ -1339,13 +1345,14 @@ fn a_retaken_row_moves_its_familys_contract_and_nothing_else() {
         .map(str::to_string)
         .collect();
     assert!(
-        named.is_empty(),
-        "{RETAKEN} names {named:?}, where no card has re-taken a family"
+        !named.iter().any(|r| r.starts_with("code_rewrite\t")),
+        "{RETAKEN} names code_rewrite, the fixture's family"
     );
     let known = fs::read_to_string(root.join(KNOWN)).unwrap();
     let known: Vec<&str> = known.lines().filter(|l| !l.starts_with('#')).collect();
     let row = format!("code_rewrite\twindows.memory.code_rewrite@0.1.0\t{FIXTURE_RUN}");
-    let (ok, out, err) = family_known_with(&root, "moves", &row);
+    let rows: String = named.iter().map(|r| format!("{r}\n")).collect();
+    let (ok, out, err) = family_known_with(&root, "moves", &format!("{rows}{row}"));
     assert!(ok, "family_known with the fixture: {err}");
     let derived: Vec<&str> = out.lines().collect();
     assert_eq!(
@@ -1373,6 +1380,103 @@ fn a_retaken_row_moves_its_familys_contract_and_nothing_else() {
     );
     let line = derived.iter().find(|l| l.starts_with("code_rewrite\t")).unwrap();
     assert_eq!(line.split('\t').nth(3), Some("windows.memory.code_rewrite@0.1.0"));
+}
+
+/// Each contract the re-taken table names holds its laptop runs' rows (Sprint 379): every body of every stored laptop run
+/// its evidence cites, the table's run among them, after the contract's row rule, conforms to its rows by
+/// `exact_rows`; its evidence cites no runner's run; and the contract version the family record names is unchanged
+/// from HEAD's, a change of evidence being a new minor version (the Decision of 2026-10-07). Prints each family's runs
+/// and bodies.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn each_retaken_contract_holds_its_laptop_runs_rows() {
+    let root = root();
+    let table = fs::read_to_string(root.join(RETAKEN)).unwrap();
+    let rows: Vec<Vec<&str>> = table
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+        .map(|l| l.split('\t').collect())
+        .collect();
+    assert!(!rows.is_empty(), "{RETAKEN} names no family");
+    let known = fs::read_to_string(root.join(KNOWN)).unwrap();
+    let mut wrong = Vec::new();
+    for c in &rows {
+        let (family, contract, run) = (c[0], c[1], c[2]);
+        let (id, version) = contract.split_once('@').unwrap();
+        let file: Value =
+            serde_json::from_str(&fs::read_to_string(root.join(format!("contracts/{id}/{version}.json"))).unwrap())
+                .unwrap();
+        let rule = file["acceptance"]["derivation"]
+            .as_str()
+            .and_then(|d| d.strip_prefix("scripts/family_run.py "))
+            .and_then(|d| d.split(':').next())
+            .unwrap_or("raw");
+        let want = file["acceptance"]["rows"].as_array().unwrap();
+        let evidence = file["evidence"].to_string();
+        // the stored laptop runs the evidence names, by their ids
+        let mut cited: Vec<&str> = evidence
+            .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '-'))
+            .filter(|t| t.starts_with("lap-") && root.join("store/probe-runs").join(t).join("body-1.jsonl").is_file())
+            .collect();
+        cited.sort_unstable();
+        cited.dedup();
+        if !cited.contains(&run) {
+            wrong.push(format!(
+                "{family}: {contract}'s evidence cites no {run}, the table's run"
+            ));
+        }
+        let mut bodies = 0;
+        for laptop in &cited {
+            for i in 1.. {
+                let Ok(text) = fs::read_to_string(root.join(format!("store/probe-runs/{laptop}/body-{i}.jsonl")))
+                else {
+                    break;
+                };
+                let printed: Vec<Row> = text
+                    .lines()
+                    .map(|l| match serde_json::from_str::<Value>(l) {
+                        Ok(Value::Object(r)) => r,
+                        _ => panic!("{laptop}/body-{i}.jsonl: a line that is no row: {l}"),
+                    })
+                    .collect();
+                let derived = derive(family, rule, printed).unwrap();
+                if let Some(divergence) = exact_rows(want, &derived) {
+                    wrong.push(format!(
+                        "{family}: {laptop}/body-{i}.jsonl against {contract}: {divergence}"
+                    ));
+                }
+                bodies += 1;
+            }
+        }
+        // the family's runner runs, from the lookup, cited nowhere in the evidence
+        for l in known.lines().filter(|l| l.starts_with(&format!("{family}\t"))) {
+            let runner = l.split('\t').nth(1).unwrap();
+            if !runner.starts_with("lap-") && evidence.contains(runner) {
+                wrong.push(format!(
+                    "{family}: {contract}'s evidence cites the runner's run {runner}"
+                ));
+            }
+        }
+        // the contract's other versions, the record's among them, kept as HEAD holds them
+        for earlier in fs::read_dir(root.join(format!("contracts/{id}")))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+            .filter(|n| n != &format!("{version}.json"))
+        {
+            let path = format!("contracts/{id}/{earlier}");
+            let head = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(["show", &format!("HEAD:{path}")])
+                .output()
+                .unwrap();
+            if !head.status.success() || head.stdout != fs::read(root.join(&path)).unwrap() {
+                wrong.push(format!("{family}: {path} differs from HEAD's"));
+            }
+        }
+        println!("{family}: {contract} ({rule}), laptop runs {cited:?}, {bodies} bodies conforming");
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 /// A re-taken row is refused naming what it names wrongly (Sprint 378): a family the frozen index lacks (a joined

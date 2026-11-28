@@ -12,10 +12,16 @@
  *     or STATUS_INVALID_PARAMETER (0xC000000D) for a type mask of 0
  *   - VerifyVersionInfoW answers the same as TRUE, or FALSE with ERROR_OLD_WIN_VERSION (1150) or ERROR_BAD_ARGUMENTS
  *     (160); TRUE leaves the last error
- * The version is w2m's profile, Windows Server 2025: 10.0 build 26100, no service pack, platform 2, product type 3
- * (server), suite mask 0x190. ntdll answers it to every program; kernel32 tells it only to a program whose manifest
- * names Windows 10 (resources.c), the rest 6.2 build 9200, whose VerifyVersionInfoW no row records (it stops the run).
- * The suite conditions (VER_AND, VER_OR) are not in the rows and stop the run.
+ * The version is the laptop's (Sprint 379; the Decision "Which Windows w2m answers as, the reference being the laptop",
+ * 2026-11-27), Windows 11 client: 10.0 build 26200, no service pack, platform 2, product type 1 (workstation), suite
+ * mask 768, as contracts/windows.version.version 0.2.0 holds the rows of laptop run
+ * lap-20261013T231059422Z-136bec80-186 (body-1.jsonl lines 88-89, verify.product_server a mismatch and
+ * verify.product_workstation a success; line 92, get_version.ex, suite 768, product 1; the build 26200 is the run's
+ * profile.txt, laptop-x64-10.0.26200.7840-Client, the rows keeping only that it is above 26100 and no runner's). Until
+ * Sprint 378 it was the runners' Windows Server 2025, build 26100, product type 3, suite 0x190. ntdll answers it to
+ * every program; kernel32 tells it only to a program whose manifest names Windows 10 (resources.c), the rest 6.2
+ * build 9200, whose VerifyVersionInfoW no row records (it stops the run). The suite conditions (VER_AND, VER_OR) are
+ * not in the rows and stop the run.
  */
 #include "runtime.h"
 
@@ -40,12 +46,12 @@ typedef unsigned short u16;
 #define ERROR_BAD_ARGUMENTS 160u
 #define ERROR_OLD_WIN_VERSION 1150u
 
-/* w2m's Windows: Server 2025 (the runners' profile, build 26100) */
+/* w2m's Windows: the laptop's, Windows 11 client build 26200 (laptop run lap-20261013T231059422Z-136bec80-186) */
 #define MAJOR 10u
 #define MINOR 0u
-#define BUILD 26100u
+#define BUILD 26200u
 #define PLATFORM 2u
-#define PRODUCT_TYPE 3u
+#define PRODUCT_TYPE 1u                                   /* VER_NT_WORKSTATION: -186 lines 88-89 and 92 */
 
 static void set_error(u32 code) { w2m_teb()->last_error_value = code; }
 
@@ -132,11 +138,12 @@ u64 k32_VerifyVersionInfoW(u64 info, u64 types, u64 mask) {
 }
 
 /* SHELL32's DllGetVersion(pdvi), reached through GetProcAddress: DLLVERSIONINFO (20 bytes) or DLLVERSIONINFO2 (32)
- * with 10.0 build 10586 on both runners (shell32's own number, not the system's); DLLVERSIONINFO2's ullVersion ends
- * in shell32's file revision, which differs by image (33438 on Server 2025, w2m's profile; 5499 on 2022); another
- * size is E_INVALIDARG with nothing written. */
+ * with 10.0 build 10586 on both runners and the laptop (shell32's own number, not the system's); DLLVERSIONINFO2's
+ * ullVersion ends in shell32's file revision, which differs by image (7840 on the laptop at 26200.7840, -186 line 96,
+ * w2m's profile; 33438 on Server 2025, 5499 on 2022; the rows keep only that it is set); another size is E_INVALIDARG
+ * with nothing written. */
 #define SHELL32_BUILD 10586u
-#define SHELL32_REVISION 33438u
+#define SHELL32_REVISION 7840u
 #define E_INVALIDARG 0x80070057u
 u64 shell32_DllGetVersion(u64 info) {
     u32 *d = (u32 *)info;

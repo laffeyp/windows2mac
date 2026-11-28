@@ -67,7 +67,7 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 
 /// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
 /// is the frozen one with these changes, which their own tests judge (Sprint 272).
-const DEPARTURES: [(&str, &str); 14] = [
+const DEPARTURES: [(&str, &str); 16] = [
     (
         "tools/guest_runtime/block_compiler.c",
         "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
@@ -155,6 +155,16 @@ const DEPARTURES: [(&str, &str); 14] = [
          three releases' state change one function, signal_object, which SignalObjectAndWait's signal shares",
     ),
     (
+        "tools/guest_runtime/system_info.c",
+        "Sprint 379: GetVersionExW, GetWindowsDirectoryW, GetSystemDirectoryW and GlobalMemoryStatusEx's total physical \
+         memory (33970921472 bytes, the laptop profile's memory_bytes) answer as the laptop does, the Decision \
+         \"Which Windows w2m answers as, the reference being the laptop\": a manifest naming Windows 10 gets build \
+         26200, suite mask 768 and product type 1, and none gets product type 1 (laptop runs \
+         lap-20261013T231059422Z-136bec80-186 line 92 and -156 line 4); the Windows directory C:\\windows in lower case \
+         (-084 lines 54-55); the system directory as the laptop's profile.json records it, held by \
+         contracts/windows.version.version, windows.system.information and windows.file.files_more 0.2.0",
+    ),
+    (
         "tools/guest_runtime/thread_storage.c",
         "Sprint 345: the TLS and FLS slots' own lock around the slot bitmaps, the callbacks, the FLS block list and \
          the TLS set-up, for its seven services, which take no runtime word; Sprint 347: TlsAlloc and TlsFree make \
@@ -177,6 +187,13 @@ const DEPARTURES: [(&str, &str); 14] = [
          only on an armed thread not BLOCKED, by compare-and-swap, w2m_block clearing it by one exchange, so a thread \
          running guest code on another vCPU takes no mark; w2m_wait_again marks the running thread; Sprint 356's \
          amendment: W2mThreadEnd abandons every mutex its thread owns before the host's THREAD_END",
+    ),
+    (
+        "tools/guest_runtime/version.c",
+        "Sprint 379: the version the laptop's, Windows 11 client 10.0 build 26200, product type 1, the Decision \"Which \
+         Windows w2m answers as, the reference being the laptop\" (laptop run lap-20261013T231059422Z-136bec80-186 \
+         lines 88-89 and 92, and its profile.txt), and shell32's file revision 7840, its line 96, where the runners' \
+         Server 2025 gave 26100, product type 3 and 33438; held by contracts/windows.version.version 0.2.0",
     ),
     (
         "tools/vm_compiler/vm_compiler.c",

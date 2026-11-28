@@ -36,6 +36,16 @@ const REPEATS: [&str; 3] = [
     "store/frontier-calls/frontier-643a6283510c-1793247683722772000.tsv",
     "store/frontier-calls/frontier-643a6283510c-1793247803946454000.tsv",
 ];
+/// The first call of `STREAM` whose answer a card re-took from the laptop and which moved the game (Sprint 379):
+/// GetWindowsDirectoryW, now `C:\windows` where the frozen host answered `C:\Windows`. The frozen stream is the
+/// reference row for row up to and including it; past it the rows are judged against Windows alone
+/// (`crates/call_compare/tests/call_compare.rs`), as past the stream's end. Measured (Sprint 379's result): with the
+/// directory reverted every row matches; with it re-taken the first difference past it is in argument slots past the
+/// function's parameters in specs/signatures.json (ResumeThread's a7, WaitForSingleObjectEx's a6, ReleaseSemaphore's
+/// a7 and a4), and the calls' order changes from row 6881; the answers re-taken earlier in the stream
+/// (GlobalMemoryStatusEx's total, DllGetVersion's revision, RtlVerifyVersionInfo's product type) leave every row up
+/// to it equal, and this test holds them so.
+const FIRST_RETAKEN_CALL: &str = "GetWindowsDirectoryW";
 /// Guests whose output is a clock's reading, 16 hex digits and a newline (`two_counters`' the ticks its two counters
 /// took, Sprint 354)
 const CLOCK_GUESTS: [&str; 3] = ["qpc", "qpc2", "two_counters"];
@@ -239,12 +249,25 @@ fn the_batch_runs_calls_are_the_python_runs_up_to_the_stop() {
             })
             .collect()
     };
-    for (row, (r, p)) in ours.iter().zip(&python).enumerate() {
+    // the cut: the first call whose answer was re-taken from the laptop (Sprint 379), found in the stream by name
+    let cut = stream
+        .lines()
+        .position(|l| l.split('\t').nth(4) == Some(FIRST_RETAKEN_CALL))
+        .unwrap_or_else(|| panic!("{STREAM} has no {FIRST_RETAKEN_CALL}"));
+    for (row, (r, p)) in ours.iter().zip(&python).enumerate().take(cut + 1) {
         assert_eq!(
             cells(row, r, &ours_names),
             cells(row, p, &python_names),
             "row {row} of the call stream differs from the Python batch run's"
         );
+    }
+    if ours.len() > cut {
+        println!(
+            "the Rust stream equals the Python's rows 0-{cut}, to {FIRST_RETAKEN_CALL}, the first call re-taken from the \
+             laptop; its {} rows past it are judged against Windows alone",
+            ours.len() - cut - 1
+        );
+        return;
     }
     // a stop inside a traced call leaves it in flight; a stop between calls (a created thread's stack growing, Sprint
     // 211) leaves none, and the stream's rows are all that is held; checked whether or not the stream reaches the

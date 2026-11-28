@@ -388,6 +388,102 @@ fn named_sync_objects_is_held_to_its_laptop_run() {
     );
 }
 
+/// The frozen families `store/family_runs/retaken-2026-11-27.tsv` re-takes on the laptop (Sprint 379), each with the rows
+/// by which its laptop run's bodies differ from those of every runner run of the same binary, as Sprint 378's result
+/// measured them: a workstation's product type, suite and build (version, and DllGetVersion's shell32 revision, which
+/// its row rule keeps as set), the product type and the system directory's spelling (system_info), the Windows directory
+/// in lower case (files_more).
+const RETAKEN_DIFFERENCES: [(&str, &[&str]); 3] = [
+    (
+        "version",
+        &[
+            "verify.product_server",
+            "verify.product_workstation",
+            "get_version.ex",
+            "get_version.plain",
+            "dll_get_version.info2",
+        ],
+    ),
+    ("files_more", &["windows.full", "windows.exact"]),
+    ("system_info", &["version_ex", "system_directory"]),
+];
+
+/// Each re-taken family's laptop run, as the re-taken table names it, is a stored laptop run of that family that ran a
+/// runner binary of the family's lookup rows, and its every body differs from every body of each runner run of that
+/// binary in exactly the rows `RETAKEN_DIFFERENCES` names (Sprint 379): any other difference is a finding about the
+/// reference.
+#[test]
+fn each_retaken_familys_laptop_rows_differ_from_the_runners_as_named() {
+    let root = root();
+    let store = root.join("store/probe-runs");
+    let retaken = read(&root.join("store/family_runs/retaken-2026-11-27.tsv"));
+    let known = read(&root.join("store/family_runs/known-2026-10-29.tsv"));
+    let rows: Vec<Vec<&str>> = retaken
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+        .map(|l| l.split('\t').collect())
+        .collect();
+    let families: Vec<&str> = rows.iter().map(|c| c[0]).collect();
+    let named: Vec<&str> = RETAKEN_DIFFERENCES.iter().map(|(f, _)| *f).collect();
+    assert_eq!(
+        families, named,
+        "the re-taken table's families against those named here"
+    );
+    let mut wrong = Vec::new();
+    for (c, (_, differing)) in rows.iter().zip(RETAKEN_DIFFERENCES) {
+        let (family, laptop) = (c[0], c[2]);
+        let l = store.join(laptop);
+        if !windows_machine::laptop_profile(&read(&l.join("profile.txt"))) {
+            wrong.push(format!("{family}: laptop run {laptop}'s profile is not the laptop's"));
+        }
+        if laptop_family(&store, laptop).as_deref() != Some(family) {
+            wrong.push(format!(
+                "{family}: laptop run {laptop} is of family {:?}",
+                laptop_family(&store, laptop)
+            ));
+        }
+        let binary = read(&l.join("probe.sha256")).trim().to_string();
+        let runners: Vec<&str> = known
+            .lines()
+            .filter(|k| k.starts_with(&format!("{family}\t")) && k.split('\t').nth(2) == Some(binary.as_str()))
+            .map(|k| k.split('\t').nth(1).unwrap())
+            .collect();
+        if runners.is_empty() {
+            wrong.push(format!(
+                "{family}: laptop run {laptop} ran binary {binary}, which no runner run of the family ran"
+            ));
+        }
+        let laptop_bodies = bodies(&l);
+        let mut compared = 0;
+        for runner in &runners {
+            for (rn, rb) in bodies(&store.join(runner)) {
+                for (ln, lb) in &laptop_bodies {
+                    let unlike = rows_unlike(&rb, lb);
+                    if unlike != differing.to_vec() {
+                        wrong.push(format!(
+                            "{family}: runner {runner}/{rn} against laptop {laptop}/{ln}: rows unlike {unlike:?}, named \
+                             {differing:?}"
+                        ));
+                    }
+                    compared += 1;
+                }
+            }
+        }
+        println!(
+            "{family}: laptop {laptop} against {} runner runs of binary {binary}, {compared} pairs",
+            runners.len()
+        );
+        if compared == 0 {
+            wrong.push(format!("{family}: no body compared"));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "the re-taken families' laptop rows:\n{}",
+        wrong.join("\n")
+    );
+}
+
 /// Contract 0.1.0 stays as Sprint 369 committed it, 53449a78a (the Decision of 2026-10-07: a change of evidence is a new
 /// minor version, the old file kept unchanged).
 #[test]

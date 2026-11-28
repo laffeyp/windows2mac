@@ -91,6 +91,9 @@ pub const KEPT: [&str; 8] = [
 pub const KNOWN: &str = "store/family_runs/known-2026-10-29.tsv";
 /// The families that joined on the Rust host (Sprint 369), in `KNOWN`'s first five columns; read after it.
 pub const JOINED: &str = "store/family_runs/joined-2026-11-27.tsv";
+/// The frozen families held to a contract re-taken on the laptop (Sprint 378): family, contract@version, the laptop run
+/// whose rows that contract holds; read after `JOINED`, the run's binary from its `probe.sha256` (Sprint 379).
+pub const RETAKEN: &str = "store/family_runs/retaken-2026-11-27.tsv";
 /// Where a batch's or a game job's bundle comes back: the job's `out/`, `job.json` beside it.
 pub const BATCHES: &str = "build/batches";
 /// A batch's files, kept once in `store/probe-runs/<batch>/` (`store_probe_runs.py` `BATCH_FILES`).
@@ -778,9 +781,11 @@ impl BatchItem {
 
 /// The batch's items (the Python's `batch_items`): for each name, one item per distinct binary of that family in
 /// `KNOWN` and then `JOINED` (a row of both counted once), in the tables' order, a repeated binary adding its run to the
-/// first item's `runs`; no name, every family the tables hold, sorted. A name `<family>@<run>` is one item, the binary
-/// `store/probe-runs/<run>/probe.sha256` names, for a family whose runs neither table holds; a probe that loads a DLL
-/// is refused there, since such a run records no DLL.
+/// first item's `runs`; no name, every family the tables hold, sorted. From Sprint 379 a family `RETAKEN` names adds its
+/// laptop run there, by the binary `store/probe-runs/<run>/probe.sha256` names: to the item of that binary, or as an item
+/// of its own when no table row runs it, refused for a probe that loads a DLL, since the table records none. A name
+/// `<family>@<run>` is one item, the binary `store/probe-runs/<run>/probe.sha256` names, for a family whose runs neither
+/// table holds; a probe that loads a DLL is refused there too.
 pub fn batch_items(root: &Path, names: &[String]) -> Result<Vec<BatchItem>, String> {
     let mut rows: Vec<Vec<String>> = Vec::new();
     for table in [KNOWN, JOINED] {
@@ -790,6 +795,30 @@ pub fn batch_items(root: &Path, names: &[String]) -> Result<Vec<BatchItem>, Stri
             if c.len() > 4 && !rows.iter().any(|r| r[0] == c[0] && r[1] == c[1]) {
                 rows.push(c);
             }
+        }
+    }
+    // the re-taken table's laptop runs, in KNOWN's first five columns
+    let text = fs::read_to_string(root.join(RETAKEN)).map_err(|e| format!("{RETAKEN}: {e}"))?;
+    for line in text.lines().filter(|l| !l.starts_with('#') && !l.is_empty()) {
+        let [family, contract, run] = line.split('\t').collect::<Vec<_>>()[..] else {
+            return Err(format!("{RETAKEN}: a row of 3 columns, not {line:?}"));
+        };
+        let at = format!("store/probe-runs/{run}/probe.sha256");
+        let sha = fs::read_to_string(root.join(&at))
+            .map_err(|e| format!("{RETAKEN}: {family}'s run {run}: {at}: {e}"))?
+            .trim()
+            .to_string();
+        let beside = match rows.iter().find(|r| r[0] == family && r[2] == sha) {
+            Some(r) => r[4].clone(),
+            None if probe_config(root, &run_probe(root, family, run)?)?.get("dll").is_some() => {
+                return Err(format!(
+                    "{RETAKEN}: {family}'s run {run} ran binary {sha}, which no table row runs with its DLL"
+                ));
+            }
+            None => "-".to_string(),
+        };
+        if !rows.iter().any(|r| r[0] == family && r[1] == run) {
+            rows.push(vec![family.into(), run.into(), sha, contract.into(), beside]);
         }
     }
     let names: Vec<String> = if names.is_empty() {

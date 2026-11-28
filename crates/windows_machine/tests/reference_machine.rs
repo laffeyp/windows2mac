@@ -20,6 +20,9 @@ const LAST_RUNNER_BEFORE_THE_LAPTOP: u64 = 38_311_779_649;
 const LISTED: &str = "store/reference_machine/runner-runs-after-the-laptop-2026-11-27.tsv";
 /// The stores walked.
 const STORES: [&str; 2] = ["store/probe-runs", "store/game-runs"];
+/// Where a laptop job's `profile.json` is kept whole when the job stored no run (Sprint 379: Windows refused the
+/// probe after the profile was taken), as `profile-<job>.json`; a contract may cite such a job for the machine's values.
+const PROFILES: &str = "store/reference_machine";
 /// The runner's runs from before the laptop arrived, 409 probe runs and 10 game runs: a closed set, since no later
 /// runner run has a smaller id and no stored run is removed.
 const RUNNER_RUNS_BEFORE_THE_LAPTOP: usize = 419;
@@ -239,10 +242,13 @@ fn every_laptop_run_from_377_records_its_code_integrity() {
     assert!(held > 0, "no stored run from {FIRST_CODE_INTEGRITY_RUN}");
 }
 
-/// The family tables, each run in its second column (Sprint 374).
-const FAMILY_TABLES: [&str; 2] = [
-    "store/family_runs/known-2026-10-29.tsv",
-    "store/family_runs/joined-2026-11-27.tsv",
+/// The family tables (Sprint 374), each with the column its run is in, from 1, and whether the table holds laptop runs
+/// alone: from Sprint 379 the re-taken table, whose third column names the laptop run a re-taken contract's rows come
+/// from (`crates/w2m_vm/src/bin/family_known.rs` `retaken`), so a runner's run there fails even at or below the cut.
+const FAMILY_TABLES: [(&str, usize, bool); 3] = [
+    ("store/family_runs/known-2026-10-29.tsv", 2, false),
+    ("store/family_runs/joined-2026-11-27.tsv", 2, false),
+    ("store/family_runs/retaken-2026-11-27.tsv", 3, true),
 ];
 
 /// The runs a contract's text cites: every GitHub run id, eleven digits standing alone, and every laptop run id,
@@ -311,21 +317,35 @@ fn cited_in(text: &str) -> Vec<String> {
 
 /// Every run a family table or a contract under `contracts/` cites is held to the walk's rule (Sprint 374; the Decision
 /// "A contract's evidence runs held to the reference machine too"): a stored run as `machine` holds it, a run not
-/// stored only when it is a GitHub run at or below `LAST_RUNNER_BEFORE_THE_LAPTOP`. Each failure names the file and
-/// the run; the count of each kind is printed.
+/// stored only when it is a GitHub run at or below `LAST_RUNNER_BEFORE_THE_LAPTOP` or a laptop job whose profile
+/// `PROFILES` keeps, naming the laptop and build 26200, and a run a table of laptop runs cites only as the laptop's
+/// (Sprint 379). Each failure names the file and the run; the count of each kind is printed.
 #[test]
 fn every_cited_run_is_held_to_the_reference_rule() {
     let root = root();
     let listed = listed(&root);
     // (citing file, run)
     let mut cited: Vec<(String, String)> = Vec::new();
-    for table in FAMILY_TABLES {
+    let mut failed = Vec::new();
+    for (table, column, laptop_only) in FAMILY_TABLES {
         let text = fs::read_to_string(root.join(table)).unwrap_or_else(|e| panic!("{table}: {e}"));
         for line in text.lines().filter(|l| !l.starts_with('#') && !l.is_empty()) {
             let run = line
                 .split('\t')
-                .nth(1)
-                .unwrap_or_else(|| panic!("{table}: a row with no run: {line:?}"));
+                .nth(column - 1)
+                .unwrap_or_else(|| panic!("{table}: a row with no run in column {column}: {line:?}"));
+            if laptop_only {
+                let kind = STORES
+                    .iter()
+                    .find(|s| root.join(s).join(run).is_dir())
+                    .map(|store| machine(store, &root.join(store).join(run), &listed));
+                if !matches!(kind, Some(Ok(Machine::Laptop))) {
+                    failed.push(format!(
+                        "{table} cites run {run}: {kind:?}, where the table holds stored laptop runs ({LAPTOP_PROFILE}) \
+                         alone"
+                    ));
+                }
+            }
             cited.push((table.to_string(), run.to_string()));
         }
     }
@@ -345,11 +365,25 @@ fn every_cited_run_is_held_to_the_reference_rule() {
         cited.extend(runs.into_iter().map(|r| (name.clone(), r)));
     }
     let mut kinds: BTreeMap<String, usize> = BTreeMap::new();
-    let mut failed = Vec::new();
     for (by, run) in &cited {
         let stored = STORES.iter().find(|s| root.join(s).join(run).is_dir());
         let kind = match stored {
             Some(store) => machine(store, &root.join(store).join(run), &listed).map(|m| format!("{m:?}")),
+            // a laptop job whose run is not stored and whose profile is (Sprint 379): its profile.json kept whole under
+            // `PROFILES`, naming the laptop
+            None if run.starts_with("lap-") && root.join(format!("{PROFILES}/profile-{run}.json")).is_file() => {
+                let at = format!("{PROFILES}/profile-{run}.json");
+                let profile: Value = serde_json::from_str(&fs::read_to_string(root.join(&at)).unwrap())
+                    .unwrap_or_else(|e| panic!("{at}: {e}"));
+                if profile["machine"] == "laptop" && profile["windows"]["build"] == 26200 {
+                    Ok("LaptopProfileNoRun".to_string())
+                } else {
+                    Err(format!(
+                        "{by} cites run {run}: {at} names machine {} build {}, not the laptop's",
+                        profile["machine"], profile["windows"]["build"]
+                    ))
+                }
+            }
             None => match run.parse::<u64>() {
                 Ok(id) if id <= LAST_RUNNER_BEFORE_THE_LAPTOP => Ok("RunnerBeforeTheLaptopNotStored".to_string()),
                 Ok(_) => Err(format!(
@@ -366,7 +400,7 @@ fn every_cited_run_is_held_to_the_reference_rule() {
     }
     let by_tables = cited
         .iter()
-        .filter(|(by, _)| FAMILY_TABLES.contains(&by.as_str()))
+        .filter(|(by, _)| FAMILY_TABLES.iter().any(|(t, _, _)| t == by))
         .count();
     println!(
         "{} citations, {by_tables} by the family tables and {} by {} contract files: {kinds:?}; failing {}",

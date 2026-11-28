@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 
 use windows_machine::{
     Batch, BatchItem, CODE_INTEGRITY, EXECUTOR, Game, HOST, JOINED, Job, KNOWN, Kind, LAPTOP_PROFILE, LINK, Py,
-    Request, STEAM_ABSENT, batch_inputs, batch_items, code_integrity, declared_temp, laptop_profile, run_id, sha256,
-    split_batch, split_game, stamp, steam_free, store, store_game, stored_run, temp_declared, tree_tar, verdict,
-    write_job,
+    RETAKEN, Request, STEAM_ABSENT, batch_inputs, batch_items, code_integrity, declared_temp, laptop_profile, run_id,
+    sha256, split_batch, split_game, stamp, steam_free, store, store_game, stored_run, temp_declared, tree_tar,
+    verdict, write_job,
 };
 
 /// The TEMP `games/hail-to-the-rainbow/state.json` declares for its state `empty`, the reference runs' (Sprint 376).
@@ -444,6 +444,14 @@ fn the_batch_reads_the_joined_table() {
     .unwrap();
     fs::write(at.join(KNOWN), &known).unwrap();
     fs::write(at.join(JOINED), &joined).unwrap();
+    // the re-taken table (Sprint 379) with no rows: no re-taken family is named here
+    let retaken: String = fs::read_to_string(root().join(RETAKEN))
+        .unwrap()
+        .lines()
+        .filter(|l| l.starts_with('#'))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    fs::write(at.join(RETAKEN), retaken).unwrap();
     let name = ["named_sync_objects".to_string()];
     let items = batch_items(&at, &name).unwrap();
     assert_eq!(items, batch_items(&root(), &name).unwrap());
@@ -460,6 +468,94 @@ fn the_batch_reads_the_joined_table() {
     fs::write(at.join(JOINED), header).unwrap();
     let why = batch_items(&at, &name).unwrap_err();
     assert!(why.contains("name no family named_sync_objects"), "{why}");
+    let _ = fs::remove_dir_all(&at);
+}
+
+/// `windows_machine batch <family>` takes the laptop run `store/family_runs/retaken-2026-11-27.tsv` names for a
+/// re-taken family (Sprint 379), by its stored binary: in a root holding the three tables, each re-taken family's items
+/// are the tree's, one of them its laptop run's binary with that run among its runs; with the re-taken table's rows gone,
+/// no item names the run, and the rest are as before.
+#[test]
+fn the_batch_reads_the_retaken_table() {
+    let at = scratch("retaken");
+    let retaken = fs::read_to_string(root().join(RETAKEN)).unwrap();
+    let rows: Vec<Vec<&str>> = retaken
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+        .map(|l| l.split('\t').collect())
+        .collect();
+    assert!(!rows.is_empty(), "{RETAKEN} names no family");
+    fs::create_dir_all(at.join("store/family_runs")).unwrap();
+    for table in [KNOWN, JOINED, RETAKEN] {
+        fs::copy(root().join(table), at.join(table)).unwrap();
+    }
+    for c in &rows {
+        let (family, run) = (c[0], c[2]);
+        fs::create_dir_all(at.join("probes").join(family)).unwrap();
+        fs::copy(
+            root().join("probes").join(family).join("probe.json"),
+            at.join("probes").join(family).join("probe.json"),
+        )
+        .unwrap();
+        fs::create_dir_all(at.join("store/probe-runs").join(run)).unwrap();
+        fs::copy(
+            root().join("store/probe-runs").join(run).join("probe.sha256"),
+            at.join("store/probe-runs").join(run).join("probe.sha256"),
+        )
+        .unwrap();
+    }
+    let header: String = retaken
+        .lines()
+        .filter(|l| l.starts_with('#'))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let mut wrong = Vec::new();
+    for c in &rows {
+        let (family, run) = (c[0], c[2]);
+        let name = [family.to_string()];
+        let binary = fs::read_to_string(root().join("store/probe-runs").join(run).join("probe.sha256")).unwrap();
+        let named = |items: &[BatchItem]| {
+            items
+                .iter()
+                .filter(|i| i.runs.split(' ').any(|r| r == run))
+                .map(|i| i.binary.clone())
+                .collect::<Vec<_>>()
+        };
+        fs::write(at.join(RETAKEN), &retaken).unwrap();
+        let with = batch_items(&at, &name).unwrap();
+        if with != batch_items(&root(), &name).unwrap() {
+            wrong.push(format!(
+                "{family}: the items in a root of the three tables are not the tree's"
+            ));
+        }
+        if named(&with) != vec![binary.trim().to_string()] {
+            wrong.push(format!(
+                "{family}: run {run} is in the items of {:?}, not of its binary {binary}",
+                named(&with)
+            ));
+        }
+        fs::write(at.join(RETAKEN), &header).unwrap();
+        let without = batch_items(&at, &name).unwrap();
+        if !named(&without).is_empty() {
+            wrong.push(format!(
+                "{family}: run {run} is named with the re-taken table's rows gone"
+            ));
+        }
+        let unnamed: Vec<BatchItem> = with
+            .into_iter()
+            .filter_map(|mut i| {
+                let runs: Vec<&str> = i.runs.split(' ').filter(|r| *r != run).collect();
+                i.runs = runs.join(" ");
+                (!i.runs.is_empty()).then_some(i)
+            })
+            .collect();
+        if unnamed != without {
+            wrong.push(format!(
+                "{family}: the items less run {run} are not those of the tables less {RETAKEN}"
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     let _ = fs::remove_dir_all(&at);
 }
 
@@ -997,4 +1093,31 @@ fn the_executor_records_the_code_integrity_state_and_window() {
     }
     assert!(last.find("code-integrity.json").unwrap() < last.find("Remove-Item $src, $tree").unwrap());
     assert_eq!(CODE_INTEGRITY, "code-integrity.json");
+}
+
+/// Sprint 379: the profile records the system and Windows directories as kernel32 answers a program, by
+/// GetSystemDirectoryW and GetWindowsDirectoryW themselves (DllImport, as cpusets.ps1 calls GetSystemCpuSetInformation),
+/// the string up to the length each answers, and a failure (0, or a length past the buffer) stopping the profile. Held
+/// by its text, as above: there is no PowerShell on this Mac.
+#[test]
+fn the_profile_records_the_system_and_windows_directories() {
+    let profile = fs::read_to_string(root().join("tools/windows_machine/profile.ps1")).unwrap();
+    for text in [
+        "[DllImport(\"kernel32.dll\", CharSet=CharSet.Unicode, SetLastError=true)]\n  static extern uint \
+         GetSystemDirectoryW([Out] char[] buffer, uint size);",
+        "[DllImport(\"kernel32.dll\", CharSet=CharSet.Unicode, SetLastError=true)]\n  static extern uint \
+         GetWindowsDirectoryW([Out] char[] buffer, uint size);",
+        "if (n == 0 || n >= b.Length) throw new System.ComponentModel.Win32Exception();\n    return new string(b, 0, \
+         (int)n);",
+        "return Answer(GetSystemDirectoryW(b, 260), b);",
+        "return Answer(GetWindowsDirectoryW(b, 260), b);",
+        "\n  system_directory = [W2mDirectories]::SystemDirectory()\n",
+        "\n  windows_directory = [W2mDirectories]::WindowsDirectory()\n",
+    ] {
+        assert!(profile.contains(text), "profile.ps1 has no {text:?}");
+    }
+    let defined = profile
+        .find("Add-Type -TypeDefinition @'\nusing System; using System.Runtime.InteropServices;\npublic static class W2mDirectories")
+        .expect("profile.ps1 defines W2mDirectories");
+    assert!(defined < profile.find("$profile = [ordered]@{").unwrap());
 }
