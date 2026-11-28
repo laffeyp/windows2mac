@@ -226,18 +226,21 @@ try {
         }
         if (Test-Path $app) { cmd /c rmdir $app }
         New-Item -ItemType Junction -Path $app -Target $gameDir | Out-Null
-        # the game's TEMP is the job's own folder: the user's TEMP is shared with the session's other programs (Steam,
-        # Defender's helper; 2026-10-17: 5 entries after the reset, one held open), so it cannot be proved empty (Sprint 102). GetTempPath
-        # reads TMP first, then TEMP
-        New-Item -ItemType Directory -Force C:\w2m\temp | Out-Null
-        # the initial state (§5): no saved settings, an empty TEMP, no log, no game process; each item read back and
-        # compared with the state games/<game>/state.json declares, the run stopped before the game on a difference
-        # (Sprint 102)
+        # the game's TEMP is the user's own, the path the reference runs of 2026-10-14 and w2m give it (Sprint 376: the
+        # job's own folder, C:\w2m\temp from Sprint 102, made nine of the game's values differ from theirs). It is shared
+        # with the session's other programs (2026-10-17: 5 entries, one held open), so it is not emptied: the files the
+        # game makes there (state.json temp_files_made, GetTempFileNameW's "cur" files) are removed and counted.
+        # GetTempPath reads TMP first, then TEMP
+        # the initial state (§5): no saved settings, none of the game's TEMP files, no log, no game process; each item read
+        # back and compared with the state games/<game>/state.json declares, the run stopped before the game on a
+        # difference (Sprint 102)
         $key = "HKCU:\Software\$company\$product"; $low = "$env:USERPROFILE\AppData\LocalLow\$company\$product"
-        $tempDir = 'C:\w2m\temp'
+        $tempDir = $userTemp.TrimEnd('\')
+        $tempMade = (Get-Content "games/$($spec.game)/state.json" -Raw | ConvertFrom-Json).temp_files_made
+        $fromGameTemp = { if ($tempMade) { @(Get-ChildItem $tempDir -Filter $tempMade -File -Force -ErrorAction SilentlyContinue) } else { @() } }
         Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item $low -Recurse -Force -ErrorAction SilentlyContinue
-        Get-ChildItem $tempDir -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        & $fromGameTemp | Remove-Item -Force -ErrorAction SilentlyContinue
         Remove-Item C:\w2m\unity.log -Force -ErrorAction SilentlyContinue
         $fromGame = { Get-Process | Where-Object { $_.Path -and ($_.Path.StartsWith($gameDir) -or $_.Path.StartsWith($app)) } }
         & $fromGame | ForEach-Object { Stop-Process -Id $_.Id -Force; [void]$_.WaitForExit(30000) }
@@ -251,14 +254,15 @@ try {
         $seen = [ordered]@{
           registry_key = if (Test-Path $key) { 'present' } else { 'absent' }
           locallow = if (Test-Path $low) { 'present' } else { 'absent' }
-          temp_entries = @(Get-ChildItem $tempDir -Force -ErrorAction SilentlyContinue).Count
+          temp_path = $tempDir
+          temp_game_files = @(& $fromGameTemp).Count
           unity_log = if (Test-Path C:\w2m\unity.log) { 'present' } else { 'absent' }
           game_processes = @(& $fromGame).Count
           steam_processes = @(& $fromSteam).Count
         }
         $differ = @(foreach ($k in $seen.Keys) { if ("$($seen[$k])" -ne "$($declared.$k)") { "$k $($seen[$k]), declared $($declared.$k)" } })
         $proof = [ordered]@{ state = $stateName; files_json_sha256 = (Get-FileHash "games/$($spec.game)/files.json" -Algorithm SHA256).Hash.ToLower()
-                             game_tree_files = $present; seen = $seen; differs = $differ }
+                             game_tree_files = $present; temp_files_made = $tempMade; seen = $seen; differs = $differ }
         if ($differ.Count) {
           Note "execution $i`: initial state differs: $($differ -join '; ')"
           throw "initial state $stateName`: $($differ -join '; ')"
@@ -388,7 +392,7 @@ try {
         Start-Service 'Steam Client Service'
         Note "Steam Client Service: $((Get-Service 'Steam Client Service').Status)"
       }
-      if ($steamExe) {          # the user's TEMP back first: the game's was the job's folder
+      if ($steamExe) {          # the user's TEMP and TMP as they were: the game's TMP was set to its TEMP
         $env:TEMP = $userTemp; $env:TMP = $userTmp
         Start-Process -FilePath $steamExe -ArgumentList '-silent'
         Note "Steam client started again: $steamExe -silent"

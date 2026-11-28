@@ -1272,7 +1272,9 @@ fn run_game_inner(root: &Path, game: &Game) -> Result<i32, String> {
                 profile.trim()
             ));
         }
-        steam_free(&root.join("build/game-runs").join(id)).map_err(|why| format!("{id}: {why}: nothing stored"))?;
+        let dir = root.join("build/game-runs").join(id);
+        steam_free(&dir).map_err(|why| format!("{id}: {why}: nothing stored"))?;
+        temp_declared(&dir).map_err(|why| format!("{id}: {why}: nothing stored"))?;
     }
     for id in &ids {
         println!("{}", store_game(root, id)?);
@@ -1327,9 +1329,53 @@ pub fn steam_free(dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// An execution's game read the TEMP its declared state names: the run's `state.json` records the TEMP path the
+/// executor proved (`seen.temp_path`), and each folder the capture's strings name right after a GetTempPathW call (the
+/// row at the call's seq + 1 ending in `\`, as the reference runs' rows 3423 and 3496 do) is that path. Sprint 376's
+/// first three executions read `C:\w2m\temp\`, the job's own folder, where the reference runs read the user's TEMP, and
+/// nine of the game's values differed with it. A folder without a trace passes; a run whose state.json records no TEMP
+/// path is refused.
+pub fn temp_declared(dir: &Path) -> Result<(), String> {
+    let Ok(trace) = fs::read_to_string(dir.join("jit_capture.bin.trace.tsv")) else {
+        return Ok(());
+    };
+    let proof: Value = fs::read_to_string(dir.join("state.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(t.trim_start_matches('\u{feff}')).ok())
+        .ok_or("state.json is missing or not JSON: the TEMP the game read is not proved")?;
+    let Some(path) = proof["seen"]["temp_path"].as_str() else {
+        return Err("state.json records no TEMP path: the TEMP the game read is not proved".to_string());
+    };
+    let want = format!("{}\\", path.trim_end_matches('\\'));
+    let calls: Vec<u64> = trace
+        .lines()
+        .filter_map(|l| {
+            let c: Vec<&str> = l.split('\t').collect();
+            (c.get(4) == Some(&"GetTempPathW")).then(|| c[0].parse().ok()).flatten()
+        })
+        .collect();
+    let strings = fs::read_to_string(dir.join("jit_capture.bin.strings.tsv")).unwrap_or_default();
+    for row in strings.lines() {
+        let c: Vec<&str> = row.splitn(3, '\t').collect();
+        let (Some(seq), Some(text)) = (c.first().and_then(|s| s.parse::<u64>().ok()), c.get(2)) else {
+            continue;
+        };
+        if text.ends_with('\\')
+            && seq.checked_sub(1).is_some_and(|s| calls.contains(&s))
+            && !text.eq_ignore_ascii_case(&want)
+        {
+            return Err(format!(
+                "the game's TEMP is {text} (strings row {seq}, after GetTempPathW), where its state declares {want}"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// One game execution stored: `build/game-runs/<id>/` to `store/game-runs/<id>/`, refused before anything is written
-/// unless its `profile.txt` is the laptop's and its `unity.log` names no Steam account ([`steam_free`]). Returns the
-/// line naming what was stored, with its log's and its call trace's line counts.
+/// unless its `profile.txt` is the laptop's, its `unity.log` names no Steam account ([`steam_free`]) and its game read
+/// the declared TEMP ([`temp_declared`]). Returns the line naming what was stored, with its log's and its call trace's
+/// line counts.
 pub fn store_game(root: &Path, id: &str) -> Result<String, String> {
     let src = root.join("build/game-runs").join(id);
     let profile = fs::read_to_string(src.join("profile.txt")).map_err(|e| format!("{id}: profile.txt: {e}"))?;
@@ -1340,6 +1386,7 @@ pub fn store_game(root: &Path, id: &str) -> Result<String, String> {
         ));
     }
     steam_free(&src).map_err(|why| format!("{id}: {why}"))?;
+    temp_declared(&src).map_err(|why| format!("{id}: {why}"))?;
     let dst = root.join("store/game-runs").join(id);
     let n = copy_tree(&src, &dst)?;
     let lines = |name: &str| fs::read_to_string(src.join(name)).map_or(0, |t| t.lines().count());

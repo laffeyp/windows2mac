@@ -1,13 +1,15 @@
 {
- "about": "The game's declared initial states (docs/windows-reference-machine-2026-10-12.md §5; Sprint 102). run-job.ps1 resets each item before an execution, reads it back, writes what it read to the run's state.json, and stops before the game starts when it differs from the state job.json names (default empty). company and product are the first two lines of Hail to the Rainbow_Data/app.info, the PlayerPrefs key HKCU\\Software\\<company>\\<product> and the folder %USERPROFILE%\\AppData\\LocalLow\\<company>\\<product>.",
+ "about": "The game's declared initial states (docs/windows-reference-machine-2026-10-12.md §5; Sprint 102). run-job.ps1 resets each item before an execution, reads it back, writes what it read to the run's state.json, and stops before the game starts when it differs from the state job.json names (default empty). company and product are the first two lines of Hail to the Rainbow_Data/app.info, the PlayerPrefs key HKCU\\Software\\<company>\\<product> and the folder %USERPROFILE%\\AppData\\LocalLow\\<company>\\<product>. temp_files_made names the files the game makes in its TEMP (GetTempFileNameW's prefix \"cur\": the reference runs' strings rows 3423 and 3496 name C:\\Users\\w2m\\AppData\\Local\\Temp\\ and a cur<hex>.tmp in it; Sprint 376).",
  "company": "NSS",
  "product": "Hail to the Rainbow",
+ "temp_files_made": "cur*.tmp",
  "states": {
   "empty": {
-   "about": "a first launch: no saved settings or saves, an empty TEMP, no log, no process from the game's folder, and the Steam client not running (no steam, steamwebhelper, steamservice, gameoverlayui or steamerrorreporter process), as the reference runs of 2026-10-14 ran: their unity.log says \"SteamAPI_Init() failed\" (Sprint 376)",
+   "about": "a first launch: no saved settings or saves, no log, no process from the game's folder; the user's own TEMP, the path the reference runs of 2026-10-14 and w2m give the game, holding none of the files the game makes there (it is shared with the session's other programs, so it is not proved empty: Sprint 102); and the Steam client not running (no steam, steamwebhelper, steamservice, gameoverlayui or steamerrorreporter process), as the reference runs ran: their unity.log says \"SteamAPI_Init() failed\" (Sprint 376)",
    "registry_key": "absent",
    "locallow": "absent",
-   "temp_entries": 0,
+   "temp_path": "C:\\Users\\w2m\\AppData\\Local\\Temp",
+   "temp_game_files": 0,
    "unity_log": "absent",
    "game_processes": 0,
    "steam_processes": 0

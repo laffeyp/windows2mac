@@ -9,14 +9,17 @@ use std::path::{Path, PathBuf};
 
 use windows_machine::{
     Batch, BatchItem, EXECUTOR, Game, JOINED, Job, KNOWN, Kind, Py, Request, STEAM_ABSENT, batch_inputs, batch_items,
-    run_id, sha256, split_batch, split_game, stamp, steam_free, store, store_game, stored_run, tree_tar, verdict,
-    write_job,
+    run_id, sha256, split_batch, split_game, stamp, steam_free, store, store_game, stored_run, temp_declared, tree_tar,
+    verdict, write_job,
 };
 
 /// Sprint 372's references: the October batch the Python sent (195 binaries, its job.json and the runs split from
 /// it), and one execution of the reference set's game job.
 const BATCH: &str = "lap-20261013T231059422Z-136bec80";
 const GAME_RUN: &str = "lap-20261014T032442034Z-c8814547";
+/// A run's state.json proof (run-job.ps1) with the user's TEMP, the path the reference runs read
+const USER_TEMP_PROOF: &str = "{\"state\": \"empty\", \"temp_files_made\": \"cur*.tmp\", \"seen\": {\"temp_path\": \
+                                \"C:\\\\Users\\\\w2m\\\\AppData\\\\Local\\\\Temp\", \"temp_game_files\": 0}, \"differs\": []}";
 /// The nine families whose rows the runner made, each by its runner run (`docs/postmortem-windows-runs-off-the-laptop-
 /// 2026-11-27.md`, "What the wrong machine reached"), as Sprint 372's batch names them.
 const RUNNER_FAMILIES: [(&str, &str); 9] = [
@@ -654,6 +657,8 @@ fn a_game_job_is_split_and_stored() {
     fs::create_dir_all(bundle.join("2")).unwrap();
     fs::copy(reference.join("profile.json"), bundle.join("profile.json")).unwrap();
     fs::copy(reference.join("unity.log"), bundle.join("2/unity.log")).unwrap();
+    // the proof a run of Sprint 376 on writes, the TEMP the reference run read (its strings rows 3423 and 3496)
+    fs::write(bundle.join("1/state.json"), USER_TEMP_PROOF).unwrap();
     for e in fs::read_dir(&reference).unwrap() {
         let p = e.unwrap().path();
         let name = p.file_name().unwrap();
@@ -667,7 +672,7 @@ fn a_game_job_is_split_and_stored() {
     let line = store_game(&at, "lap-g-01").unwrap();
     assert_eq!(
         line,
-        "lap-g-01: stored store/game-runs/lap-g-01, 19 files, profile laptop-x64-10.0.26200.7840-Client, unity.log 180 \
+        "lap-g-01: stored store/game-runs/lap-g-01, 20 files, profile laptop-x64-10.0.26200.7840-Client, unity.log 180 \
          lines, trace 3499 lines"
     );
     for e in fs::read_dir(&reference).unwrap() {
@@ -732,5 +737,95 @@ fn a_log_with_the_steam_client_running_is_not_stored() {
     assert!(store_game(&at, "lap-s-01").is_ok());
     assert!(store_game(&at, "lap-s-03").is_ok());
     assert!(steam_free(&at.join("build/game-runs/no-such-run")).is_ok());
+    let _ = fs::remove_dir_all(&at);
+}
+
+/// Sprint 376: run-job.ps1's game kind holds the initial state games/<game>/state.json declares. Each item a declared
+/// state names is read back in the script's `$seen` map, so the check before each execution covers it; and a state with
+/// no Steam process has the script stop the Steam processes it counts before the first execution and start the client
+/// again after the job. There is no PowerShell on this Mac, so the script is held by its text.
+#[test]
+fn the_game_kind_holds_every_declared_item_and_stops_the_steam_client() {
+    let script = fs::read_to_string(root().join("tools/windows_machine/run-job.ps1")).unwrap();
+    let states: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(root().join("games/hail-to-the-rainbow/state.json")).unwrap())
+            .unwrap();
+    let seen = &script[script
+        .find("$seen = [ordered]@{")
+        .expect("the game kind reads the state back")..];
+    let seen = &seen[..seen.find("\n        }").unwrap()];
+    for (name, state) in states["states"].as_object().unwrap() {
+        for key in state.as_object().unwrap().keys().filter(|k| *k != "about") {
+            assert!(
+                seen.contains(&format!("\n          {key} = ")),
+                "state {name}'s {key} is not read back before an execution"
+            );
+        }
+    }
+    assert_eq!(states["states"]["empty"]["steam_processes"], 0);
+    let stop = &script[script
+        .find("$running = @(& $fromSteam)")
+        .expect("the game kind counts the Steam client")..];
+    let stop = &stop[..stop.find("Note \"Steam client: ").unwrap()];
+    assert!(
+        stop.contains("$running | ForEach-Object {") && stop.contains("Stop-Process -Id $_.Id -Force"),
+        "the game kind does not stop the Steam client's processes it counts:\n{stop}"
+    );
+    assert!(script.contains("Start-Process -FilePath $steamExe -ArgumentList '-silent'"));
+    // the game's TEMP: the user's own, as the job found it, which the state declares and w2m gives the game
+    let temp = states["states"]["empty"]["temp_path"].as_str().unwrap();
+    assert_eq!(temp, "C:\\Users\\w2m\\AppData\\Local\\Temp");
+    let w2m = fs::read_to_string(root().join("crates/w2m_vm/src/bin/w2m-vm.rs")).unwrap();
+    assert!(
+        w2m.contains(&format!("\"TEMP={}\",", temp.replace('\\', "\\\\"))),
+        "w2m's TEMP is not {temp}"
+    );
+    assert!(
+        script.contains("$tempDir = $userTemp.TrimEnd('\\')")
+            && script.contains("$env:TMP = $tempDir; $env:TEMP = $tempDir")
+            && script.contains("temp_path = $tempDir"),
+        "the game's TEMP is not the user's TEMP the job found, read back as temp_path"
+    );
+    assert_eq!(states["temp_files_made"], "cur*.tmp");
+    assert!(script.contains("& $fromGameTemp | Remove-Item -Force"));
+}
+
+/// Sprint 376: an execution whose game read a TEMP other than the one its state.json proves is not stored. The
+/// reference run read the user's TEMP (strings rows 3423 and 3496, each after a GetTempPathW call); with a proof naming
+/// that path it passes, with one naming the job's own folder it is refused at the row, and a proof with no TEMP path, as
+/// the first three executions of this sprint wrote, is refused.
+#[test]
+fn a_run_whose_game_read_another_temp_is_not_stored() {
+    let at = scratch("temp");
+    let reference = root().join("store/game-runs").join(format!("{GAME_RUN}-01"));
+    let dir = at.join("run");
+    fs::create_dir_all(&dir).unwrap();
+    for name in ["jit_capture.bin.trace.tsv", "jit_capture.bin.strings.tsv"] {
+        fs::copy(reference.join(name), dir.join(name)).unwrap();
+    }
+    fs::write(dir.join("state.json"), USER_TEMP_PROOF).unwrap();
+    assert_eq!(temp_declared(&dir), Ok(()));
+    fs::write(
+        dir.join("state.json"),
+        USER_TEMP_PROOF.replace("C:\\\\Users\\\\w2m\\\\AppData\\\\Local\\\\Temp", "C:\\\\w2m\\\\temp"),
+    )
+    .unwrap();
+    assert_eq!(
+        temp_declared(&dir),
+        Err(
+            "the game's TEMP is C:\\Users\\w2m\\AppData\\Local\\Temp\\ (strings row 3423, after GetTempPathW), where its \
+             state declares C:\\w2m\\temp\\"
+                .to_string()
+        )
+    );
+    fs::write(
+        dir.join("state.json"),
+        "{\"state\": \"empty\", \"seen\": {\"temp_entries\": 0}, \"differs\": []}",
+    )
+    .unwrap();
+    assert_eq!(
+        temp_declared(&dir),
+        Err("state.json records no TEMP path: the TEMP the game read is not proved".to_string())
+    );
     let _ = fs::remove_dir_all(&at);
 }
