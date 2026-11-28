@@ -75,7 +75,7 @@ laptop, never a GitHub runner"), but the code names it loosely, and the runner p
 
 ### Files modified
 
-- `crates/windows_machine/{src/lib.rs, tests/*.rs}`, `tools/windows_machine/profile.ps1`, `.github/workflows/`
+- `crates/windows_machine/{src/lib.rs, tests/*.rs}`, `tools/windows_machine/{profile.ps1, run-job.ps1}`, `.github/workflows/`
   (two moved to `tools/retired-workflows/`), with others only where the class requires, reported to main when found. One concept: the reference
   machine named exactly, and no other machine able to stand in for it.
 
@@ -83,7 +83,8 @@ laptop, never a GitHub runner"), but the code names it loosely, and the runner p
 
 - `scripts/gates.sh` returns 0
 - `target/release/signal_report --check` returns 0 on the tree
-- one laptop probe job through `windows_machine` returns 0, its `profile.json` carrying the code-integrity state
+- `target/release/windows_machine probe apcs_and_waitable_timers` returns 0, its `profile.json` carrying the
+  code-integrity state and its bundle `code-integrity.json`
 
 ## observation contract
 

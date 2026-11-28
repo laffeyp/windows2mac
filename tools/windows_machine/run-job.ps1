@@ -2,7 +2,8 @@
 # Copyright (C) 2026 Peter Laffey
 # The laptop's executor (docs/windows-reference-machine-2026-10-12.md §3): runs one job the controller copied to
 # C:\w2m\jobs\<id>\ and leaves the bundle in its out\ folder. A probe is built and run as
-# .github/workflows/windows-probe.yml's build and run steps do, so the two machines' rows differ only in the machine.
+# windows-probe.yml's build and run steps did (tools/retired-workflows/ from Sprint 377), so the two machines' rows
+# differ only in the machine.
 #
 # Kinds (job.json `kind`):
 #   probe   builds probes/<probe> from tree.tar (the committed tree; substrate.tar for a `generate` step) and runs it
@@ -12,7 +13,7 @@
 #           probe, execution id, binary (bin\<sha256>.exe) and DLL (bin\<sha256>.dll, its name `dll_name`);
 #           tree.tar holds probes\; each item's rows go to out\<execution id>\. One profile, one copy each way, one
 #           lock for the whole batch, a fresh workspace for each item;
-#   game    runs the game as .github/workflows/windows-game.yml does, `executions` times one after another
+#   game    runs the game as windows-game.yml did (tools/retired-workflows/), `executions` times one after another
 #           (job.json `game`, `exe`, `seconds`, `mode`): the launcher built from tree.tar's tools\jit_capture, the
 #           game mirrored from C:\w2m\games\<game> to D:\w2m\game (the runners' GAME_DIR) and checked against
 #           files.json, C:\w2m\app a junction to it, and before each execution the game's saved state removed
@@ -25,10 +26,12 @@
 #           `frame_seconds` (default 10) as out\<i>\frames\<seconds>.png.
 # Every input's sha256 is in job.json `inputs`; a mismatch stops the job before anything runs. job.json `cpu_class`
 # ("performance" or "efficiency") pins the job to that core type (G1); the processes it starts inherit the affinity,
-# and each exec-<i>.json records it.
+# and each exec-<i>.json records it. As the job ends, out\code-integrity.json lists each CodeIntegrity 3077 block of
+# its window (Sprint 377).
 param([Parameter(Mandatory)] [string] $Job)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+$jobStart = Get-Date    # the job's code-integrity window opens here (Sprint 377)
 
 function Note([string] $what) { "$((Get-Date).ToUniversalTime().ToString('HH:mm:ss.fff')) $what" }   # run-job.log
 # a script error is written to run-job.log and fails the job (2026-10-13: a play-mode job stopped after copy_resources
@@ -450,6 +453,23 @@ try {
     } finally { Pop-Location }
   }
 } finally {
+  # the job's code-integrity window (Sprint 377): each Smart App Control block, CodeIntegrity 3077, from the job's start
+  # to here, written to out\code-integrity.json, so the controller names a refused binary or DLL (Sprint 372's
+  # probe.exe, Sprint 376's handler_trace.dll) instead of taking the missing output for the program's. A window with no
+  # event raises NoMatchingEventsFound (measured on this laptop 2026-11-27); any other failure is written as `error`
+  $ciEnd = Get-Date
+  $window = [ordered]@{ from = $jobStart.ToUniversalTime().ToString('o'); to = $ciEnd.ToUniversalTime().ToString('o'); blocks = @() }
+  try {
+    $window.blocks = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-CodeIntegrity/Operational'; Id = 3077
+                                                         StartTime = $jobStart; EndTime = $ciEnd } -ErrorAction Stop | ForEach-Object {
+      $d = @{}; ([xml]$_.ToXml()).Event.EventData.Data | ForEach-Object { $d[$_.Name] = $_.'#text' }
+      [ordered]@{ time = $_.TimeCreated.ToUniversalTime().ToString('o'); file = $d['File Name']; process = $d['Process Name']
+                  policy = $d['PolicyName'] } })
+  } catch {
+    if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { $window.error = "$_" }
+  }
+  ConvertTo-Json -Depth 4 $window | Set-Content -Path (Join-Path $out 'code-integrity.json') -Encoding utf8
+  Note "code integrity: $($window.blocks.Count) blocks from $($window.from) to $($window.to)$(if ($window.error) { ", error $($window.error)" })"
   Remove-Item $src, $tree -Recurse -Force -ErrorAction SilentlyContinue
   $lock.Dispose()
   Note "done"

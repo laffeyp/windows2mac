@@ -13,6 +13,10 @@ $cv  = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
 $cpk = 'HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor\0'    # read by name: pwsh cannot cast every value there
 $dg  = Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard -ErrorAction SilentlyContinue
 $mp  = Get-MpComputerStatus -ErrorAction SilentlyContinue
+# the code-integrity policy the run met (Sprint 377): Smart App Control refused probe binaries in Sprint 372 and one build
+# of handler_trace.dll in Sprint 376 (CodeIntegrity 3077, policy VerifiedAndReputableDesktop); the key's values as
+# Windows keeps them, and Defender's name for the state (2026-11-27: VerifiedAndReputablePolicyState 1, "On")
+$ci  = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -ErrorAction SilentlyContinue
 $clang = (& clang --version 2>$null | Select-Object -First 1)
 
 . (Join-Path $PSScriptRoot 'cpusets.ps1')
@@ -37,6 +41,9 @@ $profile = [ordered]@{
   audio            = @(Get-CimInstance Win32_SoundDevice | ForEach-Object Name)
   hypervisor       = [ordered]@{ present = $cs.HypervisorPresent; vbs_status = $dg.VirtualizationBasedSecurityStatus
                                  security_services_running = @($dg.SecurityServicesRunning) }
+  code_integrity   = [ordered]@{ verified_and_reputable_policy_state = $ci.VerifiedAndReputablePolicyState
+                                 sac_previous_state = $ci.SAC_PreviousState; sac_enforcement_reason = $ci.SAC_EnforcementReason
+                                 smart_app_control = $mp.SmartAppControlState }
   scheduler        = [ordered]@{ win32_priority_separation = (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl).Win32PrioritySeparation }
   user             = [ordered]@{ name = $env:USERNAME; profile = $env:USERPROFILE; temp = $env:TEMP }
   locale           = [ordered]@{ culture = (Get-Culture).Name; ui = (Get-UICulture).Name
