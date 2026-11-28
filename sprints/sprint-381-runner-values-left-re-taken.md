@@ -21,7 +21,10 @@ the laptop's.
   EnumDisplaySettingsW and any other the class search finds) read across the 14 reference game runs in
   `store/game-runs/` (runner 38216081440, the ten `lap-20261014T032442034Z-c8814547-*`, the three
   `lap-20261128T014720644Z-33b6423b-*`): for each, w2m's answer, the laptop's, the runner's, and whether the laptop's
-  runs agree among themselves. w2m answers as the laptop where they do; a value the laptop's runs vary in is named.
+  runs agree among themselves, written as a measurement: the re-take of the display, `windows` and `dxgi` (the
+  laptop's screen at 120 DPI) is card 383, by the Decision "The order after Sprint 378" as amended at this card's
+  close; the contents of display adapters 3 and 4, which the game asks for on the laptop, are in no stored row
+  (card amendment, Sprint 381).
 - **The profile folder.** `tools/guest_runtime/known_folders.c` 29, `C:\Users\runneradmin`: the laptop's
   `C:\Users\w2m` (`store/reference_machine/profile-lap-20261128T042841141Z-4c0653e2.json` `user.profile`), and every
   other place the class search finds the runner's user name or profile path.
@@ -85,8 +88,9 @@ the laptop's.
 
 ## done criteria
 
-No value w2m gives a program is the runner's where stored laptop evidence gives the laptop's, and the values no stored
-row holds are named.
+w2m gives the laptop's profile folder, temp-path fallback and system path where it gave the runner's, each cited to a
+stored laptop row or profile; the display is measured, not re-taken; the other runner-taken values the class search
+finds are listed in the result, by group (card amendment, Sprint 381).
 
 ## self-review checklist
 
