@@ -1,0 +1,1034 @@
+{
+ "contract_id": "windows.windows.windows",
+ "version": "0.4.0",
+ "status": "accepted",
+ "summary": "Window classes, the game's two windows (the batch run's: a RegisterClassW class by atom, style 0, CW_USEDEFAULT; the play run's: 0xCA0000, 320 x 240) and what their procedure sees: WM_GETMINMAXINFO, WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE in order, DefWindowProcW's answers, the cascade and default size, the frame (8 at the sides and bottom, 31 at the top), window longs and extra bytes, the rectangles; LoadIconA by id and IDI_APPLICATION, LoadCursorA(IDC_ARROW). Sprint 063: the game's later calls on its window (batch run 38206263976): SetWindowLongPtrA, the queue (WM_DWMNCRENDERINGCHANGED posted to each new window; PeekMessageA, GetMessageExtraInfo, TranslateMessage, DispatchMessageA; PostMessageW, WM_QUIT), RegisterDeviceNotificationW, GetFocus and SetFocus with the activation's messages, LoadImageW of a cursor file, a missing file and a missing icon. 0.4.0 holds the laptop's rows (Sprint 383; the Decision \"Which machine-decided values w2m answers as\": display and dxgi the laptop's values, 1920x1080 at 120 DPI, which reach the windows): the runners' two binaries run on the laptop, in its desktop session with another window holding the foreground: the work area to 1020 on a 1920 x 1080 screen; WM_GETMINMAXINFO's maximized size 1938 x 1098 at -9, -9 and tracking sizes 166 x 47 and 1942 x 1102; the frame 9 at the sides and bottom and 38 at the top (the caption 29); CW_USEDEFAULT on a cascade in steps of 32, a default-sized window 3/4 of the work area's width by 3/4 of its height less 25 (1440 x 740); WM_ACTIVATEAPP with lParam 0 and WM_NCACTIVATE with wParam 0, the foreground held by another program (rows msg.game.9 to msg.game.13).",
+ "applicability": "laptop (laptop-x64-10.0.26200.7840-Client, 13th Gen Intel(R) Core(TM) i5-13420H)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the laptop's tools/windows_machine/run-job.ps1 through cmd with standard output redirected, in the desktop session, another program's window holding the foreground (w2m's start: foreground_held, store/family_runs/retaken-2026-11-27.tsv's fourth column)"
+  },
+  "execution": {
+   "main": "probes/windows/windows.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "screen.work_area",
+    "bottom_above_768": false,
+    "left": 0,
+    "right": 1920,
+    "top": 0
+   },
+   {
+    "s": "icon.own_103",
+    "err": 0,
+    "non_null": true
+   },
+   {
+    "s": "icon.own_999",
+    "err": 1813,
+    "non_null": false
+   },
+   {
+    "s": "icon.system_application",
+    "err": 57005,
+    "handle": 65579
+   },
+   {
+    "s": "cursor.arrow",
+    "err": 57005,
+    "handle": 65539
+   },
+   {
+    "s": "cursor.arrow_again",
+    "same": true
+   },
+   {
+    "s": "class.register_ex",
+    "atom_in_range": true,
+    "err": 57005
+   },
+   {
+    "s": "class.register_ex_again",
+    "atom": 0,
+    "err": 1410
+   },
+   {
+    "s": "class.register",
+    "atom_in_range": true,
+    "err": 57005
+   },
+   {
+    "s": "create.unknown_class",
+    "err": 1407,
+    "null": true
+   },
+   {
+    "s": "msg.batch.0",
+    "max_position_in_x": -9,
+    "max_position_in_y": -9,
+    "max_position_x": -9,
+    "max_position_y": -9,
+    "max_size_in_x": 1938,
+    "max_size_in_y": 1098,
+    "max_size_x": 1938,
+    "max_size_y": 1098,
+    "max_track_in_x": 1942,
+    "max_track_in_y": 1102,
+    "max_track_x": 1942,
+    "max_track_y": 1102,
+    "min_track_in_x": 166,
+    "min_track_in_y": 47,
+    "min_track_x": 166,
+    "min_track_y": 47,
+    "msg": 36,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.batch.1",
+    "class_is_atom": true,
+    "cx": -2147483648,
+    "cy": -2147483648,
+    "ex_style": 0,
+    "instance_is_self": true,
+    "menu_null": true,
+    "msg": 129,
+    "name": "Hail to the Rainbow",
+    "params_null": true,
+    "parent_null": true,
+    "result": 1,
+    "same_window": true,
+    "style": 0,
+    "wparam": 0,
+    "x_equals_y": true,
+    "x_in_cascade": false
+   },
+   {
+    "s": "msg.batch.2",
+    "in_bottom": -4,
+    "in_left": 0,
+    "in_right": 1440,
+    "in_top": 0,
+    "msg": 131,
+    "out_bottom": -13,
+    "out_left": 9,
+    "out_right": 1431,
+    "out_top": 38,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.batch.3",
+    "class_is_atom": true,
+    "cx": -2147483648,
+    "cy": -2147483648,
+    "ex_style": 0,
+    "instance_is_self": true,
+    "menu_null": true,
+    "msg": 1,
+    "name": "Hail to the Rainbow",
+    "params_null": true,
+    "parent_null": true,
+    "result": 0,
+    "same_window": true,
+    "set_long_ptr": 0,
+    "set_long_ptr_err": 57005,
+    "style": 0,
+    "wparam": 0,
+    "x_equals_y": true,
+    "x_in_cascade": false
+   },
+   {
+    "s": "create.batch",
+    "err": 57005,
+    "first_message_window": true,
+    "messages": 4,
+    "null": false
+   },
+   {
+    "s": "batch.long_ptr_0",
+    "err": 57005,
+    "stored": true
+   },
+   {
+    "s": "batch.long_ptr_8",
+    "err": 1413,
+    "ret": 0
+   },
+   {
+    "s": "batch.user_data.after",
+    "before": 0,
+    "err": 57005
+   },
+   {
+    "s": "batch.styles",
+    "ex_style": 256,
+    "instance_is_self": true,
+    "procedure_is_ours": true,
+    "style": 79691776
+   },
+   {
+    "s": "batch.client_rect",
+    "err": 57005,
+    "rect_bottom": -51,
+    "rect_left": 0,
+    "rect_right": 1422,
+    "rect_top": 0,
+    "ret": 1
+   },
+   {
+    "s": "batch.window_rect",
+    "rect_bottom": -4,
+    "rect_left": 0,
+    "rect_right": 1440,
+    "rect_top": 0,
+    "ret": 1
+   },
+   {
+    "s": "batch.visible",
+    "value": false
+   },
+   {
+    "s": "batch.monitor",
+    "primary": true
+   },
+   {
+    "s": "msg.play.0",
+    "max_position_in_x": -9,
+    "max_position_in_y": -9,
+    "max_position_x": -9,
+    "max_position_y": -9,
+    "max_size_in_x": 1938,
+    "max_size_in_y": 1098,
+    "max_size_x": 1938,
+    "max_size_y": 1098,
+    "max_track_in_x": 1942,
+    "max_track_in_y": 1102,
+    "max_track_x": 1942,
+    "max_track_y": 1102,
+    "min_track_in_x": 166,
+    "min_track_in_y": 47,
+    "min_track_x": 166,
+    "min_track_y": 47,
+    "msg": 36,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.play.1",
+    "class": "W2mProbeMain",
+    "class_is_atom": false,
+    "cx": 320,
+    "cy": 240,
+    "ex_style": 256,
+    "instance_is_self": true,
+    "menu_null": true,
+    "msg": 129,
+    "name": "Hail to the Rainbow",
+    "params_null": true,
+    "parent_null": true,
+    "result": 1,
+    "same_window": true,
+    "style": 13238272,
+    "wparam": 0,
+    "x_equals_y": true,
+    "x_in_cascade": false
+   },
+   {
+    "s": "msg.play.2",
+    "in_bottom": 240,
+    "in_left": 0,
+    "in_right": 320,
+    "in_top": 0,
+    "msg": 131,
+    "out_bottom": 231,
+    "out_left": 9,
+    "out_right": 311,
+    "out_top": 38,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.play.3",
+    "class": "W2mProbeMain",
+    "class_is_atom": false,
+    "cx": 320,
+    "cy": 240,
+    "ex_style": 256,
+    "instance_is_self": true,
+    "menu_null": true,
+    "msg": 1,
+    "name": "Hail to the Rainbow",
+    "params_null": true,
+    "parent_null": true,
+    "result": 0,
+    "same_window": true,
+    "set_long_ptr": 0,
+    "set_long_ptr_err": 57005,
+    "style": 13238272,
+    "wparam": 0,
+    "x_equals_y": true,
+    "x_in_cascade": false
+   },
+   {
+    "s": "create.play",
+    "differs_from_batch": true,
+    "err": 57005,
+    "first_message_window": true,
+    "messages": 4,
+    "null": false
+   },
+   {
+    "s": "play.long_ptr_0",
+    "err": 57005,
+    "stored": true
+   },
+   {
+    "s": "play.long_ptr_8",
+    "err": 1413,
+    "ret": 0
+   },
+   {
+    "s": "play.user_data.after",
+    "before": 0,
+    "err": 57005
+   },
+   {
+    "s": "play.styles",
+    "ex_style": 256,
+    "instance_is_self": true,
+    "procedure_is_ours": true,
+    "style": 80347136
+   },
+   {
+    "s": "play.client_rect",
+    "err": 57005,
+    "rect_bottom": 193,
+    "rect_left": 0,
+    "rect_right": 302,
+    "rect_top": 0,
+    "ret": 1
+   },
+   {
+    "s": "play.window_rect",
+    "rect_bottom": 240,
+    "rect_left": 0,
+    "rect_right": 320,
+    "rect_top": 0,
+    "ret": 1
+   },
+   {
+    "s": "play.visible",
+    "value": false
+   },
+   {
+    "s": "play.monitor",
+    "primary": true
+   },
+   {
+    "s": "class.name_64",
+    "atom_in_range": true,
+    "err": 57005
+   },
+   {
+    "s": "class.name_64_again",
+    "atom_in_range": false,
+    "err": 1410
+   },
+   {
+    "s": "class.name_254",
+    "atom_in_range": true,
+    "err": 57005
+   },
+   {
+    "s": "class.name_254_again",
+    "atom_in_range": false,
+    "err": 1410
+   },
+   {
+    "s": "class.name_255",
+    "atom_in_range": true,
+    "err": 57005
+   },
+   {
+    "s": "class.name_255_again",
+    "atom_in_range": false,
+    "err": 1410
+   },
+   {
+    "s": "class.name_256",
+    "atom_in_range": false,
+    "err": 87
+   },
+   {
+    "s": "class.name_256_again",
+    "atom_in_range": false,
+    "err": 87
+   },
+   {
+    "s": "class.name_257",
+    "atom_in_range": false,
+    "err": 87
+   },
+   {
+    "s": "class.name_257_again",
+    "atom_in_range": false,
+    "err": 87
+   },
+   {
+    "s": "msg.offscreen.0",
+    "max_position_in_x": -9,
+    "max_position_in_y": -9,
+    "max_position_x": -9,
+    "max_position_y": -9,
+    "max_size_in_x": 1938,
+    "max_size_in_y": 1098,
+    "max_size_x": 1938,
+    "max_size_y": 1098,
+    "max_track_in_x": 1942,
+    "max_track_in_y": 1102,
+    "max_track_x": 1942,
+    "max_track_y": 1102,
+    "min_track_in_x": 166,
+    "min_track_in_y": 47,
+    "min_track_x": 166,
+    "min_track_y": 47,
+    "msg": 36,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.offscreen.1",
+    "class": "W2mProbeMain",
+    "class_is_atom": false,
+    "cx": 320,
+    "cy": 240,
+    "ex_style": 256,
+    "instance_is_self": true,
+    "menu_null": true,
+    "msg": 129,
+    "name": "away",
+    "params_null": true,
+    "parent_null": true,
+    "result": 1,
+    "same_window": true,
+    "style": 13238272,
+    "wparam": 0,
+    "x": 2000,
+    "y": 2000
+   },
+   {
+    "s": "msg.offscreen.2",
+    "in_bottom": 2240,
+    "in_left": 2000,
+    "in_right": 2320,
+    "in_top": 2000,
+    "msg": 131,
+    "out_bottom": 2231,
+    "out_left": 2009,
+    "out_right": 2311,
+    "out_top": 2038,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.offscreen.3",
+    "class": "W2mProbeMain",
+    "class_is_atom": false,
+    "cx": 320,
+    "cy": 240,
+    "ex_style": 256,
+    "instance_is_self": true,
+    "menu_null": true,
+    "msg": 1,
+    "name": "away",
+    "params_null": true,
+    "parent_null": true,
+    "result": 0,
+    "same_window": true,
+    "set_long_ptr": 0,
+    "set_long_ptr_err": 57005,
+    "style": 13238272,
+    "wparam": 0,
+    "x": 2000,
+    "y": 2000
+   },
+   {
+    "s": "create.offscreen",
+    "err": 57005,
+    "messages": 4,
+    "null": false
+   },
+   {
+    "s": "offscreen.monitor",
+    "nearest_primary": true,
+    "null_null": true,
+    "primary_primary": true
+   },
+   {
+    "s": "msg.game.0",
+    "max_position_in_x": -9,
+    "max_position_in_y": -9,
+    "max_position_x": -9,
+    "max_position_y": -9,
+    "max_size_in_x": 1938,
+    "max_size_in_y": 1098,
+    "max_size_x": 1938,
+    "max_size_y": 1098,
+    "max_track_in_x": 1942,
+    "max_track_in_y": 1102,
+    "max_track_x": 1942,
+    "max_track_y": 1102,
+    "min_track_in_x": 166,
+    "min_track_in_y": 47,
+    "min_track_x": 166,
+    "min_track_y": 47,
+    "msg": 36,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.game.1",
+    "class_is_atom": true,
+    "cx": -2147483648,
+    "cy": -2147483648,
+    "ex_style": 0,
+    "instance_is_self": true,
+    "menu_null": true,
+    "msg": 129,
+    "name": "Hail to the Rainbow",
+    "params_null": true,
+    "parent_null": true,
+    "result": 1,
+    "same_window": true,
+    "style": 0,
+    "wparam": 0,
+    "x_equals_y": true,
+    "x_in_cascade": false
+   },
+   {
+    "s": "msg.game.2",
+    "in_bottom": -4,
+    "in_left": 0,
+    "in_right": 1440,
+    "in_top": 0,
+    "msg": 131,
+    "out_bottom": -13,
+    "out_left": 9,
+    "out_right": 1431,
+    "out_top": 38,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.game.3",
+    "class_is_atom": true,
+    "cx": -2147483648,
+    "cy": -2147483648,
+    "ex_style": 0,
+    "instance_is_self": true,
+    "menu_null": true,
+    "msg": 1,
+    "name": "Hail to the Rainbow",
+    "params_null": true,
+    "parent_null": true,
+    "result": 0,
+    "same_window": true,
+    "set_long_ptr": 0,
+    "set_long_ptr_err": 57005,
+    "style": 0,
+    "wparam": 0,
+    "x_equals_y": true,
+    "x_in_cascade": false
+   },
+   {
+    "s": "create.game",
+    "err": 57005,
+    "messages": 4,
+    "null": false
+   },
+   {
+    "s": "game.user_data_a.after",
+    "before": 0,
+    "err": 57005
+   },
+   {
+    "s": "queue.first.00",
+    "err": 57005,
+    "extra_info": 0,
+    "hwnd_game": false,
+    "hwnd_null": false,
+    "lparam": "0",
+    "msg": 799,
+    "noremove": 1,
+    "noremove_err": 57005,
+    "remove": 1,
+    "same": 1,
+    "translate_err": 57005,
+    "translated": 0,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.4",
+    "lparam": "0",
+    "msg": 799,
+    "result": 0,
+    "same_window": false,
+    "wparam": 1
+   },
+   {
+    "s": "queue.first.00.after",
+    "dispatch_err": 57005,
+    "dispatched": 0
+   },
+   {
+    "s": "queue.first.01",
+    "err": 57005,
+    "extra_info": 0,
+    "hwnd_game": false,
+    "hwnd_null": false,
+    "lparam": "0",
+    "msg": 799,
+    "noremove": 1,
+    "noremove_err": 57005,
+    "remove": 1,
+    "same": 1,
+    "translate_err": 57005,
+    "translated": 0,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.5",
+    "lparam": "0",
+    "msg": 799,
+    "result": 0,
+    "same_window": false,
+    "wparam": 1
+   },
+   {
+    "s": "queue.first.01.after",
+    "dispatch_err": 57005,
+    "dispatched": 0
+   },
+   {
+    "s": "queue.first.02",
+    "err": 57005,
+    "extra_info": 0,
+    "hwnd_game": false,
+    "hwnd_null": false,
+    "lparam": "0",
+    "msg": 799,
+    "noremove": 1,
+    "noremove_err": 57005,
+    "remove": 1,
+    "same": 1,
+    "translate_err": 57005,
+    "translated": 0,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.6",
+    "lparam": "0",
+    "msg": 799,
+    "result": 0,
+    "same_window": false,
+    "wparam": 1
+   },
+   {
+    "s": "queue.first.02.after",
+    "dispatch_err": 57005,
+    "dispatched": 0
+   },
+   {
+    "s": "queue.first.03",
+    "err": 57005,
+    "extra_info": 0,
+    "hwnd_game": true,
+    "hwnd_null": false,
+    "lparam": "0",
+    "msg": 799,
+    "noremove": 1,
+    "noremove_err": 57005,
+    "remove": 1,
+    "same": 1,
+    "translate_err": 57005,
+    "translated": 0,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.7",
+    "lparam": "0",
+    "msg": 799,
+    "result": 0,
+    "same_window": true,
+    "wparam": 1
+   },
+   {
+    "s": "queue.first.03.after",
+    "dispatch_err": 57005,
+    "dispatched": 0
+   },
+   {
+    "s": "queue.first.04",
+    "noremove": 0,
+    "noremove_err": 57005
+   },
+   {
+    "s": "device_notification",
+    "err": 0,
+    "null": false
+   },
+   {
+    "s": "focus.before",
+    "err": 57005,
+    "game": false,
+    "null": true
+   },
+   {
+    "s": "msg.game.8",
+    "after_null": false,
+    "msg": 70,
+    "pos_flags": 3,
+    "pos_hwnd_is_self": true,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.game.9",
+    "lparam_null": true,
+    "msg": 28,
+    "result": 0,
+    "same_window": true,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.10",
+    "lparam_null": true,
+    "msg": 28,
+    "result": 0,
+    "same_window": false,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.11",
+    "lparam_null": true,
+    "msg": 28,
+    "result": 0,
+    "same_window": false,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.12",
+    "lparam_null": true,
+    "msg": 28,
+    "result": 0,
+    "same_window": false,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.13",
+    "lparam": "0",
+    "msg": 134,
+    "result": 1,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.game.16",
+    "lparam": "0",
+    "msg": 642,
+    "result": 0,
+    "same_window": true,
+    "wparam": 2
+   },
+   {
+    "s": "msg.game.15",
+    "lparam": "c000000f",
+    "msg": 641,
+    "result": 0,
+    "same_window": true,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.17",
+    "lparam_null": true,
+    "msg": 7,
+    "result": 0,
+    "same_window": true,
+    "wparam_is_self": false,
+    "wparam_null": true
+   },
+   {
+    "s": "msg.game.14",
+    "lparam": "0",
+    "msg": 6,
+    "result": 0,
+    "same_window": true,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.18",
+    "lparam_null": true,
+    "msg": 8,
+    "result": 0,
+    "same_window": true,
+    "wparam_is_self": true,
+    "wparam_null": false
+   },
+   {
+    "s": "msg.game.19",
+    "lparam": "c000000f",
+    "msg": 641,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.game.20",
+    "lparam": "c000000f",
+    "msg": 641,
+    "result": 0,
+    "same_window": true,
+    "wparam": 1
+   },
+   {
+    "s": "msg.game.21",
+    "lparam_null": true,
+    "msg": 7,
+    "result": 0,
+    "same_window": true,
+    "wparam_is_self": true,
+    "wparam_null": false
+   },
+   {
+    "s": "focus.set",
+    "err": 0,
+    "messages": 14,
+    "previous_game": true,
+    "previous_null": false
+   },
+   {
+    "s": "focus.after",
+    "game": true
+   },
+   {
+    "s": "queue.after_focus.00",
+    "noremove": 0
+   },
+   {
+    "s": "image.cursor_file",
+    "err": 0,
+    "null": false,
+    "written": 4286
+   },
+   {
+    "s": "image.cursor_file_again",
+    "err": 0,
+    "null": false,
+    "same": false
+   },
+   {
+    "s": "image.missing_file",
+    "err": 2,
+    "null": true
+   },
+   {
+    "s": "image.missing_resource",
+    "err": 1813,
+    "null": true
+   },
+   {
+    "s": "post.user",
+    "err": 57005,
+    "ret": 1
+   },
+   {
+    "s": "queue.posted.00",
+    "err": 57005,
+    "extra_info": 0,
+    "hwnd_game": true,
+    "hwnd_null": false,
+    "lparam": "3",
+    "msg": 1025,
+    "noremove": 1,
+    "noremove_err": 57005,
+    "remove": 1,
+    "same": 1,
+    "translate_err": 57005,
+    "translated": 0,
+    "wparam": 2
+   },
+   {
+    "s": "msg.game.22",
+    "lparam": "3",
+    "msg": 1025,
+    "result": 0,
+    "same_window": true,
+    "wparam": 2
+   },
+   {
+    "s": "queue.posted.00.after",
+    "dispatch_err": 57005,
+    "dispatched": 0
+   },
+   {
+    "s": "queue.posted.01",
+    "noremove": 0
+   },
+   {
+    "s": "queue.quit.00",
+    "err": 57005,
+    "extra_info": 0,
+    "hwnd_game": false,
+    "hwnd_null": true,
+    "lparam": "0",
+    "msg": 18,
+    "noremove": 1,
+    "noremove_err": 57005,
+    "remove": 1,
+    "same": 1,
+    "wparam": 5
+   },
+   {
+    "s": "msg.other.0",
+    "max_position_in_x": -9,
+    "max_position_in_y": -9,
+    "max_position_x": -9,
+    "max_position_y": -9,
+    "max_size_in_x": 1938,
+    "max_size_in_y": 1098,
+    "max_size_x": 1938,
+    "max_size_y": 1098,
+    "max_track_in_x": 1942,
+    "max_track_in_y": 1102,
+    "max_track_x": 1942,
+    "max_track_y": 1102,
+    "min_track_in_x": 166,
+    "min_track_in_y": 47,
+    "min_track_x": 166,
+    "min_track_y": 47,
+    "msg": 36,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.other.1",
+    "class_is_atom": true,
+    "cx": -2147483648,
+    "cy": -2147483648,
+    "ex_style": 0,
+    "instance_is_self": true,
+    "menu_null": true,
+    "msg": 129,
+    "name": "other",
+    "params_null": true,
+    "parent_null": true,
+    "result": 1,
+    "same_window": true,
+    "style": 0,
+    "wparam": 0,
+    "x_equals_y": true,
+    "x_in_cascade": false
+   },
+   {
+    "s": "msg.other.2",
+    "in_bottom": -4,
+    "in_left": 0,
+    "in_right": 1440,
+    "in_top": 0,
+    "msg": 131,
+    "out_bottom": -13,
+    "out_left": 9,
+    "out_right": 1431,
+    "out_top": 38,
+    "result": 0,
+    "same_window": true,
+    "wparam": 0
+   },
+   {
+    "s": "msg.other.3",
+    "class_is_atom": true,
+    "cx": -2147483648,
+    "cy": -2147483648,
+    "ex_style": 0,
+    "instance_is_self": true,
+    "menu_null": true,
+    "msg": 1,
+    "name": "other",
+    "params_null": true,
+    "parent_null": true,
+    "result": 0,
+    "same_window": true,
+    "set_long_ptr": 0,
+    "set_long_ptr_err": 57005,
+    "style": 0,
+    "wparam": 0,
+    "x_equals_y": true,
+    "x_in_cascade": false
+   },
+   {
+    "s": "create.other",
+    "messages": 4,
+    "null": false
+   },
+   {
+    "s": "focus.other_thread",
+    "err": 5,
+    "focus_still_game": true,
+    "previous_game": false,
+    "previous_null": true
+   }
+  ],
+  "derivation": "crates/w2m_vm/tests/family_runs.rs windows_laptop_rows: windows_rows (scripts/family_run.py, as 0.3.0 states it: each window's geometry from its own origin, positions as relations, x = y and a multiple of 26, the default-sized windows' heights as their excess over 3/4 of the work area less 21, the work area's bottom as lying above 768, message 0x60 out of each drain), and class.register without after_first. On the laptop the cascade steps by 32 and started at 160 in each run's first execution and at 32 in its second, so no window lies on a multiple of 26 (x_in_cascade false) and a default-sized window's height is 4 short of the rule's default (740 against 744 on the work area of 1020). The second class's atom fell below the first's in one execution of each run and above it in the other (-192 body-1 and -193 body-2 false, -192 body-2 and -193 body-1 true): Windows varies it, and the row keeps no after_first, as display_rows keeps no value for metric 93."
+ },
+ "evidence": [
+  {
+   "evidence_id": "laptop-rows",
+   "category": "observed",
+   "source_ref": "runs lap-20261013T231059422Z-136bec80-192 and lap-20261013T231059422Z-136bec80-193: laptop, laptop-x64-10.0.26200.7840-Client, 13th Gen Intel(R) Core(TM) i5-13420H, probe sha256:2fe586f116a1fb28b546e1009d605675be018d6001503aca11660d6985bba172 (-192) and sha256:6e75412ca9f139bdf500185bbe5fc8c996dbe1e339fb173a25cba5f3fbc591e7 (-193), the runners' two binaries; store/probe-runs/lap-20261013T231059422Z-136bec80-192/body-1.jsonl and body-2.jsonl and -193's, the four alike after windows_laptop_rows; the rows -192's body-1 after it",
+   "applicability": "the build and CPU observed",
+   "execution_ids": [
+    "windows-20261013T231059422Z-192-1",
+    "windows-20261013T231059422Z-192-2",
+    "windows-20261013T231059422Z-193-1",
+    "windows-20261013T231059422Z-193-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "Windows are records; nothing is drawn, and ShowWindow is later work.",
+  "Message 0x60, undocumented (wiert.me, 2020-12-22, lists it among loop messages without documentation), is posted to a system window of the thread some time after its window is activated: the probe met it after a posted WM_USER message on every run (wParam 0x80000001 on Server 2025, 1 on 2022), and the game dispatched one at seq 3491-3493 to a procedure it never saw. Its arrival varies (one execution met two in the WM_QUIT drain); w2m posts none, and the derivation takes it out of each drain (windows_rows).",
+  "On Windows DefWindowProcW's WM_ACTIVATE sends WM_IME_SETCONTEXT, WM_IME_NOTIFY and the first WM_SETFOCUS from inside; w2m sends them from SetFocus in the same order. A procedure that keeps WM_ACTIVATE from DefWindowProcW would get them in w2m and not on Windows.",
+  "LoadImageW of a cursor file left the last error 0 in the probe; the game's call left 6 (its file, written past the capture's 32-call count, is not on the record).",
+  "Where CW_USEDEFAULT places a window depends on the windows the desktop made before (160 and 32 seen for the laptop probe's first, 26, 52, 78 and 130 on the runners); w2m's cascade starts at 32, steps by 32 and does not wrap (the first execution of each laptop run put its fourth default-placed window back at 32 after 224).",
+  "The default height is fitted: 3/4 of the work area's height less 25 on the laptop at 120 DPI (740 on 1020), less 21 on both runners at 96."
+ ],
+ "sections": {
+  "probe": "probes/windows (Sprint 044)",
+  "implementation": "tools/guest_runtime/windows.c",
+  "rows": "scripts/family_run.py windows",
+  "excluded": "none"
+ },
+ "history": "0.1.0 (Sprint 054), 0.2.0 (Sprint 056) and 0.3.0 (Sprint 063) held the GitHub runners' rows, runs 38210803867 (windows-2025) and 38210806334 (windows-2022), both AMD EPYC 9V74 80-Core Processor: the work area to 720 on a 1024 x 768 screen at 96 DPI, the frame 8 and 31, the cascade in steps of 26, the foreground given to the probe; 0.4.0 (Sprint 383) the laptop's, the same two binaries; the earlier versions are kept unchanged (the Decision of 2026-10-07)."
+}

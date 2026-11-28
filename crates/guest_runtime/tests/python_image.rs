@@ -67,7 +67,7 @@ fn the_image_rust_builds_is_the_python_builds_byte_for_byte() {
 
 /// The C files the working tree changes from `FROZEN`'s, each with the sprint and the reason; the image the VM runs
 /// is the frozen one with these changes, which their own tests judge (Sprint 272).
-const DEPARTURES: [(&str, &str); 19] = [
+const DEPARTURES: [(&str, &str); 22] = [
     (
         "tools/guest_runtime/block_compiler.c",
         "Sprint 284: a dispatch pair stored whole by one stp; Sprint 286: way 0 read whole by one ldp",
@@ -76,6 +76,21 @@ const DEPARTURES: [(&str, &str); 19] = [
         "tools/guest_runtime/critical_section.c",
         "Sprint 368: w2m_critical_section_leave_once and w2m_critical_section_enter, SleepConditionVariableCS's two \
          halves (slim_locks.c): the section left by its owner entered once, and entered again",
+    ),
+    (
+        "tools/guest_runtime/display.c",
+        "Sprint 383: the display the laptop's, 1920 x 1080 at an effective 120 DPI, the work area to 1020, its 100 \
+         metrics, adapter 0 \\\\.\\DISPLAY12 \"Intel(R) UHD Graphics\" and its monitor, GetDpiForMonitor 120, 123 and \
+         141, EnumDisplaySettingsW at 144 Hz with 66 modes (laptop runs lap-20261013T231059422Z-136bec80-034 and -035), \
+         where the runners gave 1024 x 768 at 96 DPI on the Hyper-V adapter; the adapters past 0 FALSE as before; held \
+         by contracts/windows.display.display 0.3.0",
+    ),
+    (
+        "tools/guest_runtime/dxgi.c",
+        "Sprint 383: the laptop's three adapters (Intel, NVIDIA, Basic Render), the output \\\\.\\DISPLAY12 at \
+         0,0-1536,864 for a program without a DPI awareness and 0,0-1920,1080 for a PerMonitorV2 one, 34 and 66 modes at \
+         60 and 144 Hz (laptop runs lap-20261013T231059422Z-136bec80-036 and -037), where the runners gave two Basic \
+         Render adapters and 13 modes at 64 Hz; held by contracts/windows.dxgi.dxgi 0.3.0",
     ),
     (
         "tools/guest_runtime/environment.c",
@@ -212,6 +227,13 @@ const DEPARTURES: [(&str, &str); 19] = [
          Windows w2m answers as, the reference being the laptop\" (laptop run lap-20261013T231059422Z-136bec80-186 \
          lines 88-89 and 92, and its profile.txt), and shell32's file revision 7840, its line 96, where the runners' \
          Server 2025 gave 26100, product type 3 and 33438; held by contracts/windows.version.version 0.2.0",
+    ),
+    (
+        "tools/guest_runtime/windows.c",
+        "Sprint 383: a window on the laptop's screen at 120 DPI, the frame 9 and 38, the minimum and maximum tracking \
+         sizes 166 x 47 and 1942 x 1102, the cascade from 32 in steps of 32, a default height 3/4 of the work area's \
+         less 25 (laptop runs lap-20261013T231059422Z-136bec80-192 and -193), where the runners gave 8 and 31, 136 x 39 \
+         and 1044 x 788, steps of 26 from w2m's 52, and less 21; held by contracts/windows.windows.windows 0.4.0",
     ),
     (
         "tools/vm_compiler/vm_compiler.c",

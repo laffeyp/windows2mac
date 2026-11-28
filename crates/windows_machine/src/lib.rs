@@ -800,8 +800,10 @@ pub fn batch_items(root: &Path, names: &[String]) -> Result<Vec<BatchItem>, Stri
     // the re-taken table's laptop runs, in KNOWN's first five columns
     let text = fs::read_to_string(root.join(RETAKEN)).map_err(|e| format!("{RETAKEN}: {e}"))?;
     for line in text.lines().filter(|l| !l.starts_with('#') && !l.is_empty()) {
-        let [family, contract, run] = line.split('\t').collect::<Vec<_>>()[..] else {
-            return Err(format!("{RETAKEN}: a row of 3 columns, not {line:?}"));
+        // from Sprint 383 a fourth column, the start the laptop run's session adds, which a batch item does not carry
+        let (family, contract, run) = match line.split('\t').collect::<Vec<_>>()[..] {
+            [family, contract, run] | [family, contract, run, _] => (family, contract, run),
+            _ => return Err(format!("{RETAKEN}: a row of 3 or 4 columns, not {line:?}")),
         };
         let at = format!("store/probe-runs/{run}/probe.sha256");
         let sha = fs::read_to_string(root.join(&at))

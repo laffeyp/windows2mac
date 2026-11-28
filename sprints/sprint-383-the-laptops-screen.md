@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 383
-status: active
+status: done
 phase: 6
 pass_kind: functional
 ---
@@ -95,4 +95,185 @@ the laptop's rows, and the adapter enumeration's gap is named.
 
 ## result
 
-GATES-LINE
+- **The value table**, w2m before (HEAD 64e0c9279), the laptop's row, w2m after; the display family's laptop runs
+  `lap-20261013T231059422Z-136bec80-034` and `-035` (the runners' two binaries, all four bodies byte-equal), the
+  windows family's `-192` and `-193`, the dxgi family's `-036` and `-037` (all four bodies byte-equal):
+
+  | call (argument) | w2m before | the laptop's row | w2m after |
+  |---|---|---|---|
+  | GetSystemMetrics 0, 1, 16, 78, 79 (screen, full screen, virtual screen) | 1024, 768 | 1920, 1080 (metric.0-1, .16, .78-79) | 1920, 1080 |
+  | GetSystemMetrics 4, 51 (caption), 92 (padded border), 17, 62 | 23, 23, 4, 697, 736 | 29, 29, 5, 991, 1038 | the laptop's |
+  | GetSystemMetrics, the other 35 indexes that differ (2-3, 9-12, 15, 20-21, 28-31, 34-35, 38-39, 43, 47-50, 52-55, 57-61, 71-72, 75, 93) | the runners' (93: 0) | the laptop's (43 SM_CMOUSEBUTTONS 2, 75 SM_MOUSEWHEELPRESENT 0, 93 1348 in four bodies) | the laptop's, 100 of 100 |
+  | EnumDisplayDevicesA (NULL, 0) | \\.\DISPLAY1, "Microsoft Hyper-V Video", VMBUS\{da0a...} | \\.\DISPLAY12, "Intel(R) UHD Graphics", state 5, PCI_VEN_8086&DEV_A7A8&SUBSYS_8DCD103C&REV_04 (a backslash written "_") | the laptop's, PCI\VEN_8086&DEV_A7A8&SUBSYS_8DCD103C&REV_04 |
+  | EnumDisplayDevicesA (adapter, 0) | \\.\DISPLAY1\Monitor0, MSH062E, ...\0000 | \\.\DISPLAY12\Monitor0, "Generic PnP Monitor", BOE0CFD, ...\0002 | the laptop's |
+  | EnumDisplayDevicesA (NULL, 1), (NULL, 2) | FALSE | TRUE, \\.\DISPLAY13 and \\.\DISPLAY14, state 0 | FALSE: waiting (below) |
+  | EnumDisplayMonitors, GetMonitorInfoA/W | 0,0-1024,768, work to 720, \\.\DISPLAY1 | 0,0-1920,1080, work to 1020, \\.\DISPLAY12 | the laptop's |
+  | GetDpiForMonitor effective, angular, raw | 96, 96, 0x80070032 with 0 | 120, 123, 141, each S_OK | the laptop's |
+  | EnumDisplaySettingsW current, registry; mode count | 1024 x 768 x 32 at 64 Hz; 13 | 1920 x 1080 x 32 at 144 Hz; 66 (fixed output 0 and 1) | the laptop's |
+  | EnumDisplaySettingsW (\\.\DISPLAY1, any mode) | TRUE as NULL | FALSE (another device on the laptop) | FALSE; \\.\DISPLAY12 TRUE |
+  | windows: work area; WM_GETMINMAXINFO | 1024 x 720; 1040 x 784 at -8, 136 x 39, 1044 x 788 | 1920 x 1020; 1938 x 1098 at -9, 166 x 47, 1942 x 1102 | the laptop's |
+  | windows: frame, CW_USEDEFAULT, default size | 8 and 31; 52, 52 in steps of 26; 768 x 519 | 9 and 38; 160, 160 or 32, 32 in steps of 32; 1440 x 740 | 9 and 38; 32, 32 in steps of 32; 1440 x 740 |
+  | windows: WM_ACTIVATEAPP lParam, WM_NCACTIVATE wParam (msg.game.9-13) | the thread's, 1 (the family's start) | 0, 0 (the foreground held) | 0, 0 (start foreground_held) |
+  | dxgi: adapters | two Basic Render, 8,587,180,032 shared | Intel (128 MiB), NVIDIA RTX 3050 (6,292,504,576), Basic Render; 16,985,460,736 shared | the laptop's |
+  | dxgi: the output | \\.\DISPLAY1 at 0,0-1024,768 | \\.\DISPLAY12 at 0,0-1536,864 (a probe without a manifest) | 1536 x 864 without the awareness; 1920 x 1080, GetMonitorInfoW's measured rectangle, to a PerMonitorV2 program (DXGI's own: not measured) |
+  | dxgi: GetDisplayModeList | 13 at 64/1 Hz | 34 (flags 0, 1), 66 (2, 3) at 14712000/245196 and 35309000/245196 | the laptop's |
+
+- **Named as waiting, not re-taken:** EnumDisplayDevicesA past adapter 0. The game asks the laptop for adapters 0 to
+  5 and is told TRUE to 4; the rows give adapters 1 and 2 and no row gives 3 or 4. w2m answers FALSE at 1, as the
+  runners did, so the game makes no call at 2-5 (runner run 38216081440 makes none either: G3 holds it as a value
+  Windows varies). The display family's two runs are held in `store/family_runs/sweep-held-2026-10-29.tsv` by their
+  first divergence, `row "devices.adapter_1": id reference "PCI_VEN_8086&DEV_A7A8&SUBSYS_8DCD103C&REV_04", target
+  null (windows.display.display@0.3.0)`, waiting on a laptop probe that asks for adapters 3 and 4, which waits on the
+  user's Smart App Control answer (BLACKBOARD Surfaced, 2026-11-27). No API id is added
+  (`crates/guest_runtime/src/api_ids.txt` unchanged).
+- **Named as not measured:** DXGI's DesktopCoordinates for a PerMonitorV2 program. The dxgi probe has no manifest and
+  its row gives 0,0-1536,864, the 120 DPI desktop seen by a program without the awareness; Microsoft's DXGI_OUTPUT_DESC
+  page (https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_output_desc, updated 2024-02-22) says of
+  DesktopCoordinates only "Desktop coordinates depend on the dots per inch (DPI) of the desktop", and gives no figure
+  for an aware program. Decision (the supervisor's ruling, 10:19Z): w2m gives a program without the awareness the row's
+  0,0-1536,864 and a PerMonitorV2 program the monitor rectangle it measurably receives in the same desktop
+  coordinates, GetMonitorInfoW's rcMonitor 0,0-1920,1080 (display row info.wide of -034, and the 13 laptop game runs);
+  derived from a measured value, DXGI's own figure not measured; revisit if a stored row gives DXGI's DesktopCoordinates
+  for an aware program. A form that gave every program 0,0-1536,864 was run (run F) and put back by `cp`, `cmp` equal
+  to the form of the first gates pass. The other display calls' answers to a program without the awareness are in no
+  row either; no family run that makes them lacks the manifest.
+- **The PCI id's backslash:** the probe's rows write a backslash as "_" ("PCI_VEN_8086&DEV_A7A8&..."); display.c
+  writes `PCI\VEN_8086&DEV_A7A8&SUBSYS_8DCD103C&REV_04`, the hardware ID form of Microsoft's "Identifiers for PCI
+  Devices" (https://learn.microsoft.com/en-us/windows-hardware/drivers/install/identifiers-for-pci-devices, updated
+  2025-07-18): `PCI\VEN_v(4)&DEV_d(4)&SUBSYS_s(4)n(4)&REV_r(2)`.
+- **The families**, each through `store/family_runs/retaken-2026-11-27.tsv`, three rows added by `printf`: display
+  to `windows.display.display@0.3.0` (laptop run -034, rule display_rows), windows to `windows.windows.windows@0.4.0`
+  (-192) with a fourth column `{"foreground_held":true}`, dxgi to `windows.dxgi.dxgi@0.3.0` (-036, raw). Each new
+  version is the last one rewritten by `jq --indent 1` (which reproduces the earlier files byte for byte): version,
+  summary, applicability, scenario, the rows (the laptop run's after its rule), the evidence (the laptop runs), open
+  questions, history; the earlier versions unchanged. `each_retaken_contract_holds_its_laptop_runs_rows`: every body
+  of -034/-035, -192/-193 and -036/-037 conforms to its contract.
+  - The windows family's laptop runs show the foreground held by another program (WM_ACTIVATEAPP lParam 0,
+    WM_NCACTIVATE 0, rows msg.game.9-13), as windows.c already answers under `foreground_held`, the game's start. The
+    route's fourth column, read by `crates/w2m_vm/src/bin/family_known.rs` (`Retaken`, merged into the family's start)
+    and accepted by `crates/windows_machine/src/lib.rs` `batch_items`, starts the family's two runs so; refused as
+    another start key, not an object, or a fifth column (`a_retaken_row_is_refused_by_what_it_names`, three cases);
+    `a_retaken_rows_start_options_reach_the_familys_start` holds a fixture row's `{"foreground_held":true}` as
+    `code_rewrite`'s whole start and the windows row's merged with its environment. The table's header comment states
+    the column. Decision (agent-resolved): the table gains an optional fourth column rather than a change to the frozen
+    extract's start options, so the frozen host's data stays as it was and the start the laptop's session gives is
+    named beside the laptop run it comes from; grounds: project, rows msg.game.9-13 of -192 and -193 and windows.c's
+    held mode; SDD, AGENTS.md "Resolve-and-record"; practice, n/a; revisit if a laptop run gives the probe the
+    foreground, or a second family needs a start of its own.
+  - A rule of the Rust host's own, `windows_laptop_rows` (`crates/w2m_vm/tests/family_runs.rs` `derive`, and a case in
+    `the_row_rules_derive_as_the_frozen_code_does`): windows_rows, and class.register without after_first, false in
+    -192 body-1 and -193 body-2 and true in the other two; a derivation named "crates/w2m_vm/tests/family_runs.rs
+    <name>:" is read by `family_known`'s `rule` and the test's.
+  - `store/family_runs/known-2026-10-29.tsv` is `family_known`'s output under the table (six lines: the three
+    families' contract columns, windows' start and rule).
+  - `RETAKEN_DIFFERENCES` (`crates/windows_machine/tests/runner_families_on_the_laptop.rs`) gains the three families:
+    display's 80 rows and "155 lines against 208", dxgi's 66 rows and "74 lines against 151", each exact in all pairs;
+    windows' 29 rows in all eight pairs, and a third list of the rows a pair names or not by the executions it pairs
+    (class.register; queue.quit.01, queue.quit.02 and msg.other.0-3, which the line-by-line comparison names as the
+    runners' executions met message 0x60 once or twice in the WM_QUIT drain; "112 lines against 106" and "108 lines
+    against 106").
+  - The family runs after the change: "272 of 274 family runs conform, 68 of 69 families in every run; the rest held
+    by what they wait on" and "on two vCPUs: 274 of 274 held as on one vCPU, 272 of them conforming"; the dxgi run's
+    output equals -036's body byte for byte, the windows run's -192 body-2's but for the queue rows windows_rows drops.
+- **The game's runs, measured one change at a time** (`scratchpad/383/measure.sh`: `cargo build`, then
+  `scripts/gates.sh` 168-180 verbatim, the stream against the stored one by `first-diff.sh`, runtime-image addresses
+  and the varying cells set aside), each change reverted in place from `scratchpad/383/*.c` and restored by `cp`,
+  `cmp` equal:
+  - run A, all three, 09:39:51-09:41:24Z: from row 2384, GetSystemMetrics(0x4e) 0x780 where 0x400; 10,526 rows;
+  - run B, display.c alone, 09:44:27-09:46:01Z: from row 2384, the same; 10,532 rows; against A first at row 2542,
+    LoadLibraryW's a5 0x2c100000590 where A's 0x2b50000058e (the window's client size, 1424 x 705 against 1422 x
+    693, the value the laptop's game trace carries at its MonitorFromWindow);
+  - run C, windows.c alone, 09:46:20-09:47:56Z: from row 2542, a5 0x1d4000002ee where 0x1e0000002f0; 10,436 rows;
+  - run D, dxgi.c alone, 09:48:19-09:49:55Z: from row 9183, FreeLibrary's a1 0x3b8 where 0x16c (34 modes of 28
+    bytes where 13); 10,515 rows;
+  - run E, all three, 09:50:43-09:52:19Z (record-1795859443000000000): equal to A but for the eight varying cells.
+    Its unity.log is 180 lines, equal, numbers aside, to lap-20261014T032442034Z-c8814547-01's whole log (16 "Res"
+    lines, the laptop's 17 sizes, where the runner's 168 lines had 12);
+  - run F, DXGI's coordinates one answer for every program, 10:15:03-10:16:38Z (record-1795860903000000000): equal to E
+    but for the varying cells and 15 cells of runtime-image addresses in column 10 (0x18 lower); the form put back;
+  - run G, the closing run, the ruled tree (dxgi.c `cmp` equal to E's), 10:20:39-10:22:12Z
+    (record-1795861239000000000): equal to E but for the eight varying cells, its stop counts E's.
+- **Frozen-host-era artifacts the change moves, each by its file's rule:**
+  - `store/batch_run/first-stop-calls-2026-11-28.tsv`, the stored stream: its two header lines kept, a third, "#
+    Sprint 383: ...", by `printf` (restated by `sed` for run G), and run G's 10,526 rows by `cat` (`grep -v '^#' | cmp -` equal; 15 fields each, by
+    awk). Against Sprint 382's rows: before row 2384, 35 cells of runtime-image addresses (columns 5, 10, 13; the C
+    runtime's image laid out anew) and the varying cells; from 2384 the laptop's display values; the calls alike to
+    row 7182, parting at 7183 (InterlockedFlushSList where SwitchToThread). The frozen host's stream is held to
+    `LAST_HELD_ROW` 28 as before ("the Rust stream equals the Python's rows 0-28 of 10505").
+  - `store/batch_run/first-stop-2026-10-28.tsv`, the held stop: rows 2-39 from run E's stop (A's alike), the header
+    extended by `sed`: hvc 1 1147 to 1146, hvc 8 38938 to 38942, compiled 274788 to 274860, cut by no stencil 191 to
+    189, no stencil 179 to 178, blocks the host compiled 275566 to 275637, calls traced 10515 to 10526.
+  - `crates/w2m_vm/tests/batch_run.rs` `REFERENCE_LOG`: the log judge reads lap-20261014T032442034Z-c8814547-01's
+    unity.log where runner 38216081440's (reported to the supervisor before the change, and agreed): all 180 lines,
+    numbers masked as the judge masks them. -01 is chosen because nine of the ten c8814547 runs and the three 33b6423b
+    runs log alike; -05 logs two more lines ("New_Input - DONE !!!" and its file line). The runner's log file stays
+    byte-equal, as history. The run's end, `--log-lines 168` and the runner's main-thread calls, is unchanged: run G
+    stopped "ReferenceEnd: the log holds the reference's 168 lines and the main thread its calls"; moving the stop rule
+    to a laptop run is a card of its own.
+  - The exit ledger (`exit_ledger.rs`, to the game's first MAP_VIEW 29) did not move: its three tests pass on run E
+    with `store/exit_ledger/differences-2026-10-29.tsv` unchanged.
+  - `crates/guest_runtime/tests/python_image.rs` `DEPARTURES` 19 to 22: display.c, dxgi.c and windows.c, each with its
+    reason.
+- **G3** on run E and its two-vCPU run (09:52:19-09:55:13Z): "the Rust host's 10526 calls: conforms, 0 defects, 0 past
+  the cut (0 for the frozen host's same rows), 0 scheduling, 24 values Windows varies" and "the Rust host's 10487
+  calls on two vCPUs: conforms, 0 defects, 0 past the cut, 0 scheduling, 24 values Windows varies" (25 and 24 before).
+- **The values w2m shares with runner run 38216081440 alone**, of the 24 G3 holds as Windows' variance on the last
+  gates run's one-vCPU stream: read by a reader in the scratchpad (`scratchpad/383/varies`, a crate outside the tree
+  on `call_compare` by path) that calls `Windows::load` and `judge` and prints each `varies()` entry's `text()`. The
+  reference set's order puts 38216081440 first; an entry "13 of 14 reference executions disagree, 1 agree" whose
+  first disagreeing run is a laptop run is therefore agreed by the runner alone. Eight, each with lap-01's seq, and
+  the 13 laptop traces' values read by awk from `store/game-runs/*/jit_capture.bin.trace.tsv`:
+
+  | call (its call index), field | seq | w2m | the 13 laptop runs | the runner |
+  |---|---|---|---|---|
+  | mono GetTimeZoneInformation (0), ret | 921 | 0 | 2 (the ten c8814547), 1 (the three 33b6423b) | 0 |
+  | mono WideCharToMultiByte (0), ret | 923 | 0x1b | 0x16 | 0x1b |
+  | mono WideCharToMultiByte (1), ret | 924 | 0x1b | 0x16 | 0x1b |
+  | UnityPlayer EnumDisplayDevicesA (2), ret: (NULL, 1) | 1545 | 0 | 1 | 0 |
+  | EnumDisplayDevicesA (3), (NULL, 2): presence | 1546 | none | 1 | none |
+  | EnumDisplayDevicesA (4), (NULL, 3): presence | 1547 | none | 1 | none |
+  | EnumDisplayDevicesA (5), (NULL, 4): presence | 1548 | none | 1 | none |
+  | EnumDisplayDevicesA (6), (NULL, 5): presence | 1549 | none | 0 | none |
+
+  Count: 8, five of them the adapter enumeration this card names as waiting, three the time zone and its name's
+  conversion (Sprint 381's "machine values with a laptop row, not yet re-taken", time_and_error_mode). The other
+  sixteen are agreed by 8 to 13 runs, laptop runs among them (GetSystemMetrics 0x4e and 0x4f: 13 agree,
+  the runner alone disagrees).
+- **File count** (`WORKING_AGREEMENT.md` 301): 3 created (the three contract versions) and 14 modified (`display.c`,
+  `windows.c`, `dxgi.c`, `family_known.rs`, `windows_machine/src/lib.rs`, `family_runs.rs`,
+  `runner_families_on_the_laptop.rs`, `python_image.rs`, `batch_run.rs`, `retaken-2026-11-27.tsv`,
+  `known-2026-10-29.tsv`, `sweep-held-2026-10-29.tsv`, `first-stop-calls-2026-11-28.tsv`,
+  `first-stop-2026-10-28.tsv`), with this card and the gates' rows. Over 10, one concept: the three answers' files
+  are one screen (windows.c reads display.c's work area, dxgi.c its monitor), and every other file is their
+  contracts, their route and the judges the answers move; split, the first part's gates would fail on the judges the
+  second holds.
+- **Plant 1** "display	38273510163	ended; row \"metric.0\": value reference 1920, target 1024
+  (windows.display.display@0.3.0)	(which store/family_runs/sweep-held-2026-10-29.tsv does not hold)", and the same for
+  38273513428, `family_runs::every_family_run_conforms_or_is_held_by_what_it_waits_on` exit 101; live
+  09:58:25-09:59:33 UTC:
+  - backup `scratchpad/plants/383/display.c.backup`; `display.c` 57's first metric, SM_CXSCREEN, set to 1024 with the
+    Edit tool (grep, line 57); every family run on one and two vCPUs (`scratchpad/383/family-runs.sh`, gates.sh
+    242-263), then the judge under `W2M_REQUIRE_CASE_RUNS=1`; log `plant1.log`; restored by `cp`, `cmp` equal.
+- **Plant 2** "windows	38210803867	ended; row \"screen.work_area\": bottom_above_768 reference false, target true
+  (windows.windows.windows@0.4.0)	(which store/family_runs/sweep-held-2026-10-29.tsv does not hold)", and the same for
+  38210806334, the same judge, exit 101; live 09:59:46-10:00:54 UTC; the display family's held entries stood, its
+  rows keeping the work area as relations:
+  - backup `display.c.backup`; `display.c` 50, `WORK_H`, set to 720 with the Edit tool (grep, line 50); the family runs
+    and the judge as for plant 1; log `plant2.log`; restored by `cp`, `cmp` equal.
+- **Plant 3** "line 97 of the batch run's unity.log differs from the reference's\n  left: \"Rez # # # \"\n right: \"Res # # # \"",
+  `batch_run::the_batch_runs_log_is_the_references_line_for_line` exit 101; live 10:17:22-10:17:25 UTC (asked by the
+  supervisor partway through):
+  - backup `scratchpad/plants/383/unity.log.backup` of run F's (its log equal to G's, numbers aside) `build/batch_run/first-stop.unity.log`; line 97, "Res
+    800 600 2", set to "Rez ..." by `sed` (`sed -n 97p`); the judge under `W2M_REQUIRE_CASE_RUNS=1`; log `plant3.log`;
+    restored by `cp`, `cmp` equal.
+- **A first gates run passed** at E's tree (`exit 0 in 592 s`, 2026-11-28T10:12:40Z, root=5e59c115a, kept in
+  `store/gates/passes.tsv`; 504 tests; its two-vCPU run 132.108 s, "load averages 1.17 1.42 1.45"). A second, on the
+  one-answer form of dxgi.c, was stopped by the supervisor at 10:19:52Z (exit 143, no pass row). With dxgi.c, the
+  dxgi contract and `python_image.rs` put back, the gated tree differs from the first pass's by the route test
+  (`family_runs.rs`) and the stored stream regenerated from run G; the gates ran once more, below.
+
+- **Gates:** `exit 0 in 592 s	default	2026-11-28T10:33:19Z	sprint 383	64e0c92796cf784703fd6ba801a4baf13f4d1080	ca53bfbfef718463716d9ceeb701eb7bcc2516a677ebb898971d51914797b38d	root=81cc95b40cba4d0a919b631361e725457f4f4b3c	rust=all python=0 samples=0	base=3f787f6296f05c29218cc9501075350212c27cee`
+  (505 tests run, 505 passed, 1 skipped).
+- **G3's two-vCPU batch run in these gates:** `run_seconds` 132.446110171 (variant vm,
+  `build/batch_run/record-2-vcpus-1795861508000000000`, verdict conforms); `load_at_start` "load averages 1.58 2.10
+  2.22; busy: mds_stores 98%; other w2m: none".

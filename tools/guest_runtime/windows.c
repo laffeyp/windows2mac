@@ -9,15 +9,16 @@
  *     registered again by the same module answers 0 with ERROR_CLASS_ALREADY_EXISTS (1410); CreateWindowExW of a
  *     class never registered NULL with ERROR_CANNOT_FIND_WND_CLASS (1407)
  *   - CreateWindowExW sends the window procedure four messages, in order: WM_GETMINMAXINFO (the maximized size, the
- *     screen and 8 more each side, at -8, -8; the tracking sizes 136 x 39 and 1044 x 788), WM_NCCREATE and
- *     WM_CREATE with a CREATESTRUCTW holding the arguments (cx and cy as given, CW_USEDEFAULT included; x and y
- *     where the window lands; the style as given; WS_EX_WINDOWEDGE added to the extended style when the style has
- *     a caption), and between them WM_NCCALCSIZE with the window's rectangle; then returns the window, the last
- *     error left; DefWindowProcW answers 0, 1 (the title taken), the client rectangle (8 in at the sides and bottom,
- *     31 at the top) and 0
+ *     screen and the frame more each side, at minus the frame; the tracking sizes SM_C?MINTRACK and SM_C?MAXTRACK),
+ *     WM_NCCREATE and WM_CREATE with a CREATESTRUCTW holding the arguments (cx and cy as given, CW_USEDEFAULT
+ *     included; x and y where the window lands; the style as given; WS_EX_WINDOWEDGE added to the extended style when
+ *     the style has a caption), and between them WM_NCCALCSIZE with the window's rectangle; then returns the window,
+ *     the last error left; DefWindowProcW answers 0, 1 (the title taken), the client rectangle (the frame in at the
+ *     sides and bottom, the caption and the frame at the top) and 0
  *   - a window gets WS_CLIPSIBLINGS and WS_CAPTION and WS_EX_WINDOWEDGE; CW_USEDEFAULT places it on the desktop's
- *     cascade (steps of 26, from a start the desktop's earlier windows set) and sizes it 3/4 of the work area's
- *     width by 3/4 of its height less 21; w2m's desktop starts the cascade at 52, the lowest start the runners showed
+ *     cascade (from a start the desktop's earlier windows set) and sizes it 3/4 of the work area's width by 3/4 of its
+ *     height less a margin; the values at FRAME_SIDE below, the laptop's from Sprint 383 (the runners' were 8, 31,
+ *     136 x 39, 1044 x 788, steps of 26 and less 21)
  *   - SetWindowLongPtrW and GetWindowLongPtrW reach the class's extra bytes (ERROR_INVALID_INDEX, 1413, past them)
  *     and GWLP_USERDATA, the last error left; GetWindowLongPtrW gives the style, extended style, instance and
  *     procedure; GetClientRect and GetWindowRect the rectangles; the window is not visible
@@ -99,10 +100,22 @@ typedef unsigned short u16;
 #define GWL_STYLE (-16)
 #define GWL_EXSTYLE (-20)
 #define GWLP_USERDATA (-21)
-#define FRAME_SIDE 8                         /* SM_CXFRAME 4 and SM_CXPADDEDBORDER 4 */
-#define FRAME_TOP 31                         /* the caption, 23, and the frame */
-#define CASCADE_START 52
-#define CASCADE_STEP 26
+/* From Sprint 383 the laptop's screen at 120 DPI (contracts/windows.windows.windows 0.4.0, laptop runs
+ * lap-20261013T231059422Z-136bec80-192 and -193; display.c's metrics): the frame 9 (SM_CXFRAME 4 and
+ * SM_CXPADDEDBORDER 5), the caption 29, the cascade in steps of 32 (from 160 and from 32 in the two executions of each
+ * run), a default-sized window 3/4 of the work area's width by 3/4 of its height less 25. The runners' at 96 DPI
+ * (0.3.0): 8, 23, steps of 26 (from 26, 52, 78 and 130), less 21; w2m's desktop started the cascade at 52. */
+#define FRAME_SIDE 9                         /* SM_CXFRAME 4 and SM_CXPADDEDBORDER 5 */
+#define FRAME_TOP 38                         /* the caption, 29, and the frame */
+#define CASCADE_START 32                     /* the lowest start the laptop showed */
+#define CASCADE_STEP 32
+#define DEFAULT_HEIGHT_LESS 25               /* rows msg.batch.2 of -192: 160,160 to 1600,900 on a work area to 1020 */
+#define SCREEN_W 1920                        /* display.c */
+#define SCREEN_H 1080
+#define MIN_TRACK_X 166                      /* SM_CXMINTRACK, SM_CYMINTRACK */
+#define MIN_TRACK_Y 47
+#define MAX_TRACK_X 1942                     /* SM_CXMAXTRACK, SM_CYMAXTRACK */
+#define MAX_TRACK_Y 1102
 #define CLASSES 16
 #define WINDOWS 16
 #define EXTRA 64
@@ -316,7 +329,7 @@ W2M_VOID u64 user32_CreateWindowExW(u64 ex_style, u64 class_name, u64 title, u64
         s32 work[4];
         w2m_display_work_area(work);
         cx = (work[2] - work[0]) * 3 / 4;
-        cy = (work[3] - work[1]) * 3 / 4 - 21;
+        cy = (work[3] - work[1]) * 3 / 4 - DEFAULT_HEIGHT_LESS;
     }
     w->rect[0] = left; w->rect[1] = top; w->rect[2] = left + cx; w->rect[3] = top + cy;
     for (int i = 0; i < 4; i++) w->client[i] = w->rect[i];
@@ -327,10 +340,10 @@ W2M_VOID u64 user32_CreateWindowExW(u64 ex_style, u64 class_name, u64 title, u64
     f->rsp = rsp;
     f->window = h;
     s32 *mm = f->minmax;                     /* the screen's, not the work area's (rows msg.*.0) */
-    mm[2] = 1024 + 2 * FRAME_SIDE; mm[3] = 768 + 2 * FRAME_SIDE;
+    mm[2] = SCREEN_W + 2 * FRAME_SIDE; mm[3] = SCREEN_H + 2 * FRAME_SIDE;
     mm[4] = -FRAME_SIDE; mm[5] = -FRAME_SIDE;
-    mm[6] = 136; mm[7] = 39;                 /* SM_CXMINTRACK, SM_CYMINTRACK */
-    mm[8] = 1044; mm[9] = 788;               /* SM_CXMAXTRACK, SM_CYMAXTRACK */
+    mm[6] = MIN_TRACK_X; mm[7] = MIN_TRACK_Y;
+    mm[8] = MAX_TRACK_X; mm[9] = MAX_TRACK_Y;
     u8 *cs = f->create;
     *(u64 *)(cs + 0) = param;
     *(u64 *)(cs + 8) = instance;

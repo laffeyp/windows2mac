@@ -22,7 +22,9 @@
 //! From Sprint 378 a frozen family can be held to a contract re-taken on the laptop: a family that
 //! `store/family_runs/retaken-2026-11-27.tsv` (`RETAKEN`) names prints every run with the contract version named there,
 //! and the row rule that contract states, in place of its record's. `family_known ROOT TABLE` reads the table at TABLE
-//! instead, for a test's fixture; the table refuses a row by what it names (`retaken`).
+//! instead, for a test's fixture; the table refuses a row by what it names (`retaken`). From Sprint 383 a row's fourth
+//! column, where it has one, is the start options the laptop run's session adds to the family's (the windows family's
+//! laptop runs show the foreground held by another window), printed merged into the family's start.
 //!
 //! The extract was written by this binary's text reader from `family_run.py` at the tag frozen-python-2026-10-29, and the
 //! table it gives was held equal to the stored one before the Python went. A column of the imported services whose C body refuses some argument form was tried and
@@ -150,8 +152,9 @@ mod known {
     }
 
     /// The row rule a contract states: its derivation's name (`acceptance.derivation`, "scripts/family_run.py <name>:
-    /// ...") or "raw". Its excluded rows are the extract's, not the contract's text, whose reasons hold "; " too
-    /// (Sprint 233: `windows.file.attributes`' 2 rows were counted 4).
+    /// ...", the frozen host's, or from Sprint 383 "crates/w2m_vm/tests/family_runs.rs <name>: ...", a rule the Rust
+    /// host's judge holds for a contract re-taken on the laptop) or "raw". Its excluded rows are the extract's, not the
+    /// contract's text, whose reasons hold "; " too (Sprint 233: `windows.file.attributes`' 2 rows were counted 4).
     fn rule(root: &Path, contract: &str) -> Result<String, String> {
         let (id, version) = contract.split_once('@').ok_or(format!("{contract}: no version"))?;
         let path = root.join(format!("contracts/{id}/{version}.json"));
@@ -160,7 +163,10 @@ mod known {
                 .map_err(|e| format!("{}: {e}", path.display()))?;
         let derivation = c["acceptance"]["derivation"]
             .as_str()
-            .and_then(|d| d.strip_prefix("scripts/family_run.py "))
+            .and_then(|d| {
+                d.strip_prefix("scripts/family_run.py ")
+                    .or_else(|| d.strip_prefix("crates/w2m_vm/tests/family_runs.rs "))
+            })
             .and_then(|d| d.split(':').next())
             .unwrap_or("raw");
         Ok(derivation.to_string())
@@ -215,24 +221,47 @@ mod known {
     }
 
     /// The frozen families held to a contract re-taken on the laptop (Sprint 378). Rows: family, contract@version, the
-    /// laptop run whose rows that contract holds. Empty of families until a card re-takes one.
+    /// laptop run whose rows that contract holds; from Sprint 383 a fourth column where the laptop run's start differs
+    /// from the family's, a JSON object of `START_KEYS` the laptop's session sets, added to the family's start options.
     const RETAKEN: &str = "store/family_runs/retaken-2026-11-27.tsv";
+
+    /// A re-taken family's contract and the start options its laptop run adds (an empty object for none).
+    struct Retaken {
+        contract: String,
+        start: serde_json::Map<String, Value>,
+    }
 
     /// The re-taken contract of each family `table` names, checked against the frozen index's families and the
     /// contract each one's record names (`recorded`). A row is refused naming what it names wrongly: a family the index
     /// lacks, a contract file that does not exist, a contract other than the record's, a run that is not a stored
-    /// laptop run, or a family already named.
+    /// laptop run, a family already named, or (Sprint 383) a start that is no object of `START_KEYS`.
     fn retaken(
         root: &Path,
         table: &Path,
         text: &str,
         recorded: &BTreeMap<String, String>,
-    ) -> Result<BTreeMap<String, String>, String> {
+    ) -> Result<BTreeMap<String, Retaken>, String> {
         let at = table.display();
         let mut out = BTreeMap::new();
         for l in text.lines().filter(|l| !l.starts_with('#') && !l.is_empty()) {
-            let [family, contract, run] = l.split('\t').collect::<Vec<_>>()[..] else {
-                return Err(format!("{at}: a row of 3 columns, not {l:?}"));
+            let (family, contract, run, start) = match l.split('\t').collect::<Vec<_>>()[..] {
+                [family, contract, run] => (family, contract, run, None),
+                [family, contract, run, start] => (family, contract, run, Some(start)),
+                _ => return Err(format!("{at}: a row of 3 or 4 columns, not {l:?}")),
+            };
+            let start = match start {
+                None => serde_json::Map::new(),
+                Some(text) => match serde_json::from_str::<Value>(text) {
+                    Ok(Value::Object(keys)) => match keys.keys().find(|k| !START_KEYS.contains(&k.as_str())) {
+                        Some(k) => {
+                            return Err(format!(
+                                "{at}: {family}'s start names {k}, which vm_inputs does not give"
+                            ));
+                        }
+                        None => keys,
+                    },
+                    _ => return Err(format!("{at}: {family}'s start {text} is not a JSON object")),
+                },
             };
             let Some(theirs) = recorded.get(family) else {
                 return Err(format!(
@@ -257,7 +286,11 @@ mod known {
                     "{at}: {family}'s run {run} is no stored laptop run ({profile})"
                 ));
             }
-            if out.insert(family.to_string(), contract.to_string()).is_some() {
+            let moved = Retaken {
+                contract: contract.to_string(),
+                start,
+            };
+            if out.insert(family.to_string(), moved).is_some() {
                 return Err(format!("{at}: {family} named twice"));
             }
         }
@@ -315,7 +348,7 @@ mod known {
         let text = fs::read_to_string(&table).map_err(|e| format!("{}: {e}", table.display()))?;
         let moved = retaken(&root, &table, &text, &recorded)?;
         for (family, entry) in index {
-            let contract = moved.get(family).unwrap_or(&recorded[family]).clone();
+            let contract = moved.get(family).map_or(&recorded[family], |m| &m.contract).clone();
             let (excluded, stop) = excluded_and_stops.get(family).cloned().unwrap_or_default();
             let rule = format!("{} excluded {}", rule(&root, &contract)?, excluded.len());
             let excluded = if excluded.is_empty() {
@@ -324,7 +357,17 @@ mod known {
                 excluded.join(" ")
             };
             let stop = stop.unwrap_or_else(|| "-".to_string());
-            let start = options.get(family).map_or_else(|| "-".to_string(), Value::to_string);
+            // the family's start, and from Sprint 383 what its laptop run's start adds
+            let mut start = options.get(family).cloned();
+            if let Some(added) = moved.get(family).map(|m| &m.start).filter(|s| !s.is_empty()) {
+                let mut keys = match start {
+                    Some(Value::Object(keys)) => keys,
+                    _ => serde_json::Map::new(),
+                };
+                keys.extend(added.clone());
+                start = Some(Value::Object(keys));
+            }
+            let start = start.map_or_else(|| "-".to_string(), |s| s.to_string());
             let dll_name = dll_names.get(family);
             let judged = entry["divergence"]
                 .as_object()

@@ -1,9 +1,9 @@
-# the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n; "-" in both for a guest the frozen host never ran, two_process_deadlock from Sprint 364, two_process_pipe_pingpong from Sprint 365 and condition_cs from Sprint 368, which exits 0 only when SleepConditionVariableCS's checks hold); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs; Sprint 379: hvc 8 38881 to 38939, compiled 274830 to 274778 and blocks the host compiled 275608 to 275556, the game answered the laptop's C:\windows (three runs alike); Sprint 381: hvc 8 38939 to 38938, compiled 274778 to 274788, blocks the host compiled 275556 to 275566 and calls traced 10505 to 10515, the game given the laptop's profile, C:\Users\w2m (USERPROFILE and the known folders; runs alike)
+# the batch run (Hail to the Rainbow.exe, ~/w2m-depots/hail-to-the-rainbow, scripts/run_frontier.py's start, the call trace from UnityPlayer.dll!UnityMain) on the Rust host to its first stop, and each tests/data guest's stop on one vCPU (Sprint 186; Sprint 191: the calls traced, and the guests' fourth and fifth columns the frozen Python host's stop and output on one vCPU, 2026-10-28, newlines written \n; "-" in both for a guest the frozen host never ran, two_process_deadlock from Sprint 364, two_process_pipe_pingpong from Sprint 365 and condition_cs from Sprint 368, which exits 0 only when SleepConditionVariableCS's checks hold); written by scripts/gates.sh under build/batch_run/, held by crates/w2m_vm/tests/batch_run.rs; Sprint 379: hvc 8 38881 to 38939, compiled 274830 to 274778 and blocks the host compiled 275608 to 275556, the game answered the laptop's C:\windows (three runs alike); Sprint 381: hvc 8 38939 to 38938, compiled 274778 to 274788, blocks the host compiled 275556 to 275566 and calls traced 10505 to 10515, the game given the laptop's profile, C:\Users\w2m (USERPROFILE and the known folders; runs alike); Sprint 383: hvc 1 1147 to 1146, hvc 8 38938 to 38942, compiled 274788 to 274860, cut by no stencil 191 to 189, no stencil 179 to 178, blocks the host compiled 275566 to 275637 and calls traced 10515 to 10526, the game given the laptop's screen at 120 DPI (display.c, windows.c and dxgi.c; two runs alike)
 stop	ReferenceEnd: the log holds the reference's 168 lines and the main thread its calls
 images	Hail to the Rainbow.exe UnityPlayer.dll
-hvc 1	1147
+hvc 1	1146
 hvc 4	10
-hvc 8	38938
+hvc 8	38942
 hvc 10	258
 hvc 11	286
 hvc 13	13639
@@ -11,13 +11,13 @@ hvc 14	167
 hvc 15	35
 model steps of a locked form	0
 code cache full	0
-compiled	274788
+compiled	274860
 cut by decode	243
 cut by encoder	0
 cut by guarded	210
 cut by key size	0
 cut by no choice	0
-cut by no stencil	191
+cut by no stencil	189
 decode	304
 encoder	0
 full	0
@@ -26,15 +26,15 @@ host only	1
 key size	0
 log full	0
 no choice	0
-no stencil	179
+no stencil	178
 not a code page	366
 page needs a split	15
 pages protected	17086
 pause	2
 recon full	0
 scan pages	0
-blocks the host compiled	275566
-calls traced	10515
+blocks the host compiled	275637
+calls traced	10526
 calls in flight	0
 calls dropped	0
 guest	busychild	ExitProcess { code: 0 }	ExitProcess	done\n

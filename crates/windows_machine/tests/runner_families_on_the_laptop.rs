@@ -426,8 +426,15 @@ fn named_sync_objects_is_held_to_its_laptop_run() {
 /// in lower case (files_more); from Sprint 380 the system message table's four ids, runner 38120951889's 4566 and 8661
 /// and the laptop's 15680 and 15681, every form row alike (format_message); from Sprint 381 GetTempPathW's fallback to
 /// the Windows directory in lower case (temp_path) and GetModuleFileNameW's path of SHELL32, `C:\windows\System32\`
-/// (system_modules).
-const RETAKEN_DIFFERENCES: [(&str, &[&str]); 6] = [
+/// (system_modules); from Sprint 383 the laptop's screen at 120 DPI: the metrics, adapters, monitor, DPI and modes
+/// (display: the probe prints 155 rows on the runners and 208 on the laptop, 66 modes against 13), the adapters, output
+/// and mode lists (dxgi: 74 rows against 151), and the work area, the frame, the default size and the activation of a
+/// window whose foreground another program holds (windows). The third list holds the rows a pair names or not by the
+/// executions it pairs: in windows, class.register (the laptop's second class atom above or below its first), and the
+/// queue and the last window's rows, which the line-by-line comparison names as the runners' executions met message
+/// 0x60 once or twice in the WM_QUIT drain (112 or 108 lines against the laptop's 106). Every other family's list is
+/// exact.
+const RETAKEN_DIFFERENCES: [(&str, &[&str], &[&str]); 9] = [
     (
         "version",
         &[
@@ -437,20 +444,227 @@ const RETAKEN_DIFFERENCES: [(&str, &[&str]); 6] = [
             "get_version.plain",
             "dll_get_version.info2",
         ],
+        &[],
     ),
-    ("files_more", &["windows.full", "windows.exact"]),
-    ("system_info", &["version_ex", "system_directory"]),
+    ("files_more", &["windows.full", "windows.exact"], &[]),
+    ("system_info", &["version_ex", "system_directory"], &[]),
     (
         "format_message",
         &["dump 4566", "dump 8661", "dump 15680", "dump 15681"],
+        &[],
     ),
-    ("temp_path", &["temp.none"]),
-    ("system_modules", &["file_name"]),
+    ("temp_path", &["temp.none"], &[]),
+    ("system_modules", &["file_name"], &[]),
+    (
+        "display",
+        &[
+            "metric.0",
+            "metric.1",
+            "metric.2",
+            "metric.3",
+            "metric.4",
+            "metric.9",
+            "metric.10",
+            "metric.11",
+            "metric.12",
+            "metric.15",
+            "metric.16",
+            "metric.17",
+            "metric.20",
+            "metric.21",
+            "metric.28",
+            "metric.29",
+            "metric.30",
+            "metric.31",
+            "metric.34",
+            "metric.35",
+            "metric.38",
+            "metric.39",
+            "metric.43",
+            "metric.47",
+            "metric.48",
+            "metric.49",
+            "metric.50",
+            "metric.51",
+            "metric.52",
+            "metric.53",
+            "metric.54",
+            "metric.55",
+            "metric.57",
+            "metric.58",
+            "metric.59",
+            "metric.60",
+            "metric.61",
+            "metric.62",
+            "metric.71",
+            "metric.72",
+            "metric.75",
+            "metric.78",
+            "metric.79",
+            "metric.92",
+            "metric.93",
+            "devices.adapter_0",
+            "devices.adapter_0_monitor_0",
+            "devices.adapter_1",
+            "devices.adapter_2",
+            "enum_monitors.callback",
+            "enum_monitors.callback_info",
+            "info.wide",
+            "info.plain",
+            "dpi.effective",
+            "dpi.angular",
+            "dpi.raw",
+            "settings.current",
+            "settings.registry",
+            "settings.mode_0",
+            "settings.mode_1",
+            "settings.mode_2",
+            "settings.mode_3",
+            "settings.mode_4",
+            "settings.mode_5",
+            "settings.mode_6",
+            "settings.mode_7",
+            "settings.mode_8",
+            "settings.mode_9",
+            "settings.mode_10",
+            "settings.mode_11",
+            "settings.mode_12",
+            "settings.mode_count",
+            "settings.named.current",
+            "settings.named.registry",
+            "settings.named.mode_0",
+            "settings.named.mode_12",
+            "settings.named.mode_13",
+            "settings.named_lower.current",
+            "settings.other_device.current",
+            "settings.monitor_name.current",
+            "155 lines against 208",
+        ],
+        &[],
+    ),
+    (
+        "windows",
+        &[
+            "screen.work_area",
+            "msg.batch.0",
+            "msg.batch.1",
+            "msg.batch.2",
+            "msg.batch.3",
+            "batch.client_rect",
+            "batch.window_rect",
+            "msg.play.0",
+            "msg.play.1",
+            "msg.play.2",
+            "msg.play.3",
+            "play.client_rect",
+            "play.window_rect",
+            "msg.offscreen.0",
+            "msg.offscreen.2",
+            "msg.game.0",
+            "msg.game.1",
+            "msg.game.2",
+            "msg.game.3",
+            "msg.game.9",
+            "msg.game.10",
+            "msg.game.11",
+            "msg.game.12",
+            "msg.game.13",
+            "queue.after_focus.00",
+            "queue.posted.01",
+            "queue.posted.02",
+            "queue.quit.00",
+        ],
+        &[
+            "class.register",
+            "queue.quit.01",
+            "queue.quit.02",
+            "112 lines against 106",
+            "msg.other.0",
+            "msg.other.1",
+            "msg.other.2",
+            "msg.other.3",
+            "108 lines against 106",
+        ],
+    ),
+    (
+        "dxgi",
+        &[
+            "adapter.0",
+            "adapter.0.output.0",
+            "modes.count.28.0",
+            "modes.count.28.1",
+            "modes.count.28.2",
+            "modes.count.28.3",
+            "modes.count.29.0",
+            "modes.count.29.1",
+            "modes.count.29.2",
+            "modes.count.29.3",
+            "modes.count.87.0",
+            "modes.count.87.1",
+            "modes.count.87.2",
+            "modes.count.87.3",
+            "modes.count.91.0",
+            "modes.count.91.1",
+            "modes.count.91.2",
+            "modes.count.91.3",
+            "modes.count.24.0",
+            "modes.count.24.1",
+            "modes.count.24.2",
+            "modes.count.24.3",
+            "modes.count.10.0",
+            "modes.count.10.1",
+            "modes.count.10.2",
+            "modes.count.10.3",
+            "modes.28.0.",
+            "modes.28.0.0",
+            "modes.28.0.1",
+            "modes.28.0.2",
+            "modes.28.0.3",
+            "modes.28.0.4",
+            "modes.28.0.5",
+            "modes.28.0.6",
+            "modes.28.0.7",
+            "modes.28.0.8",
+            "modes.28.0.9",
+            "modes.28.0.10",
+            "modes.28.0.11",
+            "modes.28.0.12",
+            "modes.28.2.",
+            "modes.28.2.0",
+            "modes.28.2.1",
+            "modes.28.2.2",
+            "modes.28.2.3",
+            "modes.28.2.4",
+            "modes.28.2.5",
+            "modes.28.2.6",
+            "modes.28.2.7",
+            "modes.28.2.8",
+            "modes.28.2.9",
+            "modes.28.2.10",
+            "modes.28.2.11",
+            "modes.28.2.12",
+            "modes.short",
+            "modes.long",
+            "modes.null_count",
+            "adapter.0.outputs.end.1",
+            "adapter.0.release",
+            "adapter.1",
+            "adapter.1.outputs.end.0",
+            "adapter.1.release",
+            "adapters.end.2",
+            "game_walk",
+            "release.last",
+            "free_library",
+            "74 lines against 151",
+        ],
+        &[],
+    ),
 ];
 
 /// Each re-taken family's laptop run, as the re-taken table names it, is a stored laptop run of that family that ran a
 /// runner binary of the family's lookup rows, and its every body differs from every body of each runner run of that
-/// binary in exactly the rows `RETAKEN_DIFFERENCES` names (Sprint 379): any other difference is a finding about the
+/// binary in exactly the rows `RETAKEN_DIFFERENCES` names (Sprint 379), or from Sprint 383, for a family with a third
+/// list, in each of the second list's rows and in no row outside the two: any other difference is a finding about the
 /// reference.
 #[test]
 fn each_retaken_familys_laptop_rows_differ_from_the_runners_as_named() {
@@ -464,13 +678,13 @@ fn each_retaken_familys_laptop_rows_differ_from_the_runners_as_named() {
         .map(|l| l.split('\t').collect())
         .collect();
     let families: Vec<&str> = rows.iter().map(|c| c[0]).collect();
-    let named: Vec<&str> = RETAKEN_DIFFERENCES.iter().map(|(f, _)| *f).collect();
+    let named: Vec<&str> = RETAKEN_DIFFERENCES.iter().map(|(f, _, _)| *f).collect();
     assert_eq!(
         families, named,
         "the re-taken table's families against those named here"
     );
     let mut wrong = Vec::new();
-    for (c, (_, differing)) in rows.iter().zip(RETAKEN_DIFFERENCES) {
+    for (c, (_, differing, varying)) in rows.iter().zip(RETAKEN_DIFFERENCES) {
         let (family, laptop) = (c[0], c[2]);
         let l = store.join(laptop);
         if !windows_machine::laptop_profile(&read(&l.join("profile.txt"))) {
@@ -499,10 +713,19 @@ fn each_retaken_familys_laptop_rows_differ_from_the_runners_as_named() {
             for (rn, rb) in bodies(&store.join(runner)) {
                 for (ln, lb) in &laptop_bodies {
                     let unlike = rows_unlike(&rb, lb);
-                    if unlike != differing.to_vec() {
+                    // exactly the named rows; from Sprint 383, with a third list, each named row and others only of it
+                    let fits = if varying.is_empty() {
+                        unlike == differing.to_vec()
+                    } else {
+                        differing.iter().all(|d| unlike.iter().any(|u| u == d))
+                            && unlike
+                                .iter()
+                                .all(|u| differing.contains(&u.as_str()) || varying.contains(&u.as_str()))
+                    };
+                    if !fits {
                         wrong.push(format!(
                             "{family}: runner {runner}/{rn} against laptop {laptop}/{ln}: rows unlike {unlike:?}, named \
-                             {differing:?}"
+                             {differing:?}, and {varying:?} by the executions paired"
                         ));
                     }
                     compared += 1;

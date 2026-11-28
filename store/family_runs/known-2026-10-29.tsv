@@ -34,10 +34,10 @@ current_directory_ansi	38231721988	6d420fe3142e17fb456ad2022e5f4e5dfe3f537cfdf32
 current_directory_ansi	38231725219	666c8e1f75cd34d4e6b3873b4378571353662d534390ee1887dfdfc022aed81d	windows.paths.current_directory_ansi@0.1.0	-	-	-	raw excluded 0	-	-
 current_directory_ansi	38231728407	6d420fe3142e17fb456ad2022e5f4e5dfe3f537cfdf321b40bb42e0783793d65	windows.paths.current_directory_ansi@0.1.0	-	-	-	raw excluded 0	-	-
 current_directory_ansi	38231731700	666c8e1f75cd34d4e6b3873b4378571353662d534390ee1887dfdfc022aed81d	windows.paths.current_directory_ansi@0.1.0	-	-	-	raw excluded 0	-	-
-display	38273510163	d4b4751fefdeb2b8ebecaba82e8d4670e561f7a422f428b713860141b3197564	windows.display.display@0.2.0	-	-	-	display_rows excluded 0	-	-
-display	38273513428	459c45e187bc43eeddcb361c58b4fd2c50e0461af5b4afaffd463880df33c662	windows.display.display@0.2.0	-	-	-	display_rows excluded 0	-	-
-dxgi	38254500336	08535c336744784880cc5ec5e18747bfc5f09086b736267403278c05afc25124	windows.dxgi.dxgi@0.2.0	-	-	-	raw excluded 0	-	-
-dxgi	38254503636	8507070b2d998afb5db7a307bf6f3e428f2bf29df24d094e71fce47bcfb88c09	windows.dxgi.dxgi@0.2.0	-	-	-	raw excluded 0	-	-
+display	38273510163	d4b4751fefdeb2b8ebecaba82e8d4670e561f7a422f428b713860141b3197564	windows.display.display@0.3.0	-	-	-	display_rows excluded 0	-	-
+display	38273513428	459c45e187bc43eeddcb361c58b4fd2c50e0461af5b4afaffd463880df33c662	windows.display.display@0.3.0	-	-	-	display_rows excluded 0	-	-
+dxgi	38254500336	08535c336744784880cc5ec5e18747bfc5f09086b736267403278c05afc25124	windows.dxgi.dxgi@0.3.0	-	-	-	raw excluded 0	-	-
+dxgi	38254503636	8507070b2d998afb5db7a307bf6f3e428f2bf29df24d094e71fce47bcfb88c09	windows.dxgi.dxgi@0.3.0	-	-	-	raw excluded 0	-	-
 environment_empty	38044699077	f4f14814713c4e7ebbb495466dbac26666a57852b33bf382c69359c876dd7191	windows.environment.empty_block@0.1.0	-	-	{"arguments":"child-empty","environment":[],"gui":true,"output_file":"w2m-environment-empty.jsonl"}	child_rows.derive excluded 0	-	-
 environment_empty	38044700976	70dc13b7c0dbdbc4a4ddbe167a3f737e10c469d9e27e3055b8254f28cfb58bae	windows.environment.empty_block@0.1.0	-	-	{"arguments":"child-empty","environment":[],"gui":true,"output_file":"w2m-environment-empty.jsonl"}	child_rows.derive excluded 0	-	-
 environment_empty	38044703336	e989ea6b47e0bc74b60cb091ca7c4b07ed066e29df8d5cd2d31cc6b647356431	windows.environment.empty_block@0.1.0	-	-	{"arguments":"child-empty","environment":[],"gui":true,"output_file":"w2m-environment-empty.jsonl"}	child_rows.derive excluded 0	-	-
@@ -268,8 +268,8 @@ version	38173735116	a51dc8c571e44c403686444ec1206ef923c91fc0163d23c96f06079e465c
 virtual_memory	38172734444	af77fd8015671e678be7df19b74160d4cc93ce8691c64127412da3572cf73955	windows.memory.virtual@0.2.0	-	-	-	virtual_memory_rows excluded 0	-	-
 virtual_memory	38172736319	8385bc74e8db79d6ef5c62d4ebd0dc161e7985f85f4d763dc73dd42bed2a137d	windows.memory.virtual@0.2.0	-	-	-	virtual_memory_rows excluded 0	-	-
 wait_handoff	lap-20261017T040446837Z-dc268176	c45bd6f706ee778fe35f45c6d81a006c5e517822a65d9c1efb3eb9f2aaacb7f6	windows.sync.wait_handoff@0.3.0	-	-	-	raw excluded 0	-	-
-windows	38210803867	2fe586f116a1fb28b546e1009d605675be018d6001503aca11660d6985bba172	windows.windows.windows@0.3.0	-	-	{"environment":["TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp","TMP=C:\\Users\\w2m\\AppData\\Local\\Temp"]}	windows_rows excluded 0	-	-
-windows	38210806334	6e75412ca9f139bdf500185bbe5fc8c996dbe1e339fb173a25cba5f3fbc591e7	windows.windows.windows@0.3.0	-	-	{"environment":["TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp","TMP=C:\\Users\\w2m\\AppData\\Local\\Temp"]}	windows_rows excluded 0	-	-
+windows	38210803867	2fe586f116a1fb28b546e1009d605675be018d6001503aca11660d6985bba172	windows.windows.windows@0.4.0	-	-	{"environment":["TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp","TMP=C:\\Users\\w2m\\AppData\\Local\\Temp"],"foreground_held":true}	windows_laptop_rows excluded 0	-	-
+windows	38210806334	6e75412ca9f139bdf500185bbe5fc8c996dbe1e339fb173a25cba5f3fbc591e7	windows.windows.windows@0.4.0	-	-	{"environment":["TEMP=C:\\Users\\w2m\\AppData\\Local\\Temp","TMP=C:\\Users\\w2m\\AppData\\Local\\Temp"],"foreground_held":true}	windows_laptop_rows excluded 0	-	-
 winrt	38178400798	3795d70ec166716f65d011203027e0e8a6896a71e1a8687e34a50998559ec6f5	windows.winrt.winrt@0.1.0	-	-	-	raw excluded 0	-	-
 winrt	38178402576	11bb048fbe6f9acbc7a0fd308aab24598dbb3d59210024a9a9c35de7f201456d	windows.winrt.winrt@0.1.0	-	-	-	raw excluded 0	-	-
 named_sync_objects	lap-20261127T221622950Z-62b931c2-009	446f77bc42c8f3f56c54513fff3ed245d2a42135b9683b622cca0a3372db069f	windows.sync.named_objects@0.2.0	-	-	-	raw excluded 0	-	-

@@ -1,0 +1,1860 @@
+{
+ "contract_id": "windows.display.display",
+ "version": "0.3.0",
+ "status": "accepted",
+ "summary": "The display as the game queries it, under its manifest (PerMonitorV2): GetSystemMetrics 0-99, the adapters and the monitor (EnumDisplayDevicesA), EnumDisplayMonitors' one callback, GetMonitorInfoA and W, MonitorFromPoint, Rect and Window, shcore's GetDpiForMonitor, EnumDisplaySettingsW's current settings and modes. 0.3.0 holds the laptop's rows (Sprint 383; the Decision \"Which machine-decided values w2m answers as\": display and dxgi the laptop's values, 1920x1080 at 120 DPI): the runners' two binaries run on the laptop: one 1920 x 1080 monitor at an effective 120 DPI (angular 123, raw 141), the work area above the taskbar to 1020, the caption 29 and the padded border 5; adapter 0 \\\\.\\DISPLAY12, \"Intel(R) UHD Graphics\", with one monitor, and adapters 1 and 2 (\\\\.\\DISPLAY13 and \\\\.\\DISPLAY14, state 0); EnumDisplaySettingsW 1920 x 1080 x 32 at 144 Hz and 66 modes; EnumDisplaySettingsW of \\\\.\\DISPLAY1, another device here, answers FALSE and leaves the last error.",
+ "applicability": "laptop (laptop-x64-10.0.26200.7840-Client, 13th Gen Intel(R) Core(TM) i5-13420H)",
+ "roles": [
+  "main"
+ ],
+ "scenario": {
+  "initial": {
+   "process": "started by the laptop's tools/windows_machine/run-job.ps1 through cmd with standard output redirected"
+  },
+  "execution": {
+   "main": "probes/display/display.c, top to bottom"
+  },
+  "observation": {
+   "phase": "after each call"
+  }
+ },
+ "acceptance": {
+  "relation": "exact_rows",
+  "key": "s",
+  "rows": [
+   {
+    "s": "metric.0",
+    "value": 1920
+   },
+   {
+    "s": "metric.1",
+    "value": 1080
+   },
+   {
+    "s": "metric.2",
+    "value": 21
+   },
+   {
+    "s": "metric.3",
+    "value": 21
+   },
+   {
+    "s": "metric.4",
+    "value": 29
+   },
+   {
+    "s": "metric.5",
+    "value": 1
+   },
+   {
+    "s": "metric.6",
+    "value": 1
+   },
+   {
+    "s": "metric.7",
+    "value": 3
+   },
+   {
+    "s": "metric.8",
+    "value": 3
+   },
+   {
+    "s": "metric.9",
+    "value": 21
+   },
+   {
+    "s": "metric.10",
+    "value": 21
+   },
+   {
+    "s": "metric.11",
+    "value": 40
+   },
+   {
+    "s": "metric.12",
+    "value": 40
+   },
+   {
+    "s": "metric.13",
+    "value": 32
+   },
+   {
+    "s": "metric.14",
+    "value": 32
+   },
+   {
+    "s": "metric.15",
+    "value": 25
+   },
+   {
+    "s": "metric.16",
+    "value": 1920
+   },
+   {
+    "s": "metric.17",
+    "value": -6
+   },
+   {
+    "s": "metric.18",
+    "value": 0
+   },
+   {
+    "s": "metric.19",
+    "value": 1
+   },
+   {
+    "s": "metric.20",
+    "value": 21
+   },
+   {
+    "s": "metric.21",
+    "value": 21
+   },
+   {
+    "s": "metric.22",
+    "value": 0
+   },
+   {
+    "s": "metric.23",
+    "value": 0
+   },
+   {
+    "s": "metric.24",
+    "value": 0
+   },
+   {
+    "s": "metric.25",
+    "value": 0
+   },
+   {
+    "s": "metric.26",
+    "value": 0
+   },
+   {
+    "s": "metric.27",
+    "value": 0
+   },
+   {
+    "s": "metric.28",
+    "value": 166
+   },
+   {
+    "s": "metric.29",
+    "value": 47
+   },
+   {
+    "s": "metric.30",
+    "value": 46
+   },
+   {
+    "s": "metric.31",
+    "value": 28
+   },
+   {
+    "s": "metric.32",
+    "value": 4
+   },
+   {
+    "s": "metric.33",
+    "value": 4
+   },
+   {
+    "s": "metric.34",
+    "value": 166
+   },
+   {
+    "s": "metric.35",
+    "value": 47
+   },
+   {
+    "s": "metric.36",
+    "value": 4
+   },
+   {
+    "s": "metric.37",
+    "value": 4
+   },
+   {
+    "s": "metric.38",
+    "value": 94
+   },
+   {
+    "s": "metric.39",
+    "value": 94
+   },
+   {
+    "s": "metric.40",
+    "value": 0
+   },
+   {
+    "s": "metric.41",
+    "value": 0
+   },
+   {
+    "s": "metric.42",
+    "value": 0
+   },
+   {
+    "s": "metric.43",
+    "value": 2
+   },
+   {
+    "s": "metric.44",
+    "value": 0
+   },
+   {
+    "s": "metric.45",
+    "value": 2
+   },
+   {
+    "s": "metric.46",
+    "value": 2
+   },
+   {
+    "s": "metric.47",
+    "value": 199
+   },
+   {
+    "s": "metric.48",
+    "value": 34
+   },
+   {
+    "s": "metric.49",
+    "value": 20
+   },
+   {
+    "s": "metric.50",
+    "value": 20
+   },
+   {
+    "s": "metric.51",
+    "value": 29
+   },
+   {
+    "s": "metric.52",
+    "value": 28
+   },
+   {
+    "s": "metric.53",
+    "value": 28
+   },
+   {
+    "s": "metric.54",
+    "value": 24
+   },
+   {
+    "s": "metric.55",
+    "value": 24
+   },
+   {
+    "s": "metric.56",
+    "value": 8
+   },
+   {
+    "s": "metric.57",
+    "value": 199
+   },
+   {
+    "s": "metric.58",
+    "value": 34
+   },
+   {
+    "s": "metric.59",
+    "value": 1942
+   },
+   {
+    "s": "metric.60",
+    "value": 1102
+   },
+   {
+    "s": "metric.61",
+    "value": 1938
+   },
+   {
+    "s": "metric.62",
+    "value": 2
+   },
+   {
+    "s": "metric.63",
+    "value": 3
+   },
+   {
+    "s": "metric.64",
+    "value": 0
+   },
+   {
+    "s": "metric.65",
+    "value": 0
+   },
+   {
+    "s": "metric.66",
+    "value": 0
+   },
+   {
+    "s": "metric.67",
+    "value": 0
+   },
+   {
+    "s": "metric.68",
+    "value": 4
+   },
+   {
+    "s": "metric.69",
+    "value": 4
+   },
+   {
+    "s": "metric.70",
+    "value": 0
+   },
+   {
+    "s": "metric.71",
+    "value": 19
+   },
+   {
+    "s": "metric.72",
+    "value": 19
+   },
+   {
+    "s": "metric.73",
+    "value": 0
+   },
+   {
+    "s": "metric.74",
+    "value": 0
+   },
+   {
+    "s": "metric.75",
+    "value": 0
+   },
+   {
+    "s": "metric.76",
+    "value": 0
+   },
+   {
+    "s": "metric.77",
+    "value": 0
+   },
+   {
+    "s": "metric.78",
+    "value": 1920
+   },
+   {
+    "s": "metric.79",
+    "value": 1080
+   },
+   {
+    "s": "metric.80",
+    "value": 1
+   },
+   {
+    "s": "metric.81",
+    "value": 1
+   },
+   {
+    "s": "metric.82",
+    "value": 1
+   },
+   {
+    "s": "metric.83",
+    "value": 1
+   },
+   {
+    "s": "metric.84",
+    "value": 1
+   },
+   {
+    "s": "metric.85",
+    "value": 4
+   },
+   {
+    "s": "metric.86",
+    "value": 0
+   },
+   {
+    "s": "metric.87",
+    "value": 0
+   },
+   {
+    "s": "metric.88",
+    "value": 0
+   },
+   {
+    "s": "metric.89",
+    "value": 0
+   },
+   {
+    "s": "metric.90",
+    "value": 0
+   },
+   {
+    "s": "metric.91",
+    "value": 0
+   },
+   {
+    "s": "metric.92",
+    "value": 5
+   },
+   {
+    "s": "metric.93"
+   },
+   {
+    "s": "metric.94",
+    "value": 0
+   },
+   {
+    "s": "metric.95",
+    "value": 0
+   },
+   {
+    "s": "metric.96",
+    "value": 0
+   },
+   {
+    "s": "metric.97",
+    "value": 0
+   },
+   {
+    "s": "metric.98",
+    "value": 0
+   },
+   {
+    "s": "metric.99",
+    "value": 0
+   },
+   {
+    "s": "metric.4096",
+    "value": 0
+   },
+   {
+    "s": "metric.8193",
+    "value": 0
+   },
+   {
+    "s": "devices.adapter_0",
+    "err": 57005,
+    "id": "PCI_VEN_8086&DEV_A7A8&SUBSYS_8DCD103C&REV_04",
+    "key": "_Registry_Machine_System_CurrentControlSet_Control_Video_{GUID}_0000",
+    "name": "__._DISPLAY12",
+    "ret": 1,
+    "state": 5,
+    "string": "Intel(R) UHD Graphics"
+   },
+   {
+    "s": "devices.adapter_0_monitor_0",
+    "err": 57005,
+    "id": "MONITOR_BOE0CFD_{4d36e96e-e325-11ce-bfc1-08002be10318}_0002",
+    "key": "_Registry_Machine_System_CurrentControlSet_Control_Class_{4d36e96e-e325-11ce-bfc1-08002be10318}_0002",
+    "name": "__._DISPLAY12_Monitor0",
+    "ret": 1,
+    "state": 3,
+    "string": "Generic PnP Monitor"
+   },
+   {
+    "s": "devices.adapter_0_monitor_1",
+    "err": 57005,
+    "ret": 0
+   },
+   {
+    "s": "devices.adapter_1",
+    "err": 57005,
+    "id": "PCI_VEN_8086&DEV_A7A8&SUBSYS_8DCD103C&REV_04",
+    "key": "_Registry_Machine_System_CurrentControlSet_Control_Video_{18AD10DA-71E4-11F1-A6D5-806E6F6E6963}_0001",
+    "name": "__._DISPLAY13",
+    "ret": 1,
+    "state": 0,
+    "string": "Intel(R) UHD Graphics"
+   },
+   {
+    "s": "devices.adapter_2",
+    "err": 57005,
+    "id": "PCI_VEN_8086&DEV_A7A8&SUBSYS_8DCD103C&REV_04",
+    "key": "_Registry_Machine_System_CurrentControlSet_Control_Video_{18AD10DA-71E4-11F1-A6D5-806E6F6E6963}_0002",
+    "name": "__._DISPLAY14",
+    "ret": 1,
+    "state": 0,
+    "string": "Intel(R) UHD Graphics"
+   },
+   {
+    "s": "devices.unknown_adapter",
+    "err": 57005,
+    "ret": 0
+   },
+   {
+    "s": "enum_monitors.callback",
+    "data": 23130,
+    "dc_null": true,
+    "index": 0,
+    "monitor": 65537,
+    "rect_bottom": 1080,
+    "rect_left": 0,
+    "rect_right": 1920,
+    "rect_top": 0
+   },
+   {
+    "s": "enum_monitors.callback_info",
+    "device": "__._DISPLAY12",
+    "err": 57005,
+    "flags": 1,
+    "monitor_bottom": 1080,
+    "monitor_left": 0,
+    "monitor_right": 1920,
+    "monitor_top": 0,
+    "ret": 1,
+    "size": 72,
+    "work_bottom": true,
+    "work_left": 0,
+    "work_right": 1920,
+    "work_top": 0
+   },
+   {
+    "s": "enum_monitors",
+    "callbacks": 1,
+    "err": 57005,
+    "ret": 1
+   },
+   {
+    "s": "info.wide",
+    "device": "__._DISPLAY12",
+    "flags": 1,
+    "monitor_bottom": 1080,
+    "monitor_left": 0,
+    "monitor_right": 1920,
+    "monitor_top": 0,
+    "ret": 1,
+    "size": 104,
+    "work_bottom": true,
+    "work_left": 0,
+    "work_right": 1920,
+    "work_top": 0
+   },
+   {
+    "s": "info.plain",
+    "flags": 1,
+    "monitor_bottom": 1080,
+    "monitor_left": 0,
+    "monitor_right": 1920,
+    "monitor_top": 0,
+    "ret": 1
+   },
+   {
+    "s": "info.bad_size",
+    "err": 87,
+    "ret": 0
+   },
+   {
+    "s": "info.not_a_monitor",
+    "err": 1461,
+    "ret": 0
+   },
+   {
+    "s": "from_point.origin_null",
+    "first": true,
+    "null": false
+   },
+   {
+    "s": "from_point.far_null",
+    "first": false,
+    "null": true
+   },
+   {
+    "s": "from_point.far_nearest",
+    "first": true,
+    "null": false
+   },
+   {
+    "s": "from_point.far_primary",
+    "first": true,
+    "null": false
+   },
+   {
+    "s": "from_rect.inside",
+    "first": true,
+    "null": false
+   },
+   {
+    "s": "from_rect.far_null",
+    "null": true
+   },
+   {
+    "s": "from_rect.far_nearest",
+    "first": true
+   },
+   {
+    "s": "from_window.null_null",
+    "null": true
+   },
+   {
+    "s": "from_window.null_primary",
+    "first": true
+   },
+   {
+    "s": "from_window.null_nearest",
+    "first": true,
+    "null": false
+   },
+   {
+    "s": "dpi.found",
+    "function": true,
+    "library": true
+   },
+   {
+    "s": "dpi.effective",
+    "hr": 0,
+    "x": 120,
+    "y": 120
+   },
+   {
+    "s": "dpi.angular",
+    "hr": 0,
+    "x": 123,
+    "y": 123
+   },
+   {
+    "s": "dpi.raw",
+    "hr": 0,
+    "x": 141,
+    "y": 141
+   },
+   {
+    "s": "dpi.bad_type",
+    "hr": 2147942560,
+    "x": 42405,
+    "y": 42405
+   },
+   {
+    "s": "dpi.not_a_monitor",
+    "hr": 2147942406,
+    "x": 42405,
+    "y": 42405
+   },
+   {
+    "s": "settings.current",
+    "bits": 32,
+    "device": "CDD",
+    "err": 57005,
+    "fields": 544997536,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 1080,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1920,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.registry",
+    "bits": 32,
+    "device": "CDD",
+    "err": 57005,
+    "fields": 544997536,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 1080,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1920,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_0",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 1080,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1920,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_1",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 1080,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1920,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_2",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 480,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 640,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_3",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 480,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 640,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_4",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 480,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 640,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_5",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 480,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 640,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_6",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 600,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 800,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_7",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 600,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 800,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_8",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 600,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 800,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_9",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 600,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 800,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_10",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1024,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_11",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1024,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_12",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1024,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_13",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1024,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_14",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 864,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1152,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_15",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 864,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1152,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_16",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 864,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1152,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_17",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 864,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1152,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_18",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 600,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_19",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 600,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_20",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 600,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_21",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 600,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_22",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 720,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_23",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 720,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_24",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 720,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_25",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 720,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_26",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_27",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_28",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_29",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_30",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 800,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_31",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 800,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_32",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 800,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_33",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 800,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_34",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 960,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_35",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 960,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_36",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 960,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_37",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 960,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_38",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 1024,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_39",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 1024,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_40",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 1024,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_41",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 1024,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1280,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_42",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1360,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_43",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1360,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_44",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1360,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_45",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1360,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_46",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1366,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_47",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1366,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_48",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1366,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_49",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 768,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1366,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_50",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 1050,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1400,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_51",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 1050,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1400,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_52",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 1050,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1400,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_53",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 1050,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1400,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_54",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 900,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1440,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_55",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 900,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1440,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_56",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 900,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1440,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_57",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 900,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1440,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_58",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 900,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1600,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_59",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 900,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1600,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_60",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 900,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1600,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_61",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 900,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1600,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_62",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 144,
+    "height": 1050,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1680,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_63",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 144,
+    "height": 1050,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1680,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_64",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 8126592,
+    "fixed_output": 0,
+    "flags": 0,
+    "frequency": 60,
+    "height": 1050,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1680,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_65",
+    "bits": 32,
+    "device": "cdd",
+    "err": 57005,
+    "fields": 544997504,
+    "fixed_output": 1,
+    "flags": 0,
+    "frequency": 60,
+    "height": 1050,
+    "orientation": 0,
+    "ret": 1,
+    "size": 188,
+    "width": 1680,
+    "x": 0,
+    "y": 0
+   },
+   {
+    "s": "settings.mode_count",
+    "value": 66
+   },
+   {
+    "s": "settings.named.current",
+    "err": 57005,
+    "ret": 0
+   },
+   {
+    "s": "settings.named.registry",
+    "err": 57005,
+    "ret": 0
+   },
+   {
+    "s": "settings.named.mode_0",
+    "err": 57005,
+    "ret": 0
+   },
+   {
+    "s": "settings.named.mode_12",
+    "err": 57005,
+    "ret": 0
+   },
+   {
+    "s": "settings.named.mode_13",
+    "err": 57005,
+    "ret": 0
+   },
+   {
+    "s": "settings.named_lower.current",
+    "err": 57005,
+    "ret": 0
+   },
+   {
+    "s": "settings.other_device.current",
+    "err": 57005,
+    "ret": 0
+   },
+   {
+    "s": "settings.monitor_name.current",
+    "err": 57005,
+    "ret": 0
+   }
+  ],
+  "derivation": "scripts/family_run.py display_rows: The metrics the taskbar moves are kept as relations to the work area (17, SM_CYFULLSCREEN: the work area's height less 23, here -6 at 120 DPI's caption of 29; 62, SM_CYMAXIMIZED: the work area's height and 16, here 2), and the work area's bottom as lying above the screen's. Index 93 has no SM_ name and differs from run to run on the runners (5852, 6552, 7696, 8000; 1348 in the laptop's four bodies): its row keeps no value. The adapter's registry key ends in a GUID that differs by machine: the row keeps the key's form."
+ },
+ "evidence": [
+  {
+   "evidence_id": "laptop-rows",
+   "category": "observed",
+   "source_ref": "runs lap-20261013T231059422Z-136bec80-034 and lap-20261013T231059422Z-136bec80-035: laptop, laptop-x64-10.0.26200.7840-Client, 13th Gen Intel(R) Core(TM) i5-13420H, probe sha256:d4b4751fefdeb2b8ebecaba82e8d4670e561f7a422f428b713860141b3197564 (-034) and sha256:459c45e187bc43eeddcb361c58b4fd2c50e0461af5b4afaffd463880df33c662 (-035), the runners' two binaries; store/probe-runs/lap-20261013T231059422Z-136bec80-034/body-1.jsonl and body-2.jsonl and -035's, all four byte for byte alike; the rows -034's after display_rows",
+   "applicability": "the build and CPU observed",
+   "execution_ids": [
+    "display-20261013T231059422Z-034-1",
+    "display-20261013T231059422Z-034-2",
+    "display-20261013T231059422Z-035-1",
+    "display-20261013T231059422Z-035-2"
+   ]
+  }
+ ],
+ "open_questions": [
+  "w2m answers EnumDisplayDevicesA FALSE past adapter 0 (rows devices.adapter_1 and devices.adapter_2), as the runners did: the game, told TRUE at 1, asks the laptop for adapters 2 to 5, and the contents of 3 and 4 are in no stored row; the two runs wait in store/family_runs/sweep-held-2026-10-29.tsv on a laptop probe that asks for them.",
+  "GetSystemMetrics(93), which has no SM_ name, answers 1348 in the laptop's four bodies and differed from run to run on the runners; w2m answers 1348.",
+  "The rows are the PerMonitorV2 view; a process without that awareness sees the 120 DPI display scaled to 96 (1536 x 864), which no stored row gives these calls' answers for.",
+  "The game's window is not yet a Mac window (phase 6): the display is the laptop's until then."
+ ],
+ "sections": {
+  "probe": "probes/display (Sprint 044)",
+  "implementation": "tools/guest_runtime/display.c",
+  "rows": "scripts/family_run.py display",
+  "excluded": "none"
+ },
+ "history": "0.1.0 (Sprint 054) and 0.2.0 (Sprint 065) held the GitHub runners' rows, runs 38273510163 (windows-2025, AMD EPYC 7763 64-Core Processor) and 38273513428 (windows-2022, INTEL(R) XEON(R) PLATINUM 8573C): one 1024 x 768 monitor at 96 DPI on the Hyper-V adapter, 13 modes at 64 Hz; 0.3.0 (Sprint 383) the laptop's, the same two binaries; 0.1.0 and 0.2.0 are kept unchanged (the Decision of 2026-10-07)."
+}

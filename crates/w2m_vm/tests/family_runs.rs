@@ -361,6 +361,14 @@ fn derive(family: &str, rule: &str, printed: Vec<Row>) -> Result<Vec<Row>, Strin
         }
         // 338-390 (Sprint 231): the windows' places as relations to the desktop
         "windows_rows" => rows = windows_rows(rows)?,
+        // Sprint 383, the Rust host's own rule for contracts/windows.windows.windows 0.4.0, the laptop's rows:
+        // windows_rows, and class.register without after_first, whose second class's atom the laptop gave below the
+        // first's in one execution of each of its runs and above it in the other (lap-20261013T231059422Z-136bec80-192
+        // body-1 false, body-2 true; -193 body-1 true, body-2 false), as metric.93 keeps no value
+        "windows_laptop_rows" => {
+            rows = windows_rows(rows)?;
+            drop_keys(&mut rows, &["class.register"], &["after_first"]);
+        }
         other => return Err(format!("row rule {other} is not ported")),
     }
     Ok(rows)
@@ -776,6 +784,23 @@ fn the_row_rules_derive_as_the_frozen_code_does() {
             {"s": "queue.first.00", "msg": 15, "noremove_err": 0},
             {"s": "queue.first.00.after", "x": 1},
             {"s": "queue.later.00", "msg": 15}
+        ])
+    );
+    // Sprint 383: the laptop's rule is windows_rows with class.register's after_first dropped, and that row's alone
+    assert_eq!(
+        derived(
+            "windows",
+            "windows_laptop_rows",
+            serde_json::json!([
+                {"s": "class.register_ex", "atom_in_range": true, "err": 57005},
+                {"s": "class.register", "atom_in_range": true, "after_first": false, "err": 57005},
+                {"s": "class.other", "after_first": true}
+            ])
+        ),
+        serde_json::json!([
+            {"s": "class.register_ex", "atom_in_range": true, "err": 57005},
+            {"s": "class.register", "atom_in_range": true, "err": 57005},
+            {"s": "class.other", "after_first": true}
         ])
     );
     let unknown = derive("threads", "thread_rows", Vec::new()).unwrap_err();
@@ -1406,9 +1431,13 @@ fn each_retaken_contract_holds_its_laptop_runs_rows() {
         let file: Value =
             serde_json::from_str(&fs::read_to_string(root.join(format!("contracts/{id}/{version}.json"))).unwrap())
                 .unwrap();
+        // the frozen host's rule, or from Sprint 383 the Rust host's (family_known's `rule`)
         let rule = file["acceptance"]["derivation"]
             .as_str()
-            .and_then(|d| d.strip_prefix("scripts/family_run.py "))
+            .and_then(|d| {
+                d.strip_prefix("scripts/family_run.py ")
+                    .or_else(|| d.strip_prefix("crates/w2m_vm/tests/family_runs.rs "))
+            })
             .and_then(|d| d.split(':').next())
             .unwrap_or("raw");
         let want = file["acceptance"]["rows"].as_array().unwrap();
@@ -1479,9 +1508,47 @@ fn each_retaken_contract_holds_its_laptop_runs_rows() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
+/// A re-taken row's fourth column reaches the family's start (Sprint 383): with `code_rewrite`, whose start is "-", the
+/// fixture's `{"foreground_held":true}` is its whole start; and the stored table's windows row, whose family starts
+/// with an environment, gives that environment and the foreground held together.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn a_retaken_rows_start_options_reach_the_familys_start() {
+    let root = root();
+    let named: String = fs::read_to_string(root.join(RETAKEN))
+        .unwrap()
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let row = format!("code_rewrite\twindows.memory.code_rewrite@0.1.0\t{FIXTURE_RUN}\t{{\"foreground_held\":true}}");
+    let (ok, out, err) = family_known_with(&root, "start", &format!("{named}{row}"));
+    assert!(ok, "family_known with the fixture: {err}");
+    let column = |family: &str, n: usize| -> String {
+        let line = out
+            .lines()
+            .find(|l| l.starts_with(&format!("{family}\t")))
+            .unwrap_or_else(|| panic!("no {family} line"));
+        line.split('\t').nth(n).unwrap().to_string()
+    };
+    assert_eq!(column("code_rewrite", 6), r#"{"foreground_held":true}"#);
+    assert_eq!(column("code_rewrite", 3), "windows.memory.code_rewrite@0.1.0");
+    let windows: Value = serde_json::from_str(&column("windows", 6)).unwrap();
+    assert_eq!(
+        windows["foreground_held"],
+        Value::Bool(true),
+        "the windows family's start: {windows}"
+    );
+    assert!(
+        windows["environment"].as_array().is_some_and(|e| !e.is_empty()),
+        "the windows family's start keeps its environment: {windows}"
+    );
+}
+
 /// A re-taken row is refused naming what it names wrongly (Sprint 378): a family the frozen index lacks (a joined
 /// family among them, which moves by its own row in the joined table), a contract file that does not exist, another
-/// contract than the record's, a run that is no stored laptop run, a family named twice.
+/// contract than the record's, a run that is no stored laptop run, a family named twice; from Sprint 383 a fourth column
+/// naming a key no start has, or not an object, and a row of five columns.
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 #[test]
 fn a_retaken_row_is_refused_by_what_it_names() {
@@ -1514,6 +1581,18 @@ fn a_retaken_row_is_refused_by_what_it_names() {
             "code_rewrite's run 38173733146 is no stored laptop run",
         ),
         ("twice", format!("{ours}\n{ours}"), "code_rewrite named twice"),
+        // Sprint 383: a fourth column, the start the laptop run adds, holds only the start's keys, as an object
+        (
+            "start_key",
+            format!("{ours}\t{{\"no_such_option\":true}}"),
+            "code_rewrite's start names no_such_option, which vm_inputs does not give",
+        ),
+        (
+            "start_object",
+            format!("{ours}\t[true]"),
+            "code_rewrite's start [true] is not a JSON object",
+        ),
+        ("columns", format!("{ours}\t{{}}\textra"), "a row of 3 or 4 columns"),
     ];
     let mut wrong = Vec::new();
     for (name, rows, refusal) in cases {

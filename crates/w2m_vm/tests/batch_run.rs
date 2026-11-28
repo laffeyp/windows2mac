@@ -518,9 +518,16 @@ fn the_two_vcpu_batch_run_stops_at_the_references_row_with_its_log() {
     assert_log_is_the_references(&root, &log);
 }
 
+/// The reference's log (Sprint 219: game run 38216081440's 168 lines). From Sprint 383 a laptop game run's: with the
+/// laptop's display the game keeps the laptop's 17 sizes and logs 16 "Res" lines where the runner's 13 gave 12, 180
+/// lines, as nine of the ten `lap-20261014T032442034Z-c8814547` runs and the three `lap-20261128T014720644Z-33b6423b`
+/// runs log them, numbers aside (-05 logs one more "New_Input - DONE" line and its file line). The run's end is left
+/// as it was: the log at 168 lines or more (`--log-lines 168`) and the runner's main-thread calls.
+const REFERENCE_LOG: &str = "store/game-runs/lap-20261014T032442034Z-c8814547-01/unity.log";
+
 /// A batch run's unity.log, `ours`, equals the reference's line for line, numbers the varying cells.
 fn assert_log_is_the_references(root: &Path, ours: &str) {
-    let reference = fs::read_to_string(root.join("store/game-runs/38216081440/unity.log")).unwrap();
+    let reference = fs::read_to_string(root.join(REFERENCE_LOG)).unwrap();
     let (ours, reference): (Vec<String>, Vec<String>) = (
         ours.lines().map(without_numbers).collect(),
         reference.lines().map(without_numbers).collect(),
