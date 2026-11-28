@@ -28,6 +28,11 @@ num-integer = "0.1"
 num-rational = "0.4.2"
 num-traits = "0.2"
 
+[dev-dependencies]
+# the reference set the batch run's comparison cites, the rules' set from the stored game runs (batch_record.rs; Sprint
+# 376); a dev-dependency cycle, call_compare reading `process::PROCESSORS` from this crate
+call_compare = { path = "../call_compare" }
+
 [[test]]
 name = "all"
 path = "tests/all.rs"

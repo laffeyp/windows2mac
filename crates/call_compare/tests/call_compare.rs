@@ -7,6 +7,9 @@
 //!   defect, and the 24 values Windows varies its comparison counted (docs/postmortem-2026-10-21.md 56);
 //! - the run: the Rust host's stream, as far as it reaches, has the divergences the frozen host's stream has over the
 //!   same rows, and no defect past the cut a stopped run makes (`call_compare::verdict`).
+//!
+//! From Sprint 376 the store holds three more laptop runs the rules admit; a claim about the frozen host's choice is
+//! held over the store as the frozen host saw it (`frozen_hosts_store`), and today's set has a test of its own.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,6 +20,8 @@ use call_compare::{Stream, Verdict, Windows};
 const STREAM: &str = "store/frontier-calls/frontier-643a6283510c-1792623423346201000";
 /// The values Windows varies over the frozen host's stream of 2026-10-21 (docs/postmortem-2026-10-21.md 56)
 const VARIES: usize = 24;
+/// The values Windows varies over that stream against the reference set of Sprint 376's store, its fourteen runs
+const VARIES_TODAY: usize = 25;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -45,7 +50,9 @@ fn texts(v: &Verdict) -> Vec<String> {
 #[test]
 fn the_frozen_hosts_stream_conforms_to_windows_as_its_record_says() {
     let root = root();
-    let windows = Windows::load(&root).unwrap();
+    // the reference set the record was judged against: the frozen host's store
+    let frozen_store = frozen_hosts_store("frozen-stream");
+    let windows = Windows::load(&frozen_store).unwrap();
     let trace = fs::read_to_string(root.join(format!("{STREAM}.tsv"))).unwrap();
     let strings = fs::read_to_string(root.join(format!("{STREAM}.strings.tsv"))).unwrap();
     let stream = |calls, strings, stopped| Stream {
@@ -85,6 +92,40 @@ fn the_frozen_hosts_stream_conforms_to_windows_as_its_record_says() {
         v.varies().len(),
         VARIES,
         "values Windows varies over the frozen host's stream"
+    );
+    let _ = fs::remove_dir_all(&frozen_store);
+    // against today's set, Sprint 376's three runs with it (build 26200.9974 beside the ten's 7840): still conforms
+    // and no defect, with more values Windows varies
+    let today = Windows::load(&root)
+        .unwrap()
+        .judge(&stream(&trace, &strings, false))
+        .unwrap();
+    assert_eq!(
+        (today.verdict().as_str(), today.defects().len(), today.varies().len()),
+        ("conforms", 0, VARIES_TODAY),
+        "the frozen host's stream against today's set:\n{:#?}",
+        texts(&today)
+    );
+    // the one value that varies over the fourteen and not over the eleven: SwitchToThread's return, which one of the
+    // three 26200.9974 runs gives as 1 and the other two, with the eleven, as 0, so Windows' run-to-run variance and
+    // not a build's. (The first three runs of Sprint 376, with the game's TEMP the job's own folder, added nine more,
+    // each the three against all eleven; they are kept in build/game-runs-job-temp/.)
+    let value = |t: &str| t.split(": ").next().unwrap_or_default().to_string();
+    let before: Vec<String> = v.varies().iter().map(|d| value(&d.text())).collect();
+    let joined: Vec<String> = today
+        .varies()
+        .iter()
+        .map(|d| d.text())
+        .filter(|t| !before.contains(&value(t)))
+        .collect();
+    assert_eq!(
+        joined,
+        [format!(
+            "UnityPlayer.dll!SwitchToThread call 31 ret: Windows 0x1, w2m 0x0: 1 of 14 reference executions disagree, \
+             13 agree (run {} seq 3074)",
+            STEAM_OFF[0]
+        )],
+        "the values that vary with Sprint 376's runs in the set"
     );
 }
 
@@ -352,14 +393,60 @@ fn left_out() -> Vec<(String, String)> {
     out
 }
 
-/// G3's reference set chosen by its rules (Sprint 375): from the stored game runs, `call_compare.py`'s `reference_set`
-/// gives the eleven runs the frozen host's run of 2026-10-21 names, and leaves out the 33 others, each for its reason;
-/// `Windows`, which judges the batch runs, holds that set and cites it in `reference_ref`.
+/// The runs Sprint 376 stored: three laptop executions with the Steam client not running, on build 26200.9974
+const STEAM_OFF: [&str; 3] = [
+    "lap-20261128T014720644Z-33b6423b-01",
+    "lap-20261128T014720644Z-33b6423b-02",
+    "lap-20261128T014720644Z-33b6423b-03",
+];
+
+/// A root of the test's own that holds the store as the frozen host saw it: its 44 stored game runs (the eleven its run
+/// of 2026-10-21 names and the 33 it left out) with their records, linked to the repository's, and the game's files.json,
+/// the contract and the signatures `Windows` reads.
+fn frozen_hosts_store(name: &str) -> PathBuf {
+    let repo = root();
+    let at = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&at);
+    let link = |path: &str| {
+        let to = at.join(path);
+        fs::create_dir_all(to.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(repo.join(path), to).unwrap();
+    };
+    for path in [
+        "games/hail-to-the-rainbow/files.json",
+        call_compare::CONTRACT,
+        "specs/signatures.json",
+    ] {
+        link(path);
+    }
+    let frozen = call_compare::frozen_reference_set(&repo).unwrap();
+    let runs: Vec<String> = frozen
+        .into_iter()
+        .chain(left_out().into_iter().map(|(r, _)| r))
+        .collect();
+    assert_eq!(runs.len(), 44, "the frozen host's stored game runs");
+    for run in &runs {
+        link(&format!("{}/{run}", call_compare::GAME_RUNS));
+        if repo
+            .join(call_compare::RECORDS)
+            .join(format!("game-run-{run}"))
+            .is_dir()
+        {
+            link(&format!("{}/game-run-{run}", call_compare::RECORDS));
+        }
+    }
+    at
+}
+
+/// G3's reference set chosen by its rules (Sprint 375): from the stored game runs the frozen host saw (44, before Sprint
+/// 376 stored three more), `call_compare.py`'s `reference_set` gives the eleven runs the frozen host's run of 2026-10-21
+/// names, and leaves out the 33 others, each for its reason; `Windows`, which judges the batch runs, holds that set and
+/// cites it in `reference_ref`.
 #[test]
 fn the_rules_choose_the_frozen_hosts_reference_set() {
-    let root = root();
+    let root = frozen_hosts_store("frozen-store");
     let set = call_compare::reference_set_of(&root).unwrap();
-    let frozen = call_compare::frozen_reference_set(&root).unwrap();
+    let frozen = call_compare::frozen_reference_set(&self::root()).unwrap();
     let joined: Vec<&String> = set.members.iter().filter(|r| !frozen.contains(r)).collect();
     let left: Vec<(&String, Option<&String>)> = frozen
         .iter()
@@ -377,6 +464,30 @@ fn the_rules_choose_the_frozen_hosts_reference_set() {
     let windows = Windows::load(&root).unwrap();
     let cited: Vec<String> = frozen.iter().map(|r| format!("game-run-{r}")).collect();
     assert_eq!(windows.reference_ref(), cited.join(" + "));
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// The store's reference set today (Sprint 376): the frozen host's eleven and the three laptop executions made with the
+/// Steam client not running, each admitted by every rule, after them in name order; the same 33 left out for the same
+/// reasons; and `Windows` citing the fourteen.
+#[test]
+fn the_store_admits_the_three_steam_off_runs() {
+    let root = root();
+    let set = call_compare::reference_set_of(&root).unwrap();
+    let mut want = call_compare::frozen_reference_set(&root).unwrap();
+    for run in STEAM_OFF {
+        assert!(
+            !set.outside.contains_key(run),
+            "{run} left out: {:?}",
+            set.outside.get(run)
+        );
+        want.push(run.to_string());
+    }
+    assert_eq!(set.members, want, "the set in name order");
+    let outside: Vec<(String, String)> = set.outside.into_iter().collect();
+    assert_eq!(outside, left_out(), "each run left out, with its reason");
+    let cited: Vec<String> = want.iter().map(|r| format!("game-run-{r}")).collect();
+    assert_eq!(Windows::load(&root).unwrap().reference_ref(), cited.join(" + "));
 }
 
 /// The rules the store's runs do not reach, each on a copy of laptop run c8814547-01 under a root of the test's own:
@@ -469,12 +580,12 @@ fn each_rule_leaves_a_laptop_run_out_for_its_reason() {
 
 /// Each stored game run on the record, as `record_game_run.py` put it there: the EXECUTION_STARTED and
 /// EXECUTION_COMPLETED that `call_compare::game_run_execution` makes from the run's files are the record's, field for
-/// field, for all 38 the frozen host recorded (Sprint 375).
+/// field, for all 38 the frozen host recorded (Sprint 375) and the three Sprint 376 recorded.
 #[test]
 fn the_record_step_writes_the_frozen_hosts_executions() {
     use events::{Event, ExecutionCompleted, ExecutionStarted};
     let root = root();
-    let mut held = 0;
+    let (mut held, mut steam_off) = (0, 0);
     for entry in fs::read_dir(root.join(call_compare::GAME_RUNS)).unwrap().flatten() {
         let run = entry.file_name().to_string_lossy().to_string();
         let record = root.join(call_compare::RECORDS).join(format!("game-run-{run}"));
@@ -509,9 +620,17 @@ fn the_record_step_writes_the_frozen_hosts_executions() {
             ExecutionCompleted::from_payload(&payload("EXECUTION_COMPLETED")).unwrap(),
             "{run}"
         );
-        held += 1;
+        if STEAM_OFF.contains(&run.as_str()) {
+            steam_off += 1;
+        } else {
+            held += 1;
+        }
     }
-    assert_eq!(held, 38, "the stored game runs on the record");
+    assert_eq!(held, 38, "the frozen host's stored game runs on the record");
+    assert_eq!(
+        steam_off, 3,
+        "Sprint 376's runs, put on the record by `record-game-runs`"
+    );
 }
 
 /// The main-thread calls `w2m-vm --game` stops by are the ones `call_compare` derives from the ending run (Sprint 219):

@@ -270,6 +270,7 @@ name = "w2m_vm"
 version = "0.1.0"
 dependencies = [
  "a64_encoder",
+ "call_compare",
  "cpu_cases",
  "events",
  "guest_runtime",

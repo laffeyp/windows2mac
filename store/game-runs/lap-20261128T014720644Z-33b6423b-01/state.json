@@ -1,0 +1,16 @@
+{
+  "state": "empty",
+  "files_json_sha256": "c4c7b4448b9679091246f7ed9d73ebb632e966a7a90e7781caff64d3f124cfdb",
+  "game_tree_files": 297,
+  "temp_files_made": "cur*.tmp",
+  "seen": {
+    "registry_key": "absent",
+    "locallow": "absent",
+    "temp_path": "C:\\Users\\w2m\\AppData\\Local\\Temp",
+    "temp_game_files": 0,
+    "unity_log": "absent",
+    "game_processes": 0,
+    "steam_processes": 0
+  },
+  "differs": []
+}

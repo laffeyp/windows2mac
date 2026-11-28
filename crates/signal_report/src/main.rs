@@ -1500,7 +1500,7 @@ fn named_design_change(commit: &str, path: &str) -> bool {
 /// From Sprint 367 a card amendment that changes paths outside its card and `probes/` passes when named here too, as any
 /// other commit does (reviewer-4's thirty-eighth review's follow-up, Low 1: the amendment branch had never read this
 /// list).
-const BETWEEN_SPRINTS: [(&str, &str); 2] = [
+const BETWEEN_SPRINTS: [(&str, &str); 4] = [
     (
         "c2fe0bbc8",
         "reviewer-3's review at 246, its dispositions, committed after 246's close and before card 247 (Sprint 247)",
@@ -1509,6 +1509,16 @@ const BETWEEN_SPRINTS: [(&str, &str); 2] = [
         "b358c5588",
         "reviewer-4's thirty-eighth review, High 1: Sprint 366's design corrected after its close, carried in Sprint \
          367's card amendment",
+    ),
+    (
+        "24284d8f1",
+        "Sprint 376's card amendment: the Steam client's stop and the store's Steam check, committed before the laptop game \
+         job, which runs only what HEAD holds (`run_game_inner`, `git archive HEAD`)",
+    ),
+    (
+        "33b6423b3",
+        "Sprint 376's second card amendment: the game's TEMP the user's own and the store's TEMP check, committed before \
+         the second laptop game job for the same reason",
     ),
 ];
 

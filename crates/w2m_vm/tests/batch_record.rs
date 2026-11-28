@@ -45,6 +45,9 @@ struct Facts {
     traced: u64,
     /// the run's vCPUs, the stop file's `vcpus` row, which a run on more than one writes, else 1 (Sprint 367)
     vcpus: u64,
+    /// the reference set the comparison cites, `call_compare::Windows`' set from the stored game runs (Sprint 376);
+    /// None holds it to the reference record's
+    reference_ref: Option<String>,
 }
 
 /// The end a stop names, as `run_frontier.py` 400-407 maps it.
@@ -336,13 +339,26 @@ fn problems(ours: &[(String, Value)], reference: &[(String, Value)], facts: &Fac
         of(ours, "COMPARISON_COMPLETED").first(),
         of(reference, "COMPARISON_COMPLETED").first(),
     ) {
-        for k in ["contract_id", "relation", "reference_ref"] {
+        for k in ["contract_id", "relation"] {
             if c[k] != r[k] {
                 found.push(format!(
                     "COMPARISON_COMPLETED {k} {} where the reference has {}",
                     c[k], r[k]
                 ));
             }
+        }
+        // the reference set: from Sprint 375 the rules' set, computed from the stored game runs (the Decision "The
+        // reference set's choices"), which from Sprint 376 holds three runs the frozen host's record does not cite;
+        // `call_compare`'s tests hold the frozen record's eleven over the store as the frozen host saw it
+        let set = facts
+            .reference_ref
+            .as_ref()
+            .map_or(r["reference_ref"].clone(), |s| Value::String(s.clone()));
+        if c["reference_ref"] != set {
+            found.push(format!(
+                "COMPARISON_COMPLETED reference_ref {} where the reference set is {set}",
+                c["reference_ref"]
+            ));
         }
         // the contract's version the comparator reads, 0.2.0 from Sprint 368, where the reference's record names 0.1.0
         if c["contract_version"] != CONTRACT_VERSION {
@@ -416,6 +432,11 @@ fn facts(root: &Path, stop_file: &str, fixture: &str, held: &str, in_flight: &st
         in_flight,
         traced: row("calls traced").parse().unwrap_or(0),
         vcpus: row("vcpus").parse().unwrap_or(1),
+        reference_ref: Some(
+            call_compare::Windows::load(root)
+                .unwrap_or_else(|e| panic!("the reference set: {e}"))
+                .reference_ref(),
+        ),
     }
 }
 
@@ -1010,6 +1031,7 @@ fn a_moved_field_is_named() {
         in_flight: vec!["KERNEL32.dll!MapViewOfFile".into()],
         traced: 925,
         vcpus: 1,
+        reference_ref: None,
     };
     // the reference's comparison, judging this record's run
     let mut comparison = reference
@@ -1094,6 +1116,7 @@ fn a_moved_field_is_named() {
         in_flight: Vec::new(),
         traced: 925,
         vcpus: 1,
+        reference_ref: None,
     };
     let found = problems(&good, &reference, &between_calls);
     assert_eq!(found.len(), 1, "{found:?}");
@@ -1145,6 +1168,7 @@ fn a_two_vcpu_record_carries_its_count() {
         in_flight: Vec::new(),
         traced: 925,
         vcpus,
+        reference_ref: None,
     };
     assert_eq!(problems(&record(2.into()), &reference, &facts(2)), Vec::<String>::new());
     assert_eq!(

@@ -1695,3 +1695,110 @@
 2026-11-28T00:38:45Z	sprint 375	signal-report-check	11
 2026-11-28T00:38:45Z	sprint 375	design-check	0
 2026-11-28T00:38:45Z	sprint 375	unplaced	6
+2026-11-28T01:40:39Z	sprint 376	cargo-fmt	0
+2026-11-28T01:40:39Z	sprint 376	cargo-clippy	4
+2026-11-28T01:40:39Z	sprint 376	linux-check	1
+2026-11-28T01:40:39Z	sprint 376	runner-binaries-build	5
+2026-11-28T02:16:03Z	sprint 376	cargo-fmt	0
+2026-11-28T02:16:03Z	sprint 376	cargo-clippy	4
+2026-11-28T02:16:03Z	sprint 376	linux-check	1
+2026-11-28T02:16:03Z	sprint 376	runner-binaries-build	6
+2026-11-28T02:16:03Z	sprint 376	batch-run	98
+2026-11-28T02:16:03Z	sprint 376	batch-run-records-check	0
+2026-11-28T02:16:03Z	sprint 376	batch-run-replay	1
+2026-11-28T02:16:03Z	sprint 376	batch-run-two-vcpus	175
+2026-11-28T02:16:03Z	sprint 376	batch-run-two-vcpus-records-check	0
+2026-11-28T02:16:03Z	sprint 376	batch-run-two-vcpus-replay	0
+2026-11-28T02:16:03Z	sprint 376	guests	5
+2026-11-28T02:16:03Z	sprint 376	twoproc-instruction-clock-guest	0
+2026-11-28T02:16:03Z	sprint 376	family-runs	27
+2026-11-28T02:16:03Z	sprint 376	family-runs-two-vcpus	40
+2026-11-28T02:16:03Z	sprint 376	nextest	196
+2026-11-28T02:16:03Z	sprint 376	doc-tests	1
+2026-11-28T02:16:03Z	sprint 376	timing-stage	1
+2026-11-28T02:16:03Z	sprint 376	release-build	1
+2026-11-28T02:16:03Z	sprint 376	case-runs-ledger-check	2
+2026-11-28T02:16:03Z	sprint 376	planted-chain	43
+2026-11-28T02:16:03Z	sprint 376	planted-chain-records-check	0
+2026-11-28T02:16:03Z	sprint 376	vocabulary-generator-check	0
+2026-11-28T02:16:03Z	sprint 376	signal-report-check	11
+2026-11-28T02:16:03Z	sprint 376	design-check	0
+2026-11-28T02:16:03Z	sprint 376	records-replay	1
+2026-11-28T02:16:03Z	sprint 376	records-check	0
+2026-11-28T02:16:03Z	sprint 376	unplaced	9
+2026-11-28T02:32:31Z	sprint 	cargo-fmt	0
+2026-11-28T02:32:31Z	sprint 	cargo-clippy	1
+2026-11-28T02:32:31Z	sprint 	linux-check	1
+2026-11-28T02:32:31Z	sprint 	runner-binaries-build	5
+2026-11-28T02:32:31Z	sprint 	batch-run	98
+2026-11-28T02:32:31Z	sprint 	batch-run-records-check	0
+2026-11-28T02:32:31Z	sprint 	batch-run-replay	0
+2026-11-28T02:32:31Z	sprint 	batch-run-two-vcpus	180
+2026-11-28T02:32:31Z	sprint 	batch-run-two-vcpus-records-check	0
+2026-11-28T02:32:31Z	sprint 	batch-run-two-vcpus-replay	0
+2026-11-28T02:32:31Z	sprint 	guests	5
+2026-11-28T02:32:31Z	sprint 	twoproc-instruction-clock-guest	1
+2026-11-28T02:32:31Z	sprint 	family-runs	28
+2026-11-28T02:32:31Z	sprint 	family-runs-two-vcpus	40
+2026-11-28T02:32:31Z	sprint 	nextest	195
+2026-11-28T02:32:31Z	sprint 	doc-tests	2
+2026-11-28T02:32:31Z	sprint 	timing-stage	0
+2026-11-28T02:32:31Z	sprint 	release-build	1
+2026-11-28T02:32:31Z	sprint 	case-runs-ledger-check	4
+2026-11-28T02:32:31Z	sprint 	planted-chain	42
+2026-11-28T02:32:31Z	sprint 	planted-chain-records-check	1
+2026-11-28T02:32:31Z	sprint 	vocabulary-generator-check	0
+2026-11-28T02:44:03Z	sprint 	cargo-fmt	0
+2026-11-28T02:44:03Z	sprint 	cargo-clippy	0
+2026-11-28T02:44:03Z	sprint 	linux-check	0
+2026-11-28T02:44:03Z	sprint 	runner-binaries-build	0
+2026-11-28T02:44:03Z	sprint 	batch-run	96
+2026-11-28T02:44:03Z	sprint 	batch-run-records-check	0
+2026-11-28T02:44:03Z	sprint 	batch-run-replay	0
+2026-11-28T02:44:03Z	sprint 	batch-run-two-vcpus	176
+2026-11-28T02:44:03Z	sprint 	batch-run-two-vcpus-records-check	0
+2026-11-28T02:44:03Z	sprint 	batch-run-two-vcpus-replay	0
+2026-11-28T02:44:03Z	sprint 	guests	4
+2026-11-28T02:44:03Z	sprint 	twoproc-instruction-clock-guest	1
+2026-11-28T02:44:03Z	sprint 	family-runs	27
+2026-11-28T02:44:03Z	sprint 	family-runs-two-vcpus	39
+2026-11-28T02:44:03Z	sprint 	nextest	182
+2026-11-28T02:44:03Z	sprint 	doc-tests	2
+2026-11-28T02:44:03Z	sprint 	timing-stage	0
+2026-11-28T02:44:03Z	sprint 	release-build	0
+2026-11-28T02:44:03Z	sprint 	case-runs-ledger-check	3
+2026-11-28T02:44:03Z	sprint 	planted-chain	43
+2026-11-28T02:44:03Z	sprint 	planted-chain-records-check	0
+2026-11-28T02:44:03Z	sprint 	vocabulary-generator-check	0
+2026-11-28T02:44:03Z	sprint 	signal-report-check	12
+2026-11-28T02:44:03Z	sprint 	design-check	0
+2026-11-28T02:44:03Z	sprint 	records-replay	0
+2026-11-28T02:44:03Z	sprint 	records-check	0
+2026-11-28T02:44:03Z	sprint 	unplaced	7
+2026-11-28T02:54:36Z	sprint 376	cargo-fmt	0
+2026-11-28T02:54:36Z	sprint 376	cargo-clippy	0
+2026-11-28T02:54:36Z	sprint 376	linux-check	0
+2026-11-28T02:54:36Z	sprint 376	runner-binaries-build	0
+2026-11-28T02:54:36Z	sprint 376	batch-run	97
+2026-11-28T02:54:36Z	sprint 376	batch-run-records-check	0
+2026-11-28T02:54:36Z	sprint 376	batch-run-replay	0
+2026-11-28T02:54:36Z	sprint 376	batch-run-two-vcpus	176
+2026-11-28T02:54:36Z	sprint 376	batch-run-two-vcpus-records-check	0
+2026-11-28T02:54:36Z	sprint 376	batch-run-two-vcpus-replay	0
+2026-11-28T02:54:36Z	sprint 376	guests	5
+2026-11-28T02:54:36Z	sprint 376	twoproc-instruction-clock-guest	1
+2026-11-28T02:54:36Z	sprint 376	family-runs	27
+2026-11-28T02:54:36Z	sprint 376	family-runs-two-vcpus	40
+2026-11-28T02:54:36Z	sprint 376	nextest	188
+2026-11-28T02:54:36Z	sprint 376	doc-tests	1
+2026-11-28T02:54:36Z	sprint 376	timing-stage	0
+2026-11-28T02:54:36Z	sprint 376	release-build	1
+2026-11-28T02:54:36Z	sprint 376	case-runs-ledger-check	3
+2026-11-28T02:54:36Z	sprint 376	planted-chain	44
+2026-11-28T02:54:36Z	sprint 376	planted-chain-records-check	0
+2026-11-28T02:54:36Z	sprint 376	vocabulary-generator-check	0
+2026-11-28T02:54:36Z	sprint 376	signal-report-check	11
+2026-11-28T02:54:36Z	sprint 376	design-check	0
+2026-11-28T02:54:36Z	sprint 376	records-replay	1
+2026-11-28T02:54:36Z	sprint 376	records-check	0
+2026-11-28T02:54:36Z	sprint 376	unplaced	6
